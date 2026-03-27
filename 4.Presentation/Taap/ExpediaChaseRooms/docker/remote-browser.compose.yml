@@ -1,0 +1,14 @@
+services:
+  taap-remote-browser:
+    image: browserless/chromium:latest
+    container_name: taap-remote-browser
+    restart: unless-stopped
+    ports:
+      - "3000:3000"
+    environment:
+      TOKEN: "mengtu-taap"
+      MAX_CONCURRENT_SESSIONS: "4"
+      CONNECTION_TIMEOUT: "600000"
+      PREBOOT_CHROME: "true"
+      KEEP_ALIVE: "true"
+    shm_size: "1gb"

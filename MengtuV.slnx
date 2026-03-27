@@ -1,0 +1,48 @@
+<Solution>
+  <Folder Name="/0.0VBaseFrameworks/">
+    <Project Path="../mengtu.theforce/0.Frameworks/VBase.AppMetrics/VBase.AppMetrics.csproj" />
+    <Project Path="0.0VBaseFrameworks/MengTuDbConfig/MengTuDbConfig.shproj" Id="f411d585-042e-4048-8d8c-9cfdea36af64" />
+    <Project Path="0.0VBaseFrameworks/VBaseFramework.Core/VBaseFramework.Core.csproj" />
+    <Project Path="0.0VBaseFrameworks/VBaseFramework.ServiceDefaults/VBaseFramework.ServiceDefaults.csproj" Id="4535a6ed-2396-4699-a879-75bad01832ea" />
+  </Folder>
+  <Folder Name="/1.Domain/">
+    <Project Path="1.Domain/Domain.RoomMatch/Domain.RoomMatch.csproj" />
+    <Project Path="1.Domain/OTADomain/OTADomain.csproj" Id="6fee78ca-3838-4c9d-b2c0-e154a16ae5e5" />
+  </Folder>
+  <Folder Name="/2.Infrastructure/">
+    <Project Path="2.Infrastructure/Infrastructure.HTTP.SupStaticData/Infrastructure.HTTP.SupStaticData.csproj" Id="f8ad0402-711b-42ab-9c53-7b979733f0f2" />
+    <Project Path="2.Infrastructure/Infrastructure.Redis.RoomMatchingRedis/Infrastructure.Redis.RoomMatchingRedis.csproj" Id="c5478d2c-1836-4673-9d51-30de376f8c62" />
+    <Project Path="2.Infrastructure/Infrastructure.Redis.SupPriceCahce/Infrastructure.Redis.SupPriceCahce.csproj" />
+    <Project Path="2.Infrastructure/Infrastructure.Redis.SupRoomInfo/Infrastructure.Redis.SupRoomInfo.csproj" Id="37818658-4d4d-4f7b-bbe0-6b54ec9f602e" />
+    <Project Path="2.Infrastructure/Infrastructure.Sql.MengTuAPI/Infrastructure.Sql.MengTuAPI.csproj" Id="531bea02-a581-4c76-8a52-b2982c322da4" />
+    <Project Path="2.Infrastructure/Infrastructure.Sql.MengTuSup/Infrastructure.Sql.MengTuSup.csproj" />
+    <Project Path="2.Infrastructure/Infrastructure.Sql.MengTuYDOTA/Infrastructure.Sql.MengTuYDOTA.csproj" Id="f9a7706a-ccdd-4b71-8080-debf08e4b8b3" />
+    <Project Path="2.Infrastructure/Infrastructure.Sql.MixedData/Infrastructure.Sql.MixedData.csproj" Id="220d98af-cc48-4711-863e-83f1330452a9" />
+    <Project Path="2.Infrastructure/Infrastructure.Sql.RoomMapping/Infrastructure.Sql.RoomMapping.csproj" Id="071b4704-9365-406a-9128-0eff436be5f5" />
+    <Project Path="2.Infrastructure/Infrastructure.Sql.SupCacheDB/Infrastructure.Sql.SupCacheDB.csproj" />
+    <Project Path="2.Infrastructure/Infrastructure.Web.Taap/Infrastructure.Web.Taap.csproj" Id="29b92600-4701-4d7c-9245-40e841b2dde9" />
+  </Folder>
+  <Folder Name="/3.Application/" />
+  <Folder Name="/3.Application/RoomMatchings/">
+    <Project Path="3.Application/RoomMatchings/RoomMatch.Core/RoomMatch.Core.csproj" />
+  </Folder>
+  <Folder Name="/3.Application/Taap/">
+    <Project Path="3.Application/Taap/ExpediaChaseRoomApp/ExpediaChaseRoomApp.csproj" Id="4a958dbd-d2de-4482-9149-782b9e7c2bb8" />
+  </Folder>
+  <Folder Name="/4.Presentation/" />
+  <Folder Name="/4.Presentation/DataStatistics/">
+    <Project Path="4.Presentation/DataStatistics/RoomMappingSupStaticRoomInfoStatistics/RoomMappingSupStaticRoomInfoStatistics.csproj" />
+  </Folder>
+  <Folder Name="/4.Presentation/RoomDataProcessings/">
+    <Project Path="4.Presentation/RoomDataProcessings/SupRoomInfoRedisToSql/SupRoomInfoRedisToSql.csproj" Id="0b2d0dc9-abae-4b83-8ee2-e96c3adca58c" />
+  </Folder>
+  <Folder Name="/4.Presentation/RoomMatchings/">
+    <Project Path="4.Presentation/RoomMatchings/OTARoomInfoCompletion/OTARoomInfoCompletion.csproj" />
+    <Project Path="4.Presentation/RoomMatchings/RoomMatching/RoomMatching.csproj" Id="ab3a3ec8-11a5-4429-a37f-bbc4d7bb04bc" />
+    <Project Path="4.Presentation/RoomMatchings/SupRoomInfoRedisToSql/SupRoomInfoRedisToSql.csproj" />
+  </Folder>
+  <Folder Name="/4.Presentation/Taap/">
+    <Project Path="4.Presentation/Taap/ExpediaChaseRooms/ExpediaChaseRooms.csproj" />
+  </Folder>
+</Solution>
+

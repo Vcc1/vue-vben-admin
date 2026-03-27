@@ -1,0 +1,10 @@
+{
+  "profiles": {
+    "RoomMatching": {
+      "commandName": "Project"
+    },
+    "Container (Dockerfile)": {
+      "commandName": "Docker"
+    }
+  }
+}
