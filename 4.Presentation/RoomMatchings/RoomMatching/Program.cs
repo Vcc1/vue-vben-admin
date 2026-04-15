@@ -22,10 +22,10 @@ var host = Serve.Run(new RunOptions
 }, (services, configuration) =>
 {
     #region 业务SQL注入
-    DbTool.MengTuDBConfigTool.InitDBConfig(configuration, "MT_YD_OTA");
-    DbTool.MengTuDBConfigTool.InitDBConfig(configuration, "MengTuSup");
-    DbTool.MengTuDBConfigTool.InitDBConfig(configuration, "MengTuAPI");
-    DbTool.MengTuDBConfigTool.InitDBConfig(configuration, "RoomMapping");
+    //DbTool.MengTuDBConfigTool.InitDBConfig(configuration, "MT_YD_OTA");
+    //DbTool.MengTuDBConfigTool.InitDBConfig(configuration, "MengTuSup");
+    //DbTool.MengTuDBConfigTool.InitDBConfig(configuration, "MengTuAPI");
+    //DbTool.MengTuDBConfigTool.InitDBConfig(configuration, "RoomMapping");
     #endregion
 
 
