@@ -35,14 +35,12 @@ public class Worker : BackgroundService
     IServiceProvider serviceProvider { get; set; }
     IRoomAnalyzer roomAnalysis { get; set; }
     ILogger<Worker> logger { get; set; }
-
     public Worker(IServiceProvider serviceProvider, IRoomAnalyzer roomAnalysis, ILogger<Worker> logger)
     {
         this.serviceProvider = serviceProvider;
         this.roomAnalysis = roomAnalysis;
         this.logger = logger;
     }
-
     /// <summary>
     /// 待匹配处理数据队列
     /// </summary>

@@ -3,6 +3,7 @@ using Microsoft.AspNetCore.Builder;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
+using Infrastructure.Sql.MengTuYDOTA;
 using RoomMatch.Core.RoomAnalysis;
 using System.Diagnostics;
 using System.Reflection;
@@ -25,12 +26,13 @@ var host = Serve.Run(new RunOptions
     //DbTool.MengTuDBConfigTool.InitDBConfig(configuration, "MT_YD_OTA");
     //DbTool.MengTuDBConfigTool.InitDBConfig(configuration, "MengTuSup");
     //DbTool.MengTuDBConfigTool.InitDBConfig(configuration, "MengTuAPI");
-    //DbTool.MengTuDBConfigTool.InitDBConfig(configuration, "RoomMapping");
+    DbTool.MengTuDBConfigTool.InitDBConfig(configuration, "RoomMapping");
     #endregion
 
 
     Framework.Core.IOC.ServiceCollectionExpand.AddBusiness(services, new Assembly[] {
          //typeof(VBaseContext).Assembly,
+         typeof(RoomMappingDbContext).Assembly,
          typeof(RoomAnalyzer).Assembly,
          typeof(RoomMatch.Core.RoomDictionary.RoomDictionarySingleton).Assembly
     });
