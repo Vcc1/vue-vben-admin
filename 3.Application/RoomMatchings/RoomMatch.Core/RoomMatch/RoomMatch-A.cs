@@ -1,6 +1,5 @@
 ﻿using Framework.Core.IOC;
 using Infrastructure.Sql.MengTuSup.Entitys;
-using Infrastructure.Sql.MengTuYDOTA.Entitys;
 using Infrastructure.Sql.MixedData.Entitys;
 using Infrastructure.Sql.RoomMapping.Entitys;
 using Microsoft.Extensions.ObjectPool;

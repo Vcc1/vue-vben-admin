@@ -21,7 +21,6 @@
     <ItemGroup>
       <ProjectReference Include="..\..\..\1.Domain\Domain.RoomMatch\Domain.RoomMatch.csproj" />
       <ProjectReference Include="..\..\..\2.Infrastructure\Infrastructure.Sql.MengTuSup\Infrastructure.Sql.MengTuSup.csproj" />
-      <ProjectReference Include="..\..\..\2.Infrastructure\Infrastructure.Sql.MengTuYDOTA\Infrastructure.Sql.MengTuYDOTA.csproj" />
       <ProjectReference Include="..\..\..\2.Infrastructure\Infrastructure.Sql.MixedData\Infrastructure.Sql.MixedData.csproj" />
       <ProjectReference Include="..\..\..\2.Infrastructure\Infrastructure.Sql.RoomMapping\Infrastructure.Sql.RoomMapping.csproj" />
       <ProjectReference Include="..\..\..\1.Domain\OTADomain\OTADomain.csproj" />

@@ -5,8 +5,6 @@ using Infrastructure.Sql.MengTuAPI;
 using Infrastructure.Sql.MengTuSup.Entitys;
 using Infrastructure.Sql.MixedData;
 using Infrastructure.Sql.MixedData.Entitys;
-using Infrastructure.Sql.MengTuYDOTA;
-using Infrastructure.Sql.MengTuYDOTA.Entitys;
 using Microsoft.Data.SqlClient;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
@@ -23,6 +21,7 @@ using Infrastructure.Sql.MengTuSup;
 using Infrastructures.RoomMatchingRedis;
 using Infrastructures.RoomMatchingRedis.Entitys;
 using OTADomain.Matchings;
+using Infrastructure.Sql.RoomMapping;
 
 class DataPair
 {
@@ -126,7 +125,7 @@ public class Worker : BackgroundService
 
         var scope = serviceProvider.CreateScope();
         var MengTuSupContext = scope.ServiceProvider.GetService<MengTuSupContext>();
-        var MengTuAPIContext = scope.ServiceProvider.GetService<MengTuAPIContext>();
+        var MengTuAPIContext = scope.ServiceProvider.GetService<MengTuAPIDbContext>();
         var RoomMappingDbContext = scope.ServiceProvider.GetService<RoomMappingDbContext>();
         var stopwatch = new Stopwatch();
         // 计时：读取数据耗时
@@ -137,14 +136,14 @@ public class Worker : BackgroundService
             .Select(e => e.Key)
             .ToListAsync();
 
-        var onlineHotelCodes = await MengTuAPIContext.Database
-            .SqlQuery<string>($"SELECT MTHotelCode FROM dbo.V_OTAOnlineHotel")
-            .ToListAsync(stoppingToken);
+        //var onlineHotelCodes = await MengTuAPIContext.Database
+        //    .SqlQuery<string>($"SELECT MTHotelCode FROM dbo.V_OTAOnlineHotel")
+        //    .ToListAsync(stoppingToken);
 
-        if (onlineHotelCodes is { Count: > 0 })
-        {
-            mtHotelCodeList.AddRange(onlineHotelCodes);
-        }
+        //if (onlineHotelCodes is { Count: > 0 })
+        //{
+        //    mtHotelCodeList.AddRange(onlineHotelCodes);
+        //}
 
         mtHotelCodeList = mtHotelCodeList
             .Where(e => !string.IsNullOrWhiteSpace(e))
@@ -243,10 +242,10 @@ public class Worker : BackgroundService
                         if (pair.CRooms == null || pair.CRooms.Count == 0)
                         {
                             //写空Redis
-                            redis.Push(pair.MTHotelCode, new List<HotelMappingDto>());
-                            redis2.Push(pair.MTHotelCode, new List<HotelMappingDto>());
-                            redis3.Push(pair.MTHotelCode, new List<HotelMappingDto>());
-                            redis4.Push(pair.MTHotelCode, new List<HotelMappingDto>());
+                            //redis.Push(pair.MTHotelCode, new List<HotelMappingDto>());
+                            //redis2.Push(pair.MTHotelCode, new List<HotelMappingDto>());
+                            //redis3.Push(pair.MTHotelCode, new List<HotelMappingDto>());
+                            //redis4.Push(pair.MTHotelCode, new List<HotelMappingDto>());
 
                         }
                         foreach (var item in result)
@@ -471,10 +470,10 @@ public class Worker : BackgroundService
                       };
                   }).Where(e => e != null).ToList();
                 //写入redis
-                redis.Push(hotelCode, roomMatching);
-                redis2.Push(hotelCode, roomMatching);
-                redis3.Push(hotelCode, roomMatching);
-                redis4.Push(hotelCode, roomMatching);
+                //redis.Push(hotelCode, roomMatching);
+                //redis2.Push(hotelCode, roomMatching);
+                //redis3.Push(hotelCode, roomMatching);
+                //redis4.Push(hotelCode, roomMatching);
             }
             //#endif
             #endregion

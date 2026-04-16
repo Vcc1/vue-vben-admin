@@ -8,7 +8,7 @@ using System;
 using System.Reflection.Emit;
 using VBaseFramework.Core.EF;
 
-namespace Infrastructure.Sql.MengTuYDOTA;
+namespace Infrastructure.Sql.RoomMapping;
 
 
 

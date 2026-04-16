@@ -83,7 +83,7 @@ public sealed class ResolveSupHotelMappingTask
     private async Task ResolveBatchAsync(List<string> batch, ChannelWriter<OtaRoomInfoCompletionWorkItem> resolvedHotelWriter, CancellationToken cancellationToken)
     {
         using var scope = _scopeFactory.CreateScope();
-        var mengTuApiContext = scope.ServiceProvider.GetRequiredService<MengTuAPIContext>();
+        var mengTuApiContext = scope.ServiceProvider.GetRequiredService<MengTuAPIDbContext>();
 
         var hotelMappings = await mengTuApiContext.SupHotelInfos
             .AsNoTracking()

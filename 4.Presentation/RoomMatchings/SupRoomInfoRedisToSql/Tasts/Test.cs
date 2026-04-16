@@ -1,6 +1,6 @@
 ﻿/*using EFCore.BulkExtensions;*/
 using Framework.Core.IOC;
-using Infrastructure.Sql.MengTuYDOTA;
+using Infrastructure.Sql.RoomMapping;
 //using Infrastructure.Sql.VBase;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.EntityFrameworkCore;

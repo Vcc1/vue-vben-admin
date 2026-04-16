@@ -1,4 +1,4 @@
-using Infrastructure.Sql.MengTuYDOTA;
+using Infrastructure.Sql.RoomMapping;
 using Infrastructure.Sql.RoomMapping.Entitys;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;

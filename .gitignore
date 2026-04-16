@@ -143,3 +143,4 @@ docker-compose.override.yml
 .tmp-compile-supcache/Infrastructure.Sql.SupCacheDB.dll
 .tmp-compile/compile.rsp
 .tmp-compile/Infrastructure.Web.Taap.dll
+.codex/

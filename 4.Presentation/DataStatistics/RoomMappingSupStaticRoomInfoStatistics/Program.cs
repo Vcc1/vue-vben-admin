@@ -1,5 +1,5 @@
 using DbTool;
-using Infrastructure.Sql.MengTuYDOTA;
+using Infrastructure.Sql.RoomMapping;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;

@@ -1,5 +1,5 @@
 using Framework.Core.IOC;
-using Infrastructure.Sql.MengTuYDOTA;
+using Infrastructure.Sql.RoomMapping;
 using Microsoft.Extensions.DependencyInjection;
 using RoomMatch.Core.RoomDictionaryDataSource;
 

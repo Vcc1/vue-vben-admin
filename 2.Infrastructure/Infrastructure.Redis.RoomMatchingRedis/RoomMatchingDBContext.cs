@@ -23,7 +23,7 @@ namespace Infrastructures.RoomMatchingRedis
     public class RoomMappingRedis : RedisContextBase
     {
         private readonly ILogger<RoomMappingRedis> _logger;
-        public RoomMappingRedis(IConfiguration configuration, ILogger<RoomMappingRedis> logger) : base(configuration, "RoomMatchingRedis")
+        public RoomMappingRedis(IConfiguration configuration, ILogger<RoomMappingRedis> logger) : base(configuration, "RoomMappingRedis")
         {
 
             _logger = logger;

@@ -7,14 +7,14 @@ using VBaseFramework.Core.EF;
 namespace Infrastructure.Sql.MengTuAPI
 {
     [EFDbService("MengTuApi")]
-    public class MengTuAPIContext : DbContext
+    public class MengTuAPIDbContext : DbContext
     {
-        public MengTuAPIContext(DbContextOptions<MengTuAPIContext> options) : base(options)
+        public MengTuAPIDbContext(DbContextOptions<MengTuAPIDbContext> options) : base(options)
         {
 
 
         }
-        protected MengTuAPIContext(DbContextOptions options) : base(options)
+        protected MengTuAPIDbContext(DbContextOptions options) : base(options)
         {
 
 

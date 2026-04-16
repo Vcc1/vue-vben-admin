@@ -3,7 +3,7 @@ using EFCore.BulkExtensions;
 using Infrastructure.Redis.SupRoomInfo;
 using Infrastructure.Redis.SupRoomInfo.Entitys;
 using Infrastructure.Sql.MengTuSup.Entitys;
-using Infrastructure.Sql.MengTuYDOTA;
+using Infrastructure.Sql.RoomMapping;
 using Infrastructure.Sql.RoomMapping.Entitys;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;

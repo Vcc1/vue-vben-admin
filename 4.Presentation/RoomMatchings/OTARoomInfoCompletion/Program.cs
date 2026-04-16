@@ -1,7 +1,7 @@
 using Framework.Core.IOC;
 using Infrastructure.HTTP.SupStaticData.EAN;
 using Infrastructure.Sql.MengTuAPI;
-using Infrastructure.Sql.MengTuYDOTA;
+using Infrastructure.Sql.RoomMapping;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using RoomMatch.Core.RoomDictionary;
@@ -38,7 +38,7 @@ var host = Serve.Run(new RunOptions
         })
         .AddBusiness(new Assembly[]
         {
-            typeof(MengTuAPIContext).Assembly,
+            typeof(MengTuAPIDbContext).Assembly,
             typeof(RoomMappingDbContext).Assembly,
             typeof(EANStaticDataContext).Assembly,
             typeof(RoomMatch.Core.RoomDictionary.RoomWord).Assembly,

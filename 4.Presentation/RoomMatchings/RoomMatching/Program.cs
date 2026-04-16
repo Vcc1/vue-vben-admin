@@ -1,9 +1,11 @@
 ﻿
+using Infrastructure.Sql.MengTuAPI;
+using Infrastructure.Sql.RoomMapping;
+using MengTu.Connectmate.Client;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
-using Infrastructure.Sql.MengTuYDOTA;
 using RoomMatch.Core.RoomAnalysis;
 using System.Diagnostics;
 using System.Reflection;
@@ -19,20 +21,14 @@ if (processModule is not null)
 var host = Serve.Run(new RunOptions
 {
     Args = args,
-    ServiceName = "MT-RoomTypeMatchingTest",
+    ServiceName = "MT-RoomMatching",
 }, (services, configuration) =>
 {
-    #region 业务SQL注入
-    //DbTool.MengTuDBConfigTool.InitDBConfig(configuration, "MT_YD_OTA");
-    //DbTool.MengTuDBConfigTool.InitDBConfig(configuration, "MengTuSup");
-    //DbTool.MengTuDBConfigTool.InitDBConfig(configuration, "MengTuAPI");
-    DbTool.MengTuDBConfigTool.InitDBConfig(configuration, "RoomMapping");
-    #endregion
-
+    services.AddConnectmateRemoteConfiguration(configuration);
 
     Framework.Core.IOC.ServiceCollectionExpand.AddBusiness(services, new Assembly[] {
-         //typeof(VBaseContext).Assembly,
          typeof(RoomMappingDbContext).Assembly,
+         typeof(MengTuAPIDbContext).Assembly,
          typeof(RoomAnalyzer).Assembly,
          typeof(RoomMatch.Core.RoomDictionary.RoomDictionarySingleton).Assembly
     });

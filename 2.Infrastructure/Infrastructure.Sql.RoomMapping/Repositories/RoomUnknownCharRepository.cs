@@ -1,5 +1,5 @@
 using Framework.Core.IOC;
-using Infrastructure.Sql.MengTuYDOTA;
+using Infrastructure.Sql.RoomMapping;
 using Infrastructure.Sql.RoomMapping.Entitys;
 using Microsoft.Data.SqlClient;
 using Microsoft.EntityFrameworkCore;
