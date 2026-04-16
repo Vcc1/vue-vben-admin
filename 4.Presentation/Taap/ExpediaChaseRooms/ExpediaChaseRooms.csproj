@@ -14,7 +14,6 @@
   </ItemGroup>
 
   <ItemGroup>
-    <ProjectReference Include="..\..\..\..\mengtu.theforce\0.Frameworks\VBase.AppMetrics\VBase.AppMetrics.csproj" />
     <ProjectReference Include="..\..\..\2.Infrastructure\Infrastructure.Sql.SupCacheDB\Infrastructure.Sql.SupCacheDB.csproj" />
     <ProjectReference Include="..\..\..\0.0VBaseFrameworks\VBaseFramework.ServiceDefaults\VBaseFramework.ServiceDefaults.csproj" />
     <ProjectReference Include="..\..\..\3.Application\Taap\ExpediaChaseRoomApp\ExpediaChaseRoomApp.csproj" />

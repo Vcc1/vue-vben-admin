@@ -1,6 +1,5 @@
 <Solution>
   <Folder Name="/0.0VBaseFrameworks/">
-    <Project Path="../mengtu.theforce/0.Frameworks/VBase.AppMetrics/VBase.AppMetrics.csproj" />
     <Project Path="0.0VBaseFrameworks/MengTuDbConfig/MengTuDbConfig.shproj" Id="f411d585-042e-4048-8d8c-9cfdea36af64" />
     <Project Path="0.0VBaseFrameworks/VBaseFramework.Core/VBaseFramework.Core.csproj" />
     <Project Path="0.0VBaseFrameworks/VBaseFramework.ServiceDefaults/VBaseFramework.ServiceDefaults.csproj" Id="4535a6ed-2396-4699-a879-75bad01832ea" />
