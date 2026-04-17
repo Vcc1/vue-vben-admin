@@ -22,6 +22,7 @@ using Infrastructures.RoomMatchingRedis;
 using Infrastructures.RoomMatchingRedis.Entitys;
 using OTADomain.Matchings;
 using Infrastructure.Sql.RoomMapping;
+using System.Linq;
 
 class DataPair
 {
@@ -31,6 +32,9 @@ class DataPair
 }
 public class Worker : BackgroundService
 {
+    private const int ReadHotelBatchSize = 100;
+    private const int WriteHotelBatchSize = 100;
+
     IServiceProvider serviceProvider { get; set; }
     IRoomAnalyzer roomAnalysis { get; set; }
     ILogger<Worker> logger { get; set; }
@@ -43,7 +47,7 @@ public class Worker : BackgroundService
     /// <summary>
     /// 待匹配处理数据队列
     /// </summary>
-    Channel<List<DataPair>> readQueue = Channel.CreateBounded<List<DataPair>>(new BoundedChannelOptions(100)
+    Channel<DataPair> readQueue = Channel.CreateBounded<DataPair>(new BoundedChannelOptions(1000)
     {
         FullMode = BoundedChannelFullMode.Wait,
         SingleWriter = true,
@@ -78,12 +82,11 @@ public class Worker : BackgroundService
             {
                 logger.LogInformation("匹配任务开始执行");
                 QueueReload();
-                //读取：按 batch 读取
-                _ = ReadData(stoppingToken);
-                //解析：按 batch 操作
-                _ = ExeDataAsync(stoppingToken);
+                var readTask = ReadData(stoppingToken);
+                var exeTask = ExeDataAsync(stoppingToken);
                 //入库：按 batch 操作
                 await BulkInsertData(stoppingToken);
+                await Task.WhenAll(readTask, exeTask);
                 logger.LogInformation("匹配任务执行完成");
             }
             catch (Exception e)
@@ -96,12 +99,10 @@ public class Worker : BackgroundService
         }
     }
 
-    private readonly SemaphoreSlim _lock = new SemaphoreSlim(1, 1);
-
     private void QueueReload()
     {
         #region 初始化
-        readQueue = Channel.CreateBounded<List<DataPair>>(new BoundedChannelOptions(100)
+        readQueue = Channel.CreateBounded<DataPair>(new BoundedChannelOptions(1000)
         {
             FullMode = BoundedChannelFullMode.Wait,
             SingleWriter = true,
@@ -122,19 +123,16 @@ public class Worker : BackgroundService
 
     private async Task ReadData(CancellationToken stoppingToken)
     {
-
-        var scope = serviceProvider.CreateScope();
-        var MengTuSupContext = scope.ServiceProvider.GetService<MengTuSupContext>();
-        var MengTuAPIContext = scope.ServiceProvider.GetService<MengTuAPIDbContext>();
-        var RoomMappingDbContext = scope.ServiceProvider.GetService<RoomMappingDbContext>();
+        using var scope = serviceProvider.CreateScope();
+        var roomMappingDbContext = scope.ServiceProvider.GetRequiredService<RoomMappingDbContext>();
         var stopwatch = new Stopwatch();
         // 计时：读取数据耗时
         stopwatch.Start();
 
-        var mtHotelCodeList = await RoomMappingDbContext.OTARoomInfos
+        var mtHotelCodeList = await roomMappingDbContext.OTARoomInfos
             .GroupBy(e => e.MTHotelCode)
             .Select(e => e.Key)
-            .ToListAsync();
+            .ToListAsync(stoppingToken);
 
         //var onlineHotelCodes = await MengTuAPIContext.Database
         //    .SqlQuery<string>($"SELECT MTHotelCode FROM dbo.V_OTAOnlineHotel")
@@ -154,14 +152,14 @@ public class Worker : BackgroundService
 
         stopwatch.Stop();
         logger.LogTrace($"读取MTHotelCode数据耗时: {stopwatch.ElapsedMilliseconds} ms");
-        var readProducer = Task.Run(async () =>
+        try
         {
             var page = 0;
-            foreach (var batch in mtHotelCodeList.Chunk(1000))
+            foreach (var batch in mtHotelCodeList.Chunk(ReadHotelBatchSize))
             {
                 stopwatch.Restart();
                 List<OTARoomInfo> mrooms = null;
-                mrooms = await GetOTARoomInfo(RoomMappingDbContext, stopwatch, batch, mrooms);
+                mrooms = await GetOTARoomInfo(roomMappingDbContext, stopwatch, batch, mrooms);
                 if (mrooms == null)
                 {
                     logger.LogError("数据读取失败 GetOTARoomInfo");
@@ -169,7 +167,7 @@ public class Worker : BackgroundService
                 }
 
                 List<SupRoomInfoView> crooms = null;
-                crooms = await GetSupRoomInfo(RoomMappingDbContext, batch, crooms);
+                crooms = await GetSupRoomInfo(roomMappingDbContext, batch, crooms);
                 if (crooms == null)
                 {
                     logger.LogError("数据读取失败 GetSupRoomInfo");
@@ -179,21 +177,28 @@ public class Worker : BackgroundService
                 var mroomDic = mrooms.GroupBy(e => e.MTHotelCode).ToDictionary(e => e.Key, e => e.ToList());
                 var croomDic = crooms.GroupBy(e => e.MTHotelCode).ToDictionary(e => e.Key, e => e.ToList());
 
-                var pairs = batch.Select(code => new DataPair
+                foreach (var code in batch)
                 {
-                    MTHotelCode = code,
-                    MRooms = mroomDic.GetValueOrDefault(code) ?? new List<OTARoomInfo>(),
-                    CRooms = croomDic.GetValueOrDefault(code) ?? new List<SupRoomInfoView>(),
-                }).ToList();
+                    var pair = new DataPair
+                    {
+                        MTHotelCode = code,
+                        MRooms = mroomDic.GetValueOrDefault(code) ?? new List<OTARoomInfo>(),
+                        CRooms = croomDic.GetValueOrDefault(code) ?? new List<SupRoomInfoView>(),
+                    };
+                    await readQueue.Writer.WriteAsync(pair, stoppingToken);
+                }
 
                 stopwatch.Stop();
-                logger.LogTrace($"读取第{page++}批房型数据耗时: {stopwatch.ElapsedMilliseconds} ms");
-                await readQueue.Writer.WriteAsync(pairs, stoppingToken);
+                logger.LogTrace($"读取第{page++}批酒店房型数据耗时: {stopwatch.ElapsedMilliseconds} ms，本批酒店数: {batch.Length}");
             }
             logger.LogTrace($"房型数据读取全部完成");
-            readQueue.Writer.Complete(); // 结束信号
-        });
-        await Task.Delay(0);
+            readQueue.Writer.TryComplete();
+        }
+        catch (Exception ex)
+        {
+            readQueue.Writer.TryComplete(ex);
+            throw;
+        }
     }
 
     private async Task ExeDataAsync(CancellationToken stoppingToken)
@@ -204,119 +209,101 @@ public class Worker : BackgroundService
         {
             var task = Task.Run(async () =>
             {
-                using var scope = serviceProvider.CreateScope();
-                var context = scope.ServiceProvider.GetService<RoomMappingDbContext>();
-                var redis = scope.ServiceProvider.GetService<RoomMappingRedis>();
-                var redis2 = scope.ServiceProvider.GetService<RoomMappingRedis>();
-                var redis3 = scope.ServiceProvider.GetService<RoomMappingRedis>();
-                var redis4 = scope.ServiceProvider.GetService<RoomMappingRedis>();
-
-                while (!readQueue.Reader.Completion.IsCompleted)
+                while (await readQueue.Reader.WaitToReadAsync(stoppingToken))
                 {
-                    List<DataPair> batch = new List<DataPair>();
-                    await _lock.WaitAsync();
-                    try
+                    if (!readQueue.Reader.TryRead(out var pair))
                     {
-                        if (readQueue.Reader.Completion.IsCompleted)
-                        {
-                            break; // 如果读取队列已完成，则退出循环
-                        }
-                        batch = await readQueue.Reader.ReadAsync(stoppingToken);
-                    }
-                    catch (Exception)
-                    {
-                    }
-                    finally
-                    {
-                        _lock.Release();
+                        continue;
                     }
 
-                    List<RoomMatching> roomMatchings = new List<RoomMatching>();
+                    var estimatedCount = pair.CRooms?.Count ?? 0;
+                    List<RoomMatching> roomMatchings = estimatedCount > 0
+                        ? new List<RoomMatching>(estimatedCount)
+                        : new List<RoomMatching>();
                     var idx = Interlocked.Increment(ref index);
                     var sw = Stopwatch.StartNew();
-                    logger.LogTrace($"线程 {Thread.CurrentThread.ManagedThreadId} 第 {idx} 批匹配开始  读取队列剩余：{readQueue.Reader.Count} 写入队列剩余:{writeQueue.Reader.Count}");
-                    foreach (var pair in batch)
+                    logger.LogTrace($"线程 {Thread.CurrentThread.ManagedThreadId} 第 {idx} 个酒店匹配开始，酒店:{pair.MTHotelCode} 读取队列剩余:{readQueue.Reader.Count} 写入队列剩余:{writeQueue.Reader.Count}");
+                    var result = RoomMatch.Core.RoomMatch.RoomMatch_A.MatchRoom(pair.MRooms, pair.CRooms, roomAnalysis);
+                    var mRoomById = pair.MRooms.Count > 0
+                        ? pair.MRooms.ToDictionary(e => e.Id)
+                        : null;
+                    foreach (var item in result)
                     {
-
-                        var result = RoomMatch.Core.RoomMatch.RoomMatch_A.MatchRoom(pair.MRooms, pair.CRooms, roomAnalysis);
-                        if (pair.CRooms == null || pair.CRooms.Count == 0)
+                        if (!string.IsNullOrEmpty(item.CRoom.CreateBy))
                         {
-                            //写空Redis
-                            //redis.Push(pair.MTHotelCode, new List<HotelMappingDto>());
-                            //redis2.Push(pair.MTHotelCode, new List<HotelMappingDto>());
-                            //redis3.Push(pair.MTHotelCode, new List<HotelMappingDto>());
-                            //redis4.Push(pair.MTHotelCode, new List<HotelMappingDto>());
-
+                            var mroom = item.CRoom.OTARoomId.HasValue && mRoomById != null && mRoomById.TryGetValue(item.CRoom.OTARoomId.Value, out var manualMatchedRoom)
+                                ? manualMatchedRoom
+                                : null;
+                            roomMatchings.Add(new RoomMatching()
+                            {
+                                MTHoteCode = item.CRoom.MTHotelCode,
+                                CRoom = item.CRoom,
+                                MRoom = mroom,
+                                CRoomId = item.CRoom.Id,
+                                MRoomId = mroom?.Id,
+                                RoomMatchingStatus = RoomMatchStatus.TextMatch,
+                                SupId = item.CRoom.SupId,
+                                Laval = item.Lavel
+                            });
                         }
-                        foreach (var item in result)
+                        else
                         {
-                            if (!string.IsNullOrEmpty(item.CRoom.CreateBy))
+                            roomMatchings.Add(new RoomMatching()
                             {
-                                var mroom = pair.MRooms.FirstOrDefault(e => e.Id == item.CRoom.OTARoomId);
-                                roomMatchings.Add(new RoomMatching()
-                                {
-                                    MTHoteCode = item.CRoom.MTHotelCode,
-                                    CRoom = item.CRoom,
-                                    MRoom = mroom,
-                                    CRoomId = item.CRoom.Id,
-                                    MRoomId = mroom?.Id,
-                                    RoomMatchingStatus = RoomMatchStatus.TextMatch,
-                                    SupId = item.CRoom.SupId,
-                                    Laval = item.Lavel
-                                });
-                            }
-                            else
-                            {
-                                roomMatchings.Add(new RoomMatching()
-                                {
-                                    MTHoteCode = item.CRoom.MTHotelCode,
-                                    CRoom = item.CRoom,
-                                    MRoom = item.MRoom,
-                                    CRoomId = item.CRoom.Id,
-                                    MRoomId = item.MRoom?.Id,
-                                    RoomMatchingStatus = item.RoomMatchStatus,
-                                    SupId = item.CRoom.SupId,
-                                    Laval = item.Lavel
-                                });
-                            }
+                                MTHoteCode = item.CRoom.MTHotelCode,
+                                CRoom = item.CRoom,
+                                MRoom = item.MRoom,
+                                CRoomId = item.CRoom.Id,
+                                MRoomId = item.MRoom?.Id,
+                                RoomMatchingStatus = item.RoomMatchStatus,
+                                SupId = item.CRoom.SupId,
+                                Laval = item.Lavel
+                            });
                         }
                     }
-                    await writeQueue.Writer.WriteAsync(roomMatchings);
-                    logger.LogTrace($"线程 {Thread.CurrentThread.ManagedThreadId} 第 {idx} 批匹配完成，用时 {sw.ElapsedMilliseconds} ms 读取队列剩余：{readQueue.Reader.Count} 写入队列剩余:{writeQueue.Reader.Count}");
+                    await writeQueue.Writer.WriteAsync(roomMatchings, stoppingToken);
+                    logger.LogTrace($"线程 {Thread.CurrentThread.ManagedThreadId} 第 {idx} 个酒店匹配完成，酒店:{pair.MTHotelCode} 房型数:{roomMatchings.Count} 用时:{sw.ElapsedMilliseconds} ms 读取队列剩余:{readQueue.Reader.Count} 写入队列剩余:{writeQueue.Reader.Count}");
                 }
 
             });
             tasks.Add(task);
         }
-        await Task.WhenAll(tasks);
-        logger.LogTrace($"匹配完成");
-        writeQueue.Writer.Complete();
+        try
+        {
+            await Task.WhenAll(tasks);
+            logger.LogTrace($"匹配完成");
+            writeQueue.Writer.TryComplete();
+        }
+        catch (Exception ex)
+        {
+            writeQueue.Writer.TryComplete(ex);
+            throw;
+        }
     }
 
     private async Task BulkInsertData(CancellationToken stoppingToken)
     {
         var index = 0;
-        using var scope = serviceProvider.CreateScope();
-        //var MengTuSupContext = scope.ServiceProvider.GetService<MengTuSupContext>();
-
-
-        while (!writeQueue.Reader.Completion.IsCompleted)
+        while (await writeQueue.Reader.WaitToReadAsync(stoppingToken))
         {
-            var buffer = new List<RoomMatching>(); // 累计数据
-            try
+            var hotelBuffers = new List<List<RoomMatching>>(WriteHotelBatchSize);
+            hotelBuffers.Add(await writeQueue.Reader.ReadAsync(stoppingToken));
+            while (hotelBuffers.Count < WriteHotelBatchSize && writeQueue.Reader.TryRead(out var hotelBuffer))
             {
-                buffer = await writeQueue.Reader.ReadAsync(stoppingToken);
+                hotelBuffers.Add(hotelBuffer);
             }
-            catch (Exception e)
-            {
 
-                logger.LogError(e, $"队列读取失败");
-                continue;
+            var totalRoomCount = hotelBuffers.Sum(e => e.Count);
+            var buffer = totalRoomCount > 0 ? new List<RoomMatching>(totalRoomCount) : new List<RoomMatching>();
+            foreach (var hotelBuffer in hotelBuffers)
+            {
+                buffer.AddRange(hotelBuffer);
             }
+
             Stopwatch stopwatch = Stopwatch.StartNew();
             await SaveDataAsync(buffer, stoppingToken);
             stopwatch.Stop();
-            logger.LogTrace($"第{(index++)}批数据 {buffer.Count}条数据写入完成耗时：{stopwatch.ElapsedMilliseconds} ms");
+            logger.LogTrace($"第{(index++)}批写入完成，酒店数:{hotelBuffers.Count} 房型数:{buffer.Count} 耗时:{stopwatch.ElapsedMilliseconds} ms");
         }
         logger.LogTrace($"匹配结束时间: {DateTime.Now.ToString("HH:mm:ss")}");
 
@@ -327,11 +314,13 @@ public class Worker : BackgroundService
         try
         {
             using var scope = serviceProvider.CreateScope();
-            var context = scope.ServiceProvider.GetService<RoomMappingDbContext>();
-            var redis = scope.ServiceProvider.GetService<RoomMappingRedis>();
-            var redis2 = scope.ServiceProvider.GetService<RoomMappingRedis>();
-            var redis3 = scope.ServiceProvider.GetService<RoomMappingRedis>();
-            var redis4 = scope.ServiceProvider.GetService<RoomMappingRedis>();
+            var context = scope.ServiceProvider.GetRequiredService<RoomMappingDbContext>();
+            var persistedList = list.Where(e => string.IsNullOrEmpty(e.CRoom.CreateBy)).ToList();
+            if (persistedList.Count == 0)
+            {
+                return;
+            }
+
             var conn = (SqlConnection)context.Database.GetDbConnection();
             await conn.OpenAsync(stoppingToken);
 
@@ -340,11 +329,11 @@ public class Worker : BackgroundService
             // 1. 创建临时表
             var createTempSql = @"
                  CREATE TABLE #TempRoomMapping (
-                    SupRoomId INT NOT NULL,
+                    SupRoomId INT NOT NULL PRIMARY KEY CLUSTERED,
                     OTARoomId INT NULL,
                     MTHotelCode varchar(64)  NULL,
                     Status INT NOT NULL,
-                    MatchType DECIMAL(5, 4) NOT NULL,
+                    MatchType INT NOT NULL,
                     MatchScore DECIMAL(5, 4) NOT NULL
         );";
             using (var cmd = new SqlCommand(createTempSql, conn, transaction))
@@ -356,6 +345,8 @@ public class Worker : BackgroundService
             using (var bulkCopy = new SqlBulkCopy(conn, Microsoft.Data.SqlClient.SqlBulkCopyOptions.Default, transaction))
             {
                 bulkCopy.DestinationTableName = "#TempRoomMapping";
+                bulkCopy.BatchSize = persistedList.Count;
+                bulkCopy.BulkCopyTimeout = 0;
 
                 var table = new DataTable();
                 table.Columns.Add("SupRoomId", typeof(int));
@@ -365,24 +356,19 @@ public class Worker : BackgroundService
                 table.Columns.Add("MatchType", typeof(int));
                 table.Columns.Add("MatchScore", typeof(decimal));  // Nullable
 
-                foreach (var item in list)
+                table.BeginLoadData();
+                foreach (var item in persistedList)
                 {
-                    //item.MRoomId == item.CRoom.OTARoomId ||
-                    if (!string.IsNullOrEmpty(item.CRoom.CreateBy))
-                    {
-                        //无变化不跳过 应为读取时没加载普通匹配数据 只加载了有 CreateBy的
-                        //无变化跳过 人工匹配跳过
-                        continue;
-                    }
                     var row = table.NewRow();
                     row["SupRoomId"] = item.CRoomId;
                     row["OTARoomId"] = item.MRoomId.HasValue ? (object)item.MRoomId.Value : DBNull.Value;
-                    row["MTHotelCode"] = item.MRoomId.HasValue ? (object)item.MRoom.MTHotelCode : DBNull.Value;
+                    row["MTHotelCode"] = item.MRoom?.MTHotelCode ?? (object)DBNull.Value;
                     row["Status"] = item.RoomMatchingStatus == RoomMatchStatus.TextMatch ? 1 : 0;
                     row["MatchType"] = item.RoomMatchingStatus;
                     row["MatchScore"] = item.RoomMatchingScore;
                     table.Rows.Add(row);
                 }
+                table.EndLoadData();
 
                 await bulkCopy.WriteToServerAsync(table);
             }
@@ -426,57 +412,6 @@ public class Worker : BackgroundService
                 await cmd.ExecuteNonQueryAsync();
             }
             await transaction.CommitAsync();
-
-
-            #region 写redis
-            //#if !DEBUG
-            var mthotelList = list.GroupBy(e => e.MTHoteCode).ToList();
-            foreach (var hotel in mthotelList)
-            {
-                var hotelCode = hotel.Key;
-                var roomMapping = hotel.ToList();
-                var otaRooms = roomMapping.Select(e => e.CRoom).ToList();
-                var hotelOtaRooms = otaRooms.GroupBy(e => e.OTARoomId).Select(e => e.First()).ToList();
-
-                var roomMatching = roomMapping.Select(e =>
-                  {
-
-                      if (!string.IsNullOrEmpty(e.CRoom.CreateBy))
-                      {
-                          if (e.MRoom == null)
-                          {
-                              throw new Exception();
-                          }
-                      }
-                      else if (e.MRoomId == null)
-                      {
-                          return null;
-                      }
-                      return new HotelMappingDto()
-                      {
-                          CreateBy = e.CRoom.CreateBy,
-                          MTHotelCode = e.CRoom.MTHotelCode,
-                          Id = e.CRoom.Id,
-                          SRoomName_CN = e.CRoom.SRoomNameCN,
-                          SRoomName_EN = e.CRoom.SRoomNameEN,
-                          SupRoomId = e.CRoom.Id,
-                          OTARoomId = e.MRoom.Id,
-                          OTASRoomName_CN = e.MRoom.RoomNameCN,
-                          OTASRoomName_EN = e.MRoom.RoomNameEN,
-                          Status = e.CRoom.Status,
-                          BedInfoKey = e.CRoom.BedInfoKey,
-                          MTBedType = 0,
-                          MatchType = (int)e.RoomMatchingStatus,
-                      };
-                  }).Where(e => e != null).ToList();
-                //写入redis
-                //redis.Push(hotelCode, roomMatching);
-                //redis2.Push(hotelCode, roomMatching);
-                //redis3.Push(hotelCode, roomMatching);
-                //redis4.Push(hotelCode, roomMatching);
-            }
-            //#endif
-            #endregion
         }
         catch (Exception e)
         {
