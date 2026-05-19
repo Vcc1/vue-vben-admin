@@ -1,16 +1,13 @@
 using Framework.Core.IOC;
-using Infrastructure.HTTP.SupStaticData.EAN;
-using Infrastructure.Sql.MengTuAPI;
-using Infrastructure.Sql.RoomMapping;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
+using RoomMatch.Core;
 using RoomMatch.Core.RoomDictionary;
 using System.Diagnostics;
 using System.Reflection;
 using VBase.AppMetrics;
 using VBaseFramework.Core.IOC;
 using VBaseFramework.ServiceDefaults;
-
 
 var processModule = Process.GetCurrentProcess().MainModule;
 if (processModule is not null)
@@ -29,19 +26,16 @@ var host = Serve.Run(new RunOptions
     DbTool.MengTuDBConfigTool.InitDBConfig(configuration, "RoomMapping");
     services
         .AddAppMetrics(configuration)
+        .AddRoomMatchInfrastructure(configuration)
         .AddOptions(configuration, new Assembly[]
         {
             typeof(Worker).Assembly,
-            typeof(RoomMatch.Core.RoomDictionary.RoomWord).Assembly,
+            typeof(RoomWord).Assembly,
             typeof(RoomDictionarySingleton).Assembly,
-
         })
         .AddBusiness(new Assembly[]
         {
-            typeof(MengTuAPIDbContext).Assembly,
-            typeof(RoomMappingDbContext).Assembly,
-            typeof(EANStaticDataContext).Assembly,
-            typeof(RoomMatch.Core.RoomDictionary.RoomWord).Assembly,
+            typeof(RoomWord).Assembly,
             typeof(RoomDictionarySingleton).Assembly,
         });
 

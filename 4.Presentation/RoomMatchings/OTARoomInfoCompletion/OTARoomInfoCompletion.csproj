@@ -35,10 +35,8 @@
   <ItemGroup>
     <ProjectReference Include="..\..\..\0.0VBaseFrameworks\VBaseFramework.Core\VBaseFramework.Core.csproj" />
     <ProjectReference Include="..\..\..\0.0VBaseFrameworks\VBaseFramework.ServiceDefaults\VBaseFramework.ServiceDefaults.csproj" />
-    <ProjectReference Include="..\..\..\2.Infrastructure\Infrastructure.HTTP.SupStaticData\Infrastructure.HTTP.SupStaticData.csproj" />
-    <ProjectReference Include="..\..\..\2.Infrastructure\Infrastructure.Sql.MengTuAPI\Infrastructure.Sql.MengTuAPI.csproj" />
-    <ProjectReference Include="..\..\..\2.Infrastructure\Infrastructure.Sql.RoomMapping\Infrastructure.Sql.RoomMapping.csproj" />
-    <ProjectReference Include="..\..\..\3.Application\RoomMatchings\RoomMatch.Core\RoomMatch.Core.csproj" />
+    <ProjectReference Include="..\..\..\2.Application\RoomMatchings\RoomMatch.Core\RoomMatch.Core.csproj" />
+    <ProjectReference Include="..\..\..\3.Infrastructure\RoomMatchings\Infrastructure.RoomMatchApp\Infrastructure.RoomMatchApp.csproj" />
   </ItemGroup>
 
   <ItemGroup>

@@ -14,9 +14,9 @@
   </ItemGroup>
 
   <ItemGroup>
-    <ProjectReference Include="..\..\..\2.Infrastructure\Infrastructure.Sql.SupCacheDB\Infrastructure.Sql.SupCacheDB.csproj" />
     <ProjectReference Include="..\..\..\0.0VBaseFrameworks\VBaseFramework.ServiceDefaults\VBaseFramework.ServiceDefaults.csproj" />
-    <ProjectReference Include="..\..\..\3.Application\Taap\ExpediaChaseRoomApp\ExpediaChaseRoomApp.csproj" />
+    <ProjectReference Include="..\..\..\2.Application\Taap\ExpediaChaseRoomApp\ExpediaChaseRoomApp.csproj" />
+    <ProjectReference Include="..\..\..\3.Infrastructure\Taap\Infrastructure.ExpediaChaseRoomApp\Infrastructure.ExpediaChaseRoomApp.csproj" />
   </ItemGroup>
 
   <Import Project="..\..\..\0.0VBaseFrameworks\MengTuDbConfig\MengTuDbConfig.projitems" Label="Shared" />

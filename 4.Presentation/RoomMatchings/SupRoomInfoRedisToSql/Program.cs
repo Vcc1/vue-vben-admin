@@ -1,15 +1,13 @@
-﻿using Framework.Core.IOC;
-using Infrastructure.Redis.SupRoomInfo;
-using Microsoft.EntityFrameworkCore;
+using Framework.Core.IOC;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
+using RoomMatch.Core;
 using System.Diagnostics;
 using System.Reflection;
-using VBaseFramework.ServiceDefaults;
+using VBase.AppMetrics;
 using VBaseFramework.Core.IOC;
 using VBaseFramework.Core.Redis;
-using VBase.AppMetrics;
-
+using VBaseFramework.ServiceDefaults;
 
 var processModule = Process.GetCurrentProcess().MainModule;
 if (processModule is not null)
@@ -27,14 +25,12 @@ var host = Serve.Run(new RunOptions
     DbTool.MengTuDBConfigTool.InitDBConfig(configuration, "RoomMapping");
     services
         .AddAppMetrics(configuration)
+        .AddRoomMatchInfrastructure(configuration)
         .AddOptions(configuration, new Assembly[]
         {
             typeof(Worker).Assembly,
         })
-        .AddBusiness(new Assembly[]
-        {
-            typeof(SupRoomInfoDBContext).Assembly
-        });
+        .AddBusiness(Array.Empty<Assembly>());
 
     services.AddSingleton<SupRoomInfoRedisToSqlMetrics>();
     services.AddHostedService<Worker>();

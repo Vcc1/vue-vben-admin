@@ -19,7 +19,7 @@
   </ItemGroup>
 
   <ItemGroup>
-    <ProjectReference Include="..\..\..\2.Infrastructure\Infrastructure.Sql.RoomMapping\Infrastructure.Sql.RoomMapping.csproj" />
+    <ProjectReference Include="..\..\..\3.Infrastructure\RoomMatchings\Infrastructure.RoomMatchApp\Infrastructure.RoomMatchApp.csproj" />
   </ItemGroup>
 
   <Import Project="..\..\..\0.0VBaseFrameworks\MengTuDbConfig\MengTuDbConfig.projitems" Label="Shared" />

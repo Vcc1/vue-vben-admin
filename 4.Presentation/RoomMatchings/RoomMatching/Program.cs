@@ -1,14 +1,9 @@
-﻿
-using Infrastructure.Sql.MengTuAPI;
-using Infrastructure.Sql.RoomMapping;
 using MengTu.Connectmate.Client;
 using Microsoft.AspNetCore.Builder;
-using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
-using RoomMatch.Core.RoomAnalysis;
+using RoomMatch.Core;
 using System.Diagnostics;
-using System.Reflection;
 using VBaseFramework.ServiceDefaults;
 
 var processModule = Process.GetCurrentProcess().MainModule;
@@ -25,14 +20,7 @@ var host = Serve.Run(new RunOptions
 }, (services, configuration) =>
 {
     services.AddConnectmateRemoteConfiguration(configuration);
-
-    Framework.Core.IOC.ServiceCollectionExpand.AddBusiness(services, new Assembly[] {
-         typeof(RoomMappingDbContext).Assembly,
-         typeof(MengTuAPIDbContext).Assembly,
-         typeof(RoomAnalyzer).Assembly,
-         typeof(RoomMatch.Core.RoomDictionary.RoomDictionarySingleton).Assembly
-    });
-
+    services.AddRoomMatchInfrastructure(configuration);
     services.AddHostedService<Worker>();
 }, (WebApplication app) =>
 {

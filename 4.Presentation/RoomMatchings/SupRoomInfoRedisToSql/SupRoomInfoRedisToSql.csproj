@@ -45,9 +45,8 @@
     <ItemGroup>
         <ProjectReference Include="..\..\..\0.0VBaseFrameworks\VBaseFramework.Core\VBaseFramework.Core.csproj" />
         <ProjectReference Include="..\..\..\0.0VBaseFrameworks\VBaseFramework.ServiceDefaults\VBaseFramework.ServiceDefaults.csproj" />
-        <ProjectReference Include="..\..\..\2.Infrastructure\Infrastructure.Redis.SupRoomInfo\Infrastructure.Redis.SupRoomInfo.csproj" />
-        <ProjectReference Include="..\..\..\2.Infrastructure\Infrastructure.Sql.MengTuSup\Infrastructure.Sql.MengTuSup.csproj" />
-        <ProjectReference Include="..\..\..\3.Application\RoomMatchings\RoomMatch.Core\RoomMatch.Core.csproj" />
+        <ProjectReference Include="..\..\..\2.Application\RoomMatchings\RoomMatch.Core\RoomMatch.Core.csproj" />
+        <ProjectReference Include="..\..\..\3.Infrastructure\RoomMatchings\Infrastructure.RoomMatchApp\Infrastructure.RoomMatchApp.csproj" />
     </ItemGroup>
 
     <Import Project="..\..\..\0.0VBaseFrameworks\MengTuDbConfig\MengTuDbConfig.projitems" Label="Shared" />
