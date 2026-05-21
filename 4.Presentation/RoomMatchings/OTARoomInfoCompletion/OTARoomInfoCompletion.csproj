@@ -43,7 +43,11 @@
     <PackageReference Include="Microsoft.VisualStudio.Azure.Containers.Tools.Targets" Version="1.23.0" />
     <PackageReference Include="VBase.AppMetrics" Version="1.0.3" />
   </ItemGroup>
-
-  <Import Project="..\..\..\0.0VBaseFrameworks\MengTuDbConfig\MengTuDbConfig.projitems" Label="Shared" />
+  
+  <ItemGroup>
+    <Reference Include="MengTu.Connectmate.Client">
+      <HintPath>..\..\..\999.DLL\Connectmate\net10.0\MengTu.Connectmate.Client.dll</HintPath>
+    </Reference>
+  </ItemGroup>
 
 </Project>

@@ -1,4 +1,5 @@
 using MengTu.Connectmate.Client;
+using MengTu.Connectmate.Client.Tool;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
@@ -19,6 +20,7 @@ var host = Serve.Run(new RunOptions
     ServiceName = "MT-RoomMatching",
 }, (services, configuration) =>
 {
+    services.AddConnectmateDatabaseSerializer<ConnectmateFallbackSerializer>();
     services.AddConnectmateRemoteConfiguration(configuration);
     services.AddRoomMatchInfrastructure(configuration);
     services.AddHostedService<Worker>();

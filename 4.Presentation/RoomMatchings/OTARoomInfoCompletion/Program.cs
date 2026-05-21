@@ -1,4 +1,6 @@
 using Framework.Core.IOC;
+using MengTu.Connectmate.Client;
+using MengTu.Connectmate.Client.Tool;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using RoomMatch.Core;
@@ -22,8 +24,8 @@ var host = Serve.Run(new RunOptions
     ServiceName = "MT-OTARoomInfoCompletion",
 }, (services, configuration) =>
 {
-    DbTool.MengTuDBConfigTool.InitDBConfig(configuration, "MengTuAPI");
-    DbTool.MengTuDBConfigTool.InitDBConfig(configuration, "RoomMapping");
+    services.AddConnectmateDatabaseSerializer<ConnectmateFallbackSerializer>();
+    services.AddConnectmateRemoteConfiguration(configuration);
     services
         .AddAppMetrics(configuration)
         .AddRoomMatchInfrastructure(configuration)

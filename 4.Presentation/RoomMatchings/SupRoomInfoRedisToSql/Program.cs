@@ -1,7 +1,11 @@
 using Framework.Core.IOC;
+using Infrastructure.SupRoomInfoIngestion;
+using MengTu.Connectmate.Client;
+using MengTu.Connectmate.Client.Tool;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using RoomMatch.Core;
+using SupRoomInfoIngestion;
 using System.Diagnostics;
 using System.Reflection;
 using VBase.AppMetrics;
@@ -22,18 +26,18 @@ var host = Serve.Run(new RunOptions
     ServiceName = "MT-SupRoomInfoRedisToSql",
 }, (services, configuration) =>
 {
-    DbTool.MengTuDBConfigTool.InitDBConfig(configuration, "RoomMapping");
+    services.AddConnectmateDatabaseSerializer<ConnectmateFallbackSerializer>();
+    services.AddConnectmateRemoteConfiguration(configuration);
     services
         .AddAppMetrics(configuration)
         .AddRoomMatchInfrastructure(configuration)
+        .AddSupRoomInfoIngestion(configuration)
+        .AddSupRoomInfoIngestionInfrastructure()
         .AddOptions(configuration, new Assembly[]
         {
-            typeof(Worker).Assembly,
+            typeof(SupRoomInfoIngestionOptions).Assembly,
         })
         .AddBusiness(Array.Empty<Assembly>());
-
-    services.AddSingleton<SupRoomInfoRedisToSqlMetrics>();
-    services.AddHostedService<Worker>();
 });
 
 await host.RunAsync();

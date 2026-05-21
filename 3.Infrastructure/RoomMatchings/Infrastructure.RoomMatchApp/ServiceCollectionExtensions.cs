@@ -1,5 +1,5 @@
 using Infrastructure.HTTP.SupStaticData.EAN;
-using Infrastructure.Redis.SupRoomInfo;
+using Infrastructure.Redis.SupRoomInfo.DirectPriceDiscovery;
 using Infrastructure.Sql.MengTuAPI;
 using Infrastructure.Sql.RoomMapping;
 using Microsoft.Extensions.Configuration;

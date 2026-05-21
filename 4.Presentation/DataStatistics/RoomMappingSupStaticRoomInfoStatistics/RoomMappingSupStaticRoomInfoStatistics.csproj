@@ -1,4 +1,4 @@
-<Project Sdk="Microsoft.NET.Sdk">
+﻿<Project Sdk="Microsoft.NET.Sdk">
 
   <PropertyGroup>
     <OutputType>Exe</OutputType>
@@ -21,7 +21,11 @@
   <ItemGroup>
     <ProjectReference Include="..\..\..\3.Infrastructure\RoomMatchings\Infrastructure.RoomMatchApp\Infrastructure.RoomMatchApp.csproj" />
   </ItemGroup>
-
-  <Import Project="..\..\..\0.0VBaseFrameworks\MengTuDbConfig\MengTuDbConfig.projitems" Label="Shared" />
+  
+  <ItemGroup>
+    <Reference Include="MengTu.Connectmate.Client">
+      <HintPath>..\..\..\999.DLL\Connectmate\net10.0\MengTu.Connectmate.Client.dll</HintPath>
+    </Reference>
+  </ItemGroup>
 
 </Project>

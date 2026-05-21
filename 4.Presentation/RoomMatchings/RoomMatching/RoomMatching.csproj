@@ -36,6 +36,4 @@
     </None>
   </ItemGroup>
 
-  <Import Project="..\..\..\0.0VBaseFrameworks\MengTuDbConfig\MengTuDbConfig.projitems" Label="Shared" />
-
 </Project>

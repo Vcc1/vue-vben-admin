@@ -23,7 +23,7 @@ namespace Infrastructure.HTTP.SupStaticData.Agoda
             _configuration = configuration;
         }
 
-        private string BaseUrl => _configuration.GetValue<string>("MengTuDBConfig:Sup_DbIsUseLAN") == "Y"
+        private string BaseUrl => _configuration.GetValue<bool>("Connectmate:Client:IsInternalNetwork")
             ? LanBaseUrl
             : InternetBaseUrl;
 

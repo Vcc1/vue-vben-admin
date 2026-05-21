@@ -13,7 +13,7 @@
     <ProjectReference Include="..\..\..\2.Application\RoomMatchings\RoomMatch.Core\RoomMatch.Core.csproj" />
     <ProjectReference Include="..\..\Providers\Infrastructure.HTTP.SupStaticData\Infrastructure.HTTP.SupStaticData.csproj" />
     <ProjectReference Include="..\..\Providers\Infrastructure.Redis.RoomMatchingRedis\Infrastructure.Redis.RoomMatchingRedis.csproj" />
-    <ProjectReference Include="..\..\Providers\Infrastructure.Redis.SupRoomInfo\Infrastructure.Redis.SupRoomInfo.csproj" />
+    <ProjectReference Include="..\..\Providers\Infrastructure.Redis.SupRoomInfo.DirectPriceDiscovery\Infrastructure.Redis.SupRoomInfo.DirectPriceDiscovery.csproj" />
     <ProjectReference Include="..\..\Providers\Infrastructure.Sql.MengTuAPI\Infrastructure.Sql.MengTuAPI.csproj" />
     <ProjectReference Include="..\..\Providers\Infrastructure.Sql.MengTuSup\Infrastructure.Sql.MengTuSup.csproj" />
     <ProjectReference Include="..\..\Providers\Infrastructure.Sql.MixedData\Infrastructure.Sql.MixedData.csproj" />

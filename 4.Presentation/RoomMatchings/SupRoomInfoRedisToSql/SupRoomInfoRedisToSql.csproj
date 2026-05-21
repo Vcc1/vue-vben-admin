@@ -4,9 +4,9 @@
         <OutputType>Exe</OutputType>
         <TargetFramework>net10.0</TargetFramework>
         <ImplicitUsings>enable</ImplicitUsings>
+        <DockerDefaultTargetOS>Linux</DockerDefaultTargetOS>
+        <DockerfileContext>..\..\..</DockerfileContext>
     </PropertyGroup>
-
- 
 
     <ItemGroup>
       <None Remove="Configs\nlog.config" />
@@ -26,30 +26,26 @@
     </ItemGroup>
 
     <ItemGroup>
-        <PackageReference Include="Cronos" Version="0.10.0" />
-        <PackageReference Include="EFCore.BulkExtensions" Version="10.0.1" />
-        <PackageReference Include="Microsoft.AspNetCore.Http.Abstractions" Version="2.3.0" />
-        <PackageReference Include="Microsoft.EntityFrameworkCore" Version="10.0.4" />
-        <PackageReference Include="Microsoft.EntityFrameworkCore.Relational" Version="10.0.4" />
-        <PackageReference Include="Microsoft.EntityFrameworkCore.SqlServer" Version="10.0.4" />
-        <PackageReference Include="Microsoft.Extensions.DependencyInjection.Abstractions" Version="10.0.4" />
-        <PackageReference Include="Microsoft.NET.Test.Sdk" Version="17.14.1" />
         <PackageReference Include="Microsoft.VisualStudio.Azure.Containers.Tools.Targets" Version="1.21.0" />
-        <PackageReference Include="MSTest.TestAdapter" Version="3.9.3" />
-        <PackageReference Include="MSTest.TestFramework" Version="3.9.3" />
-        <PackageReference Include="System.Data.SqlClient" Version="4.9.0" />
-        <PackageReference Include="System.Linq.Dynamic.Core" Version="1.6.7" />
-        <PackageReference Include="VBase.AppMetrics" Version="1.0.3" />
+        <PackageReference Include="VBase.AppMetrics" Version="1.0.5" />
     </ItemGroup>
 
     <ItemGroup>
         <ProjectReference Include="..\..\..\0.0VBaseFrameworks\VBaseFramework.Core\VBaseFramework.Core.csproj" />
         <ProjectReference Include="..\..\..\0.0VBaseFrameworks\VBaseFramework.ServiceDefaults\VBaseFramework.ServiceDefaults.csproj" />
+        <ProjectReference Include="..\..\..\2.Application\SupRoomInfo\SupRoomInfoIngestion\SupRoomInfoIngestion.csproj" />
         <ProjectReference Include="..\..\..\2.Application\RoomMatchings\RoomMatch.Core\RoomMatch.Core.csproj" />
+        <ProjectReference Include="..\..\..\3.Infrastructure\SupRoomInfo\Infrastructure.SupRoomInfoIngestion\Infrastructure.SupRoomInfoIngestion.csproj" />
         <ProjectReference Include="..\..\..\3.Infrastructure\RoomMatchings\Infrastructure.RoomMatchApp\Infrastructure.RoomMatchApp.csproj" />
     </ItemGroup>
-
-    <Import Project="..\..\..\0.0VBaseFrameworks\MengTuDbConfig\MengTuDbConfig.projitems" Label="Shared" />
-
+    
+    <ItemGroup>
+        <Reference Include="MengTu.Connectmate.Client">
+            <HintPath>..\..\..\999.DLL\Connectmate\net10.0\MengTu.Connectmate.Client.dll</HintPath>
+        </Reference>
+        <Reference Include="VBaseFramework.ApiSecurity.ClientSdk">
+          <HintPath>..\..\..\..\mengtu.theforce\code\MengtuDataV\999.DLL\MengTu.Connectmate.Client\net10.0\VBaseFramework.ApiSecurity.ClientSdk.dll</HintPath>
+        </Reference>
+    </ItemGroup>
 
 </Project>

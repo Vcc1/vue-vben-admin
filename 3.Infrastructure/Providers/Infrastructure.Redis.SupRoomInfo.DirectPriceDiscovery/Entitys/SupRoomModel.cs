@@ -4,7 +4,7 @@ using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
 
-namespace Infrastructure.Redis.SupRoomInfo.Entitys
+namespace Infrastructure.Redis.SupRoomInfo.DirectPriceDiscovery.Entitys
 {
     public class SupRoomModel
     {

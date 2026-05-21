@@ -1,3 +1,5 @@
+using MengTu.Connectmate.Client;
+using MengTu.Connectmate.Client.Tool;
 using System.Diagnostics;
 using ExpediaChaseRoomApp;
 using VBase.AppMetrics;
@@ -14,7 +16,8 @@ var host = Serve.Run(
     new RunOptions { Args = args, ServiceName = "MT-ExpediaChaseRooms" },
     (services, configuration) =>
     {
-        DbTool.MengTuDBConfigTool.InitDBConfig(configuration, "SupCacheDB");
+        services.AddConnectmateDatabaseSerializer<ConnectmateFallbackSerializer>();
+        services.AddConnectmateRemoteConfiguration(configuration);
         services
             .AddAppMetrics(configuration)
             .AddExpediaChaseRoomApp(configuration)

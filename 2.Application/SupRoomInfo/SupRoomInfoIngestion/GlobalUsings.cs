@@ -1,0 +1,10 @@
+global using Infrastructure.Sql.RoomMapping.Entitys;
+global using Microsoft.Extensions.DependencyInjection;
+global using Microsoft.Extensions.Hosting;
+global using Microsoft.Extensions.Logging;
+global using Microsoft.Extensions.Options;
+global using System.Collections.Concurrent;
+global using System.Collections.Generic;
+global using System.Diagnostics.Metrics;
+global using System.Threading.Channels;
+global using VBase.AppMetrics;

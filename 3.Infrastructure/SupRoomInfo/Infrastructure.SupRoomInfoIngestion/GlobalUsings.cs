@@ -1,0 +1,11 @@
+global using EFCore.BulkExtensions;
+global using Infrastructure.Redis.SupRoomInfo.CachePriceDiscovery;
+global using Infrastructure.Redis.SupRoomInfo.CachePriceDiscovery.Parsers;
+global using Infrastructure.Redis.SupRoomInfo.DirectPriceDiscovery;
+global using Infrastructure.Sql.RoomMapping;
+global using Infrastructure.Sql.RoomMapping.Entitys;
+global using Microsoft.EntityFrameworkCore;
+global using Microsoft.Extensions.DependencyInjection;
+global using Microsoft.Extensions.Logging;
+global using SupRoomInfoIngestion;
+global using SupRoomInfoIngestion.Contracts;

@@ -1,6 +1,5 @@
 <Solution>
   <Folder Name="/0.0VBaseFrameworks/">
-    <Project Path="0.0VBaseFrameworks/MengTuDbConfig/MengTuDbConfig.shproj" Id="f411d585-042e-4048-8d8c-9cfdea36af64" />
     <Project Path="0.0VBaseFrameworks/VBaseFramework.Core/VBaseFramework.Core.csproj" />
     <Project Path="0.0VBaseFrameworks/VBaseFramework.ServiceDefaults/VBaseFramework.ServiceDefaults.csproj" Id="4535a6ed-2396-4699-a879-75bad01832ea" />
   </Folder>
@@ -9,18 +8,34 @@
     <Project Path="1.Domain/OTADomain/OTADomain.csproj" Id="6fee78ca-3838-4c9d-b2c0-e154a16ae5e5" />
   </Folder>
   <Folder Name="/2.Application/" />
+  <Folder Name="/2.Application/HotelInfo/" />
   <Folder Name="/2.Application/RoomMatchings/">
     <Project Path="2.Application/RoomMatchings/RoomMatch.Core/RoomMatch.Core.csproj" />
+  </Folder>
+  <Folder Name="/2.Application/SupRoomInfo/">
+    <Project Path="2.Application/SupRoomInfo/SupRoomInfoIngestion/SupRoomInfoIngestion.csproj" />
   </Folder>
   <Folder Name="/2.Application/Taap/">
     <Project Path="2.Application/Taap/ExpediaChaseRoomApp/ExpediaChaseRoomApp.csproj" Id="4a958dbd-d2de-4482-9149-782b9e7c2bb8" />
   </Folder>
   <Folder Name="/3.Infrastructure/" />
+  <Folder Name="/3.Infrastructure/Core/" />
+  <Folder Name="/3.Infrastructure/Core/HotelInfo/" />
+  <Folder Name="/3.Infrastructure/Core/RoomMatchings/">
+    <Project Path="3.Infrastructure/RoomMatchings/Infrastructure.RoomMatchApp/Infrastructure.RoomMatchApp.csproj" />
+  </Folder>
+  <Folder Name="/3.Infrastructure/Core/SupRoomInfo/">
+    <Project Path="3.Infrastructure/SupRoomInfo/Infrastructure.SupRoomInfoIngestion/Infrastructure.SupRoomInfoIngestion.csproj" />
+  </Folder>
+  <Folder Name="/3.Infrastructure/Core/Taap/">
+    <Project Path="3.Infrastructure/Taap/Infrastructure.ExpediaChaseRoomApp/Infrastructure.ExpediaChaseRoomApp.csproj" />
+  </Folder>
   <Folder Name="/3.Infrastructure/Providers/">
     <Project Path="3.Infrastructure/Providers/Infrastructure.HTTP.SupStaticData/Infrastructure.HTTP.SupStaticData.csproj" Id="f8ad0402-711b-42ab-9c53-7b979733f0f2" />
     <Project Path="3.Infrastructure/Providers/Infrastructure.Redis.RoomMatchingRedis/Infrastructure.Redis.RoomMatchingRedis.csproj" Id="c5478d2c-1836-4673-9d51-30de376f8c62" />
     <Project Path="3.Infrastructure/Providers/Infrastructure.Redis.SupPriceCahce/Infrastructure.Redis.SupPriceCahce.csproj" />
-    <Project Path="3.Infrastructure/Providers/Infrastructure.Redis.SupRoomInfo/Infrastructure.Redis.SupRoomInfo.csproj" Id="37818658-4d4d-4f7b-bbe0-6b54ec9f602e" />
+    <Project Path="3.Infrastructure/Providers/Infrastructure.Redis.SupRoomInfo.CachePriceDiscovery/Infrastructure.Redis.SupRoomInfo.CachePriceDiscovery.csproj" />
+    <Project Path="3.Infrastructure/Providers/Infrastructure.Redis.SupRoomInfo.DirectPriceDiscovery/Infrastructure.Redis.SupRoomInfo.DirectPriceDiscovery.csproj" />
     <Project Path="3.Infrastructure/Providers/Infrastructure.Sql.MengTuAPI/Infrastructure.Sql.MengTuAPI.csproj" Id="531bea02-a581-4c76-8a52-b2982c322da4" />
     <Project Path="3.Infrastructure/Providers/Infrastructure.Sql.MengTuSup/Infrastructure.Sql.MengTuSup.csproj" />
     <Project Path="3.Infrastructure/Providers/Infrastructure.Sql.MengTuYDOTA/Infrastructure.Sql.MengTuYDOTA.csproj" Id="f9a7706a-ccdd-4b71-8080-debf08e4b8b3" />
@@ -28,12 +43,6 @@
     <Project Path="3.Infrastructure/Providers/Infrastructure.Sql.RoomMapping/Infrastructure.Sql.RoomMapping.csproj" Id="071b4704-9365-406a-9128-0eff436be5f5" />
     <Project Path="3.Infrastructure/Providers/Infrastructure.Sql.SupCacheDB/Infrastructure.Sql.SupCacheDB.csproj" />
     <Project Path="3.Infrastructure/Providers/Infrastructure.Web.Taap/Infrastructure.Web.Taap.csproj" Id="29b92600-4701-4d7c-9245-40e841b2dde9" />
-  </Folder>
-  <Folder Name="/3.Infrastructure/RoomMatchings/">
-    <Project Path="3.Infrastructure/RoomMatchings/Infrastructure.RoomMatchApp/Infrastructure.RoomMatchApp.csproj" />
-  </Folder>
-  <Folder Name="/3.Infrastructure/Taap/">
-    <Project Path="3.Infrastructure/Taap/Infrastructure.ExpediaChaseRoomApp/Infrastructure.ExpediaChaseRoomApp.csproj" />
   </Folder>
   <Folder Name="/4.Presentation/" />
   <Folder Name="/4.Presentation/DataStatistics/">

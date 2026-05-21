@@ -1,4 +1,5 @@
-using DbTool;
+using MengTu.Connectmate.Client;
+using MengTu.Connectmate.Client.Tool;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using RoomMatch.Core;
@@ -12,7 +13,8 @@ if (processModule is not null)
 }
 
 var builder = Host.CreateApplicationBuilder(args);
-MengTuDBConfigTool.InitDBConfig(builder.Configuration, "RoomMapping");
+builder.Services.AddConnectmateDatabaseSerializer<ConnectmateFallbackSerializer>();
+builder.Services.AddConnectmateRemoteConfiguration(builder.Configuration);
 
 builder.Services.AddRoomMatchInfrastructure(builder.Configuration);
 builder.Services.AddHostedService<RoomMappingSupStaticRoomInfoStatisticsWorker>();
