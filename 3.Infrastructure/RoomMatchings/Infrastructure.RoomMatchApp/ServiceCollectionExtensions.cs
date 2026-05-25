@@ -21,7 +21,7 @@ public static class RoomMatchInfrastructureServiceCollectionExtensions
             services,
             [
                 typeof(RoomMappingDbContext).Assembly,
-                typeof(MengTuAPIDbContext).Assembly,
+                typeof(MengTuApiQueryService).Assembly,
                 typeof(EANStaticDataContext).Assembly,
                 typeof(SupRoomInfoDBContext).Assembly,
                 typeof(RoomDictionarySingleton).Assembly

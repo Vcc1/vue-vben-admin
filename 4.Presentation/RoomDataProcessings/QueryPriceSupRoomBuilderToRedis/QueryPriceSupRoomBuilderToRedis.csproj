@@ -1,0 +1,47 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net10.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <DockerDefaultTargetOS>Linux</DockerDefaultTargetOS>
+    <DockerfileContext>..\..\..</DockerfileContext>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <Content Include="appsettings.json">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+      <ExcludeFromSingleFile>true</ExcludeFromSingleFile>
+      <CopyToPublishDirectory>PreserveNewest</CopyToPublishDirectory>
+    </Content>
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.VisualStudio.Azure.Containers.Tools.Targets" Version="1.21.0" />
+    <PackageReference Include="VBase.AppMetrics" Version="1.0.6" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\..\0.0VBaseFrameworks\VBaseFramework.Core\VBaseFramework.Core.csproj" />
+    <ProjectReference Include="..\..\..\0.0VBaseFrameworks\VBaseFramework.ServiceDefaults\VBaseFramework.ServiceDefaults.csproj" />
+    <ProjectReference Include="..\..\..\2.Application\RoomDataProcessings\QueryPriceSupRoomBuilder\QueryPriceSupRoomBuilder.csproj" />
+    <ProjectReference Include="..\..\..\2.Application\RoomMatchings\RoomMatch.Core\RoomMatch.Core.csproj" />
+    <ProjectReference Include="..\..\..\3.Infrastructure\RoomDataProcessings\Infrastructure.QueryPriceSupRoomBuilder\Infrastructure.QueryPriceSupRoomBuilder.csproj" />
+    <ProjectReference Include="..\..\..\3.Infrastructure\Providers\Infrastructure.HTTP.QueryPrice\Infrastructure.HTTP.QueryPrice.csproj" />
+    <ProjectReference Include="..\..\..\3.Infrastructure\Providers\Infrastructure.Redis.TriggerQueue\Infrastructure.Redis.TriggerQueue.csproj" />
+    <ProjectReference Include="..\..\..\3.Infrastructure\Providers\Infrastructure.Redis.SupRoomInfo.DirectPriceDiscovery\Infrastructure.Redis.SupRoomInfo.DirectPriceDiscovery.csproj" />
+    <ProjectReference Include="..\..\..\3.Infrastructure\Providers\Infrastructure.Sql.RoomMapping\Infrastructure.Sql.RoomMapping.csproj" />
+    <ProjectReference Include="..\..\..\3.Infrastructure\RoomMatchings\Infrastructure.RoomMatchApp\Infrastructure.RoomMatchApp.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Reference Include="MengTu.Connectmate.Client">
+      <HintPath>..\..\..\999.DLL\Connectmate\net10.0\MengTu.Connectmate.Client.dll</HintPath>
+    </Reference>
+    <Reference Include="VBaseFramework.ApiSecurity.ClientSdk">
+      <HintPath>..\..\..\..\mengtu.theforce\code\MengtuDataV\999.DLL\MengTu.Connectmate.Client\net10.0\VBaseFramework.ApiSecurity.ClientSdk.dll</HintPath>
+    </Reference>
+  </ItemGroup>
+
+</Project>

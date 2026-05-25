@@ -12,6 +12,9 @@
   <Folder Name="/2.Application/RoomMatchings/">
     <Project Path="2.Application/RoomMatchings/RoomMatch.Core/RoomMatch.Core.csproj" />
   </Folder>
+  <Folder Name="/2.Application/RoomDataProcessings/">
+    <Project Path="2.Application/RoomDataProcessings/QueryPriceSupRoomBuilder/QueryPriceSupRoomBuilder.csproj" />
+  </Folder>
   <Folder Name="/2.Application/SupRoomInfo/">
     <Project Path="2.Application/SupRoomInfo/SupRoomInfoIngestion/SupRoomInfoIngestion.csproj" />
   </Folder>
@@ -24,6 +27,9 @@
   <Folder Name="/3.Infrastructure/Core/RoomMatchings/">
     <Project Path="3.Infrastructure/RoomMatchings/Infrastructure.RoomMatchApp/Infrastructure.RoomMatchApp.csproj" />
   </Folder>
+  <Folder Name="/3.Infrastructure/Core/RoomDataProcessings/">
+    <Project Path="3.Infrastructure/RoomDataProcessings/Infrastructure.QueryPriceSupRoomBuilder/Infrastructure.QueryPriceSupRoomBuilder.csproj" />
+  </Folder>
   <Folder Name="/3.Infrastructure/Core/SupRoomInfo/">
     <Project Path="3.Infrastructure/SupRoomInfo/Infrastructure.SupRoomInfoIngestion/Infrastructure.SupRoomInfoIngestion.csproj" />
   </Folder>
@@ -32,8 +38,10 @@
   </Folder>
   <Folder Name="/3.Infrastructure/Providers/">
     <Project Path="3.Infrastructure/Providers/Infrastructure.HTTP.SupStaticData/Infrastructure.HTTP.SupStaticData.csproj" Id="f8ad0402-711b-42ab-9c53-7b979733f0f2" />
+    <Project Path="3.Infrastructure/Providers/Infrastructure.HTTP.QueryPrice/Infrastructure.HTTP.QueryPrice.csproj" />
     <Project Path="3.Infrastructure/Providers/Infrastructure.Redis.RoomMatchingRedis/Infrastructure.Redis.RoomMatchingRedis.csproj" Id="c5478d2c-1836-4673-9d51-30de376f8c62" />
     <Project Path="3.Infrastructure/Providers/Infrastructure.Redis.SupPriceCahce/Infrastructure.Redis.SupPriceCahce.csproj" />
+    <Project Path="3.Infrastructure/Providers/Infrastructure.Redis.TriggerQueue/Infrastructure.Redis.TriggerQueue.csproj" />
     <Project Path="3.Infrastructure/Providers/Infrastructure.Redis.SupRoomInfo.CachePriceDiscovery/Infrastructure.Redis.SupRoomInfo.CachePriceDiscovery.csproj" />
     <Project Path="3.Infrastructure/Providers/Infrastructure.Redis.SupRoomInfo.DirectPriceDiscovery/Infrastructure.Redis.SupRoomInfo.DirectPriceDiscovery.csproj" />
     <Project Path="3.Infrastructure/Providers/Infrastructure.Sql.MengTuAPI/Infrastructure.Sql.MengTuAPI.csproj" Id="531bea02-a581-4c76-8a52-b2982c322da4" />
@@ -49,6 +57,7 @@
     <Project Path="4.Presentation/DataStatistics/RoomMappingSupStaticRoomInfoStatistics/RoomMappingSupStaticRoomInfoStatistics.csproj" />
   </Folder>
   <Folder Name="/4.Presentation/RoomDataProcessings/">
+    <Project Path="4.Presentation/RoomDataProcessings/QueryPriceSupRoomBuilderToRedis/QueryPriceSupRoomBuilderToRedis.csproj" />
     <Project Path="4.Presentation/RoomDataProcessings/SupRoomInfoRedisToSql/SupRoomInfoRedisToSql.csproj" Id="0b2d0dc9-abae-4b83-8ee2-e96c3adca58c" />
   </Folder>
   <Folder Name="/4.Presentation/RoomMatchings/">

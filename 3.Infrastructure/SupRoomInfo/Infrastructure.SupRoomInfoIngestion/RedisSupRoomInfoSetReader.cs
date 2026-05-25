@@ -1,7 +1,17 @@
+using Microsoft.Extensions.Caching.Memory;
+
 namespace Infrastructure.SupRoomInfoIngestion;
 
 public sealed class RedisSupRoomInfoSetReader : ISupRoomInfoSetReader
 {
+    static readonly Microsoft.Extensions.Caching.Memory.MemoryCache DedupCache = new(new Microsoft.Extensions.Caching.Memory.MemoryCacheOptions
+    {
+        SizeLimit = 2_000_000,
+
+    });
+    static readonly TimeSpan DedupCacheTtl = TimeSpan.FromDays(7);
+    static long _dedupCacheCount;
+
     readonly CachePriceDiscoveryRedisContext _redis;
     readonly IBedInfoRestoreStep _bedInfoRestoreStep;
     readonly SupRoomInfoIngestionMetrics _metrics;
@@ -17,6 +27,7 @@ public sealed class RedisSupRoomInfoSetReader : ISupRoomInfoSetReader
         _bedInfoRestoreStep = bedInfoRestoreStep;
         _metrics = metrics;
         _logger = logger;
+        _metrics.SetDedupCacheCount(Volatile.Read(ref _dedupCacheCount));
     }
 
     public async Task<IReadOnlyList<TempSupRoomInfo2>> ReadAsync(
@@ -55,6 +66,22 @@ public sealed class RedisSupRoomInfoSetReader : ISupRoomInfoSetReader
                         _logger.LogWarning("无法从 Set key 解析 SupId。key={SetKey}", setKey);
                         continue;
                     }
+
+                    var dedupKey = BuildDedupCacheKey(setKey, value.ToString());
+                    if (DedupCache.TryGetValue(dedupKey, out _))
+                    {
+                        _metrics.RecordDedupCacheHit();
+                        _metrics.SetDedupCacheCount(Volatile.Read(ref _dedupCacheCount));
+                        continue;
+                    }
+
+                    _metrics.RecordDedupCacheMiss();
+
+                    DedupCache.Set(
+                        dedupKey,
+                        true,
+                        CreateDedupCacheEntryOptions());
+                    _metrics.SetDedupCacheCount(Interlocked.Increment(ref _dedupCacheCount));
 
                     items.Add(new TempSupRoomInfo2
                     {
@@ -110,5 +137,31 @@ public sealed class RedisSupRoomInfoSetReader : ISupRoomInfoSetReader
 
         var suffix = setKey[prefix.Length..].TrimStart(':', '_', '-');
         return int.TryParse(suffix, out supId);
+    }
+
+    static string BuildDedupCacheKey(string setKey, string value)
+    {
+        return $"{setKey}:{value}";
+    }
+
+    MemoryCacheEntryOptions CreateDedupCacheEntryOptions()
+    {
+        return new MemoryCacheEntryOptions
+        {
+            AbsoluteExpirationRelativeToNow = DedupCacheTtl,
+            Size = 1,
+        }.RegisterPostEvictionCallback((_, _, _, _) =>
+        {
+            while (true)
+            {
+                var current = Volatile.Read(ref _dedupCacheCount);
+                var next = Math.Max(0, current - 1);
+                if (Interlocked.CompareExchange(ref _dedupCacheCount, next, current) == current)
+                {
+                    _metrics.SetDedupCacheCount(next);
+                    return;
+                }
+            }
+        });
     }
 }

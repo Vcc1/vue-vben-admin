@@ -12,7 +12,9 @@ using System.Collections.Generic;
 using System.ComponentModel.DataAnnotations.Schema;
 using System.Linq;
 using System.Text;
+using System.Text.Encodings.Web;
 using System.Text.Json;
+using System.Text.Json.Serialization;
 using System.Threading.Tasks;
 using VBaseFramework.Core.Redis;
 using VBaseFramework.Core.String;
@@ -23,6 +25,16 @@ namespace Infrastructure.Redis.SupRoomInfo.DirectPriceDiscovery
     public class SupRoomInfoDBContext : RedisContextBase
     {
         private readonly ILogger<SupRoomInfoDBContext> _logger;
+        static readonly JsonSerializerOptions SupRoomJsonOptions = new()
+        {
+            WriteIndented = true,
+            PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
+            DictionaryKeyPolicy = JsonNamingPolicy.CamelCase,
+            PropertyNameCaseInsensitive = true,
+            DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull,
+            Encoder = JavaScriptEncoder.UnsafeRelaxedJsonEscaping
+        };
+
         public SupRoomInfoDBContext(IConfiguration configuration, ILogger<SupRoomInfoDBContext> logger) : base(configuration, "SupRoomInfoRedisDirectPriceDiscovery")
         {
 
@@ -30,6 +42,21 @@ namespace Infrastructure.Redis.SupRoomInfo.DirectPriceDiscovery
         }
         static int pageindex = 0;
         string SupRoomInfoKey = "NewSupRoom";
+
+        public async Task<long> PushSupRoomModelsAsync(IReadOnlyList<SupRoomModel> rooms, CancellationToken cancellationToken)
+        {
+            if (rooms.Count == 0)
+            {
+                return 0;
+            }
+
+            var values = rooms
+                .Select(room => (RedisValue)JsonSerializer.Serialize(room, SupRoomJsonOptions))
+                .ToArray();
+
+            cancellationToken.ThrowIfCancellationRequested();
+            return await DB.ListLeftPushAsync(SupRoomInfoKey, values);
+        }
 
         public long GetListLength(string key)
         {
@@ -148,5 +175,6 @@ namespace Infrastructure.Redis.SupRoomInfo.DirectPriceDiscovery
             LogManager.Flush();
             return result;
         }
+
     }
 }

@@ -1,16 +1,51 @@
 ﻿<Project Sdk="Microsoft.NET.Sdk">
 
-  <PropertyGroup>
-    <OutputType>Exe</OutputType>
-    <TargetFramework>net10.0</TargetFramework>
-    <ImplicitUsings>enable</ImplicitUsings>
-    <Nullable>enable</Nullable>
-    <DockerDefaultTargetOS>Linux</DockerDefaultTargetOS>
-    <DockerfileContext>..\..\..</DockerfileContext>
-  </PropertyGroup>
+    <PropertyGroup>
+        <OutputType>Exe</OutputType>
+        <TargetFramework>net10.0</TargetFramework>
+        <ImplicitUsings>enable</ImplicitUsings>
+        <DockerDefaultTargetOS>Linux</DockerDefaultTargetOS>
+        <DockerfileContext>..\..\..</DockerfileContext>
+    </PropertyGroup>
 
-  <ItemGroup>
-    <PackageReference Include="Microsoft.VisualStudio.Azure.Containers.Tools.Targets" Version="1.23.0" />
-  </ItemGroup>
+    <ItemGroup>
+      <None Remove="Configs\nlog.config" />
+    </ItemGroup>
+
+    <ItemGroup>
+        <Content Include="appsettings.json">
+            <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+            <ExcludeFromSingleFile>true</ExcludeFromSingleFile>
+            <CopyToPublishDirectory>PreserveNewest</CopyToPublishDirectory>
+        </Content>
+        <Content Include="Configs\nlog.config">
+          <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+          <ExcludeFromSingleFile>true</ExcludeFromSingleFile>
+          <CopyToPublishDirectory>PreserveNewest</CopyToPublishDirectory>
+        </Content>
+    </ItemGroup>
+
+    <ItemGroup>
+        <PackageReference Include="Microsoft.VisualStudio.Azure.Containers.Tools.Targets" Version="1.21.0" />
+        <PackageReference Include="VBase.AppMetrics" Version="1.0.5" />
+    </ItemGroup>
+
+    <ItemGroup>
+        <ProjectReference Include="..\..\..\0.0VBaseFrameworks\VBaseFramework.Core\VBaseFramework.Core.csproj" />
+        <ProjectReference Include="..\..\..\0.0VBaseFrameworks\VBaseFramework.ServiceDefaults\VBaseFramework.ServiceDefaults.csproj" />
+        <ProjectReference Include="..\..\..\2.Application\SupRoomInfo\SupRoomInfoIngestion\SupRoomInfoIngestion.csproj" />
+        <ProjectReference Include="..\..\..\2.Application\RoomMatchings\RoomMatch.Core\RoomMatch.Core.csproj" />
+        <ProjectReference Include="..\..\..\3.Infrastructure\SupRoomInfo\Infrastructure.SupRoomInfoIngestion\Infrastructure.SupRoomInfoIngestion.csproj" />
+        <ProjectReference Include="..\..\..\3.Infrastructure\RoomMatchings\Infrastructure.RoomMatchApp\Infrastructure.RoomMatchApp.csproj" />
+    </ItemGroup>
+    
+    <ItemGroup>
+        <Reference Include="MengTu.Connectmate.Client">
+            <HintPath>..\..\..\999.DLL\Connectmate\net10.0\MengTu.Connectmate.Client.dll</HintPath>
+        </Reference>
+        <Reference Include="VBaseFramework.ApiSecurity.ClientSdk">
+          <HintPath>..\..\..\..\mengtu.theforce\code\MengtuDataV\999.DLL\MengTu.Connectmate.Client\net10.0\VBaseFramework.ApiSecurity.ClientSdk.dll</HintPath>
+        </Reference>
+    </ItemGroup>
 
 </Project>

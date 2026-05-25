@@ -1,5 +1,4 @@
 using Infrastructure.Sql.MengTuAPI;
-using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using System.Threading.Channels;
@@ -83,13 +82,12 @@ public sealed class ResolveSupHotelMappingTask
     private async Task ResolveBatchAsync(List<string> batch, ChannelWriter<OtaRoomInfoCompletionWorkItem> resolvedHotelWriter, CancellationToken cancellationToken)
     {
         using var scope = _scopeFactory.CreateScope();
-        var mengTuApiContext = scope.ServiceProvider.GetRequiredService<MengTuAPIDbContext>();
+        var mengTuApiQueryService = scope.ServiceProvider.GetRequiredService<IMengTuApiQueryService>();
 
-        var hotelMappings = await mengTuApiContext.SupHotelInfos
-            .AsNoTracking()
-            .Where(x => x.SupId == EanSupId && batch.Contains(x.MTHotelCode) && !string.IsNullOrWhiteSpace(x.SHotelCode))
-            .Select(x => new { x.MTHotelCode, x.SHotelCode, x.SupId })
-            .ToListAsync(cancellationToken);
+        var hotelMappings = await mengTuApiQueryService.GetSupHotelInfosAsync(
+            EanSupId,
+            batch,
+            cancellationToken);
 
         var mappingByMtHotelCode = hotelMappings
             .Where(x => !string.IsNullOrWhiteSpace(x.MTHotelCode))

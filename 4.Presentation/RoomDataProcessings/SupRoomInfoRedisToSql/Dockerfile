@@ -1,7 +1,7 @@
 # 请参阅 https://aka.ms/customizecontainer 以了解如何自定义调试容器，以及 Visual Studio 如何使用此 Dockerfile 生成映像以更快地进行调试。
 
 # 此阶段用于在快速模式(默认为调试配置)下从 VS 运行时
-FROM mcr.microsoft.com/dotnet/runtime:10.0 AS base
+FROM mcr.microsoft.com/dotnet/aspnet:10.0 AS base
 USER $APP_UID
 WORKDIR /app
 
@@ -10,10 +10,26 @@ WORKDIR /app
 FROM mcr.microsoft.com/dotnet/sdk:10.0 AS build
 ARG BUILD_CONFIGURATION=Release
 WORKDIR /src
-COPY ["4.Presentation/RoomDataProcessings/SupRoomInfoRedisToSql/SupRoomInfoRedisToSql.csproj", "4.Presentation/RoomDataProcessings/SupRoomInfoRedisToSql/"]
-RUN dotnet restore "./4.Presentation/RoomDataProcessings/SupRoomInfoRedisToSql/SupRoomInfoRedisToSql.csproj"
+COPY ["4.Presentation/RoomMatchings/SupRoomInfoRedisToSql/SupRoomInfoRedisToSql.csproj", "4.Presentation/RoomMatchings/SupRoomInfoRedisToSql/"]
+COPY ["0.0VBaseFrameworks/VBaseFramework.Core/VBaseFramework.Core.csproj", "0.0VBaseFrameworks/VBaseFramework.Core/"]
+COPY ["0.0VBaseFrameworks/VBaseFramework.ServiceDefaults/VBaseFramework.ServiceDefaults.csproj", "0.0VBaseFrameworks/VBaseFramework.ServiceDefaults/"]
+COPY ["2.Application/SupRoomInfo/SupRoomInfoIngestion/SupRoomInfoIngestion.csproj", "2.Application/SupRoomInfo/SupRoomInfoIngestion/"]
+COPY ["3.Infrastructure/Providers/Infrastructure.Sql.RoomMapping/Infrastructure.Sql.RoomMapping.csproj", "3.Infrastructure/Providers/Infrastructure.Sql.RoomMapping/"]
+COPY ["1.Domain/Domain.RoomMatch/Domain.RoomMatch.csproj", "1.Domain/Domain.RoomMatch/"]
+COPY ["1.Domain/OTADomain/OTADomain.csproj", "1.Domain/OTADomain/"]
+COPY ["2.Application/RoomMatchings/RoomMatch.Core/RoomMatch.Core.csproj", "2.Application/RoomMatchings/RoomMatch.Core/"]
+COPY ["3.Infrastructure/SupRoomInfo/Infrastructure.SupRoomInfoIngestion/Infrastructure.SupRoomInfoIngestion.csproj", "3.Infrastructure/SupRoomInfo/Infrastructure.SupRoomInfoIngestion/"]
+COPY ["3.Infrastructure/Providers/Infrastructure.Redis.SupRoomInfo.CachePriceDiscovery/Infrastructure.Redis.SupRoomInfo.CachePriceDiscovery.csproj", "3.Infrastructure/Providers/Infrastructure.Redis.SupRoomInfo.CachePriceDiscovery/"]
+COPY ["3.Infrastructure/Providers/Infrastructure.Redis.SupRoomInfo.DirectPriceDiscovery/Infrastructure.Redis.SupRoomInfo.DirectPriceDiscovery.csproj", "3.Infrastructure/Providers/Infrastructure.Redis.SupRoomInfo.DirectPriceDiscovery/"]
+COPY ["3.Infrastructure/RoomMatchings/Infrastructure.RoomMatchApp/Infrastructure.RoomMatchApp.csproj", "3.Infrastructure/RoomMatchings/Infrastructure.RoomMatchApp/"]
+COPY ["3.Infrastructure/Providers/Infrastructure.HTTP.SupStaticData/Infrastructure.HTTP.SupStaticData.csproj", "3.Infrastructure/Providers/Infrastructure.HTTP.SupStaticData/"]
+COPY ["3.Infrastructure/Providers/Infrastructure.Redis.RoomMatchingRedis/Infrastructure.Redis.RoomMatchingRedis.csproj", "3.Infrastructure/Providers/Infrastructure.Redis.RoomMatchingRedis/"]
+COPY ["3.Infrastructure/Providers/Infrastructure.Sql.MengTuAPI/Infrastructure.Sql.MengTuAPI.csproj", "3.Infrastructure/Providers/Infrastructure.Sql.MengTuAPI/"]
+COPY ["3.Infrastructure/Providers/Infrastructure.Sql.MengTuSup/Infrastructure.Sql.MengTuSup.csproj", "3.Infrastructure/Providers/Infrastructure.Sql.MengTuSup/"]
+COPY ["3.Infrastructure/Providers/Infrastructure.Sql.MixedData/Infrastructure.Sql.MixedData.csproj", "3.Infrastructure/Providers/Infrastructure.Sql.MixedData/"]
+RUN dotnet restore "./4.Presentation/RoomMatchings/SupRoomInfoRedisToSql/SupRoomInfoRedisToSql.csproj"
 COPY . .
-WORKDIR "/src/4.Presentation/RoomDataProcessings/SupRoomInfoRedisToSql"
+WORKDIR "/src/4.Presentation/RoomMatchings/SupRoomInfoRedisToSql"
 RUN dotnet build "./SupRoomInfoRedisToSql.csproj" -c $BUILD_CONFIGURATION -o /app/build
 
 # 此阶段用于发布要复制到最终阶段的服务项目

@@ -9,6 +9,9 @@ public sealed class SaveParsedHotelBatchTask
 {
     private const string StageName = "save_parsed_hotels";
     private const string InputQueueName = "parsed_hotels";
+    private const int MaxSqlParametersPerSave = 1_800;
+    private const int InsertOperationParameterCost = 20;
+    private const int UpdateOperationParameterCost = 21;
 
     private readonly IServiceScopeFactory _scopeFactory;
     private readonly ILogger<SaveParsedHotelBatchTask> _logger;
@@ -90,14 +93,22 @@ public sealed class SaveParsedHotelBatchTask
 
         var insertedCount = 0;
         var updatedCount = 0;
+        var pendingParameterCount = 0;
 
         foreach (var extension in extensions)
         {
             if (!existingExtensions.TryGetValue(extension.Id, out var existingExtension))
             {
+                if (pendingParameterCount + InsertOperationParameterCost > MaxSqlParametersPerSave)
+                {
+                    await FlushPendingChangesAsync(dbContext, cancellationToken);
+                    pendingParameterCount = 0;
+                }
+
                 Normalize(extension);
                 dbContext.OTARoomInfoExtensions.Add(extension);
                 dbContext.OTARoomInfoExtensionLogs.Add(CreateLog(extension, OTARoomInfoExtensionLogType.Insert));
+                pendingParameterCount += InsertOperationParameterCost;
                 insertedCount++;
                 continue;
             }
@@ -107,9 +118,16 @@ public sealed class SaveParsedHotelBatchTask
                 continue;
             }
 
+            if (pendingParameterCount + UpdateOperationParameterCost > MaxSqlParametersPerSave)
+            {
+                await FlushPendingChangesAsync(dbContext, cancellationToken);
+                pendingParameterCount = 0;
+            }
+
             dbContext.OTARoomInfoExtensions.Attach(existingExtension);
             ApplyValues(existingExtension, extension);
             dbContext.OTARoomInfoExtensionLogs.Add(CreateLog(existingExtension, OTARoomInfoExtensionLogType.Update));
+            pendingParameterCount += UpdateOperationParameterCost;
             updatedCount++;
         }
 
@@ -119,8 +137,19 @@ public sealed class SaveParsedHotelBatchTask
             return;
         }
 
-        await dbContext.SaveChangesAsync(cancellationToken);
+        await FlushPendingChangesAsync(dbContext, cancellationToken);
         _logger.LogInformation("入库阶段扩展数据写入完成, BatchSize: {BatchSize}, Inserted: {InsertedCount}, Updated: {UpdatedCount}", batch.Count, insertedCount, updatedCount);
+    }
+
+    private static async Task FlushPendingChangesAsync(RoomMappingDbContext dbContext, CancellationToken cancellationToken)
+    {
+        if (!dbContext.ChangeTracker.HasChanges())
+        {
+            return;
+        }
+
+        await dbContext.SaveChangesAsync(cancellationToken);
+        dbContext.ChangeTracker.Clear();
     }
 
     private static bool HasMeaningfulData(OTARoomInfoExtension extension)

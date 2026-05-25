@@ -26,6 +26,10 @@ public sealed class SupRoomInfoIngestionMetricsWorker : BackgroundService
             _logger.LogInformation("completed: {Completed}", _state.Completed);
             _logger.LogInformation("list pending: {ListPending}", _state.ListPending);
             _logger.LogInformation("set pending: {SetPending}", _state.SetPending);
+            _logger.LogInformation("dedup cache count: {DedupCacheCount}", _state.DedupCacheCount);
+            _logger.LogInformation("dedup cache hit: {DedupCacheHit}", _state.DedupCacheHit);
+            _logger.LogInformation("dedup cache miss: {DedupCacheMiss}", _state.DedupCacheMiss);
+            _logger.LogInformation("dedup cache hit rate: {DedupCacheHitRate}", _state.DedupCacheHitRate);
             await Task.Delay(TimeSpan.FromSeconds(options.MetricsLogIntervalSeconds), stoppingToken);
         }
     }

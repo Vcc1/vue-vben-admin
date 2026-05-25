@@ -16,6 +16,9 @@ public sealed class SupRoomInfoIngestionMetrics
     readonly ObservableGauge<long> _setPendingGauge;
     readonly ObservableGauge<long> _inProgressGauge;
     readonly ObservableGauge<long> _completedGauge;
+    readonly Counter<long> _dedupCacheCounter;
+    readonly ObservableGauge<long> _dedupCacheCountGauge;
+    readonly ObservableGauge<double> _dedupCacheHitRateGauge;
     readonly SupRoomInfoIngestionState _state;
 
     public SupRoomInfoIngestionMetrics(DefaultMetrics metrics, SupRoomInfoIngestionState state)
@@ -33,6 +36,9 @@ public sealed class SupRoomInfoIngestionMetrics
         _setPendingGauge = meter.CreateObservableGauge("sup_room_info_ingestion_set_pending", () => _state.SetPending, unit: "rooms");
         _inProgressGauge = meter.CreateObservableGauge("sup_room_info_ingestion_in_progress", () => _state.InProgress, unit: "rooms");
         _completedGauge = meter.CreateObservableGauge("sup_room_info_ingestion_completed", () => _state.Completed, unit: "rooms");
+        _dedupCacheCounter = meter.CreateCounter<long>("sup_room_info_ingestion_dedup_cache_total", unit: "times");
+        _dedupCacheCountGauge = meter.CreateObservableGauge("sup_room_info_ingestion_dedup_cache_count", () => _state.DedupCacheCount, unit: "items");
+        _dedupCacheHitRateGauge = meter.CreateObservableGauge("sup_room_info_ingestion_dedup_cache_hit_rate", () => _state.DedupCacheHitRate, unit: "ratio");
     }
 
     public IDisposable MeasureDuration(string step)
@@ -73,6 +79,23 @@ public sealed class SupRoomInfoIngestionMetrics
     {
         _errorCounter.Add(1, new KeyValuePair<string, object?>("step", step));
         Telemetry.Errors.Add(1, new KeyValuePair<string, object?>("stage", step));
+    }
+
+    public void RecordDedupCacheHit()
+    {
+        _state.IncreaseDedupCacheHit();
+        _dedupCacheCounter.Add(1, new KeyValuePair<string, object?>("result", "hit"));
+    }
+
+    public void RecordDedupCacheMiss()
+    {
+        _state.IncreaseDedupCacheMiss();
+        _dedupCacheCounter.Add(1, new KeyValuePair<string, object?>("result", "miss"));
+    }
+
+    public void SetDedupCacheCount(long value)
+    {
+        _state.SetDedupCacheCount(value);
     }
 
     private sealed class DelegatingDisposable : IDisposable

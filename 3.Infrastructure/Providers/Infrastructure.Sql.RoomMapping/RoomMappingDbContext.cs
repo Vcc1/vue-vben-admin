@@ -76,6 +76,7 @@ public class RoomMappingDbContext : DbContext
     public DbSet<NormUnknownChar> NormUnknownChars { get; set; }
 
     public DbSet<SearchHasPriceHotelTask> SearchHasPriceHotelTasks { get; set; }
+    public DbSet<QueryPriceSupRoomBuildTask> QueryPriceSupRoomBuildTasks { get; set; }
     public DbSet<SupRoomInfoStat> SupRoomInfoStats { get; set; }
 
     public DbSet<SupRoomInfoView> SupRoomInfoView { get; set; }
