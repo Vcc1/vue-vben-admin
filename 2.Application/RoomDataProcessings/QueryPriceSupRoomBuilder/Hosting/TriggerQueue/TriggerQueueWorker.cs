@@ -5,6 +5,10 @@ using Microsoft.Extensions.DependencyInjection;
 
 namespace QueryPriceSupRoomBuilder;
 
+/// <summary>
+/// 触发队列后台任务。
+/// 从 Redis 通用触发队列读取 MTHotelCode，并 upsert 到任务表；真正查价由房型构建 pipeline 处理。
+/// </summary>
 public sealed class TriggerQueueWorker : BackgroundService
 {
     readonly ITriggerQueueClient _triggerQueue;
@@ -27,6 +31,9 @@ public sealed class TriggerQueueWorker : BackgroundService
         _logger = logger;
     }
 
+    /// <summary>
+    /// 持续消费触发队列；有数据时写任务表，无数据时短暂休眠。
+    /// </summary>
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
         while (!stoppingToken.IsCancellationRequested)
@@ -36,7 +43,6 @@ public sealed class TriggerQueueWorker : BackgroundService
                 var options = _optionsMonitor.CurrentValue;
                 var values = await _triggerQueue.DequeueRoomBuildHotelsAsync(options.TriggerBatchSize, stoppingToken);
                 _metrics.RecordTriggerQueuePop("trigger:room-build:hotel", values.Count);
-
                 if (values.Count > 0)
                 {
                     using var scope = _scopeFactory.CreateScope();

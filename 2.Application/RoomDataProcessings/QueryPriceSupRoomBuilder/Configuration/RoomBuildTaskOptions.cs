@@ -5,20 +5,20 @@ namespace QueryPriceSupRoomBuilder;
 public sealed class RoomBuildTaskOptions
 {
     [Required]
-    public string Cron { get; set; } = "0 */1 * * * *";
+    public string Cron { get; set; } = "0 */10 * * * *";
 
     [Range(1, 10000)]
     public int TriggerBatchSize { get; set; } = 100;
 
-    [Range(1, 10000)]
-    public int ProcessBatchSize { get; set; } = 20;
+    [Range(0, 525600)]
+    public int AttemptCooldownMinutes { get; set; } = 10080;
 
     [Range(1, 3600)]
     public int IdleDelaySeconds { get; set; } = 5;
 
     public int[] Suppliers { get; set; } = [51];
 
-    public int[] Persons { get; set; } = [1, 2, 3, 4];
+    public int[] Persons { get; set; } = [2];
 
     [Required]
     public string DateWindows { get; set; } = "1:1:59;2:1:59;3:1:59";

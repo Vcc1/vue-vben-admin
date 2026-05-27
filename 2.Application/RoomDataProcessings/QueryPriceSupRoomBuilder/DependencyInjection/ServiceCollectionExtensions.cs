@@ -17,10 +17,14 @@ public static class ServiceCollectionExtensions
             .ValidateOnStart();
 
         services.AddSingleton<RoomBuildTaskMetrics>();
+        services.AddSingleton<SupplierQueryPriceRateLimiter>();
         services.AddSingleton<SupRoomCandidateSelector>();
+        services.AddSingleton<RoomBuildTaskReaderStep>();
+        services.AddSingleton<RoomBuildTaskQueryPriceStep>();
+        services.AddSingleton<RoomBuildTaskPersistenceStep>();
         services.AddScoped<QueryPriceSupRoomBuildProcessor>();
-        services.AddHostedService<TriggerQueueWorker>();
         services.AddHostedService<RoomBuildTaskWorker>();
+        services.AddHostedService<TriggerQueueWorker>();
 
         return services;
     }

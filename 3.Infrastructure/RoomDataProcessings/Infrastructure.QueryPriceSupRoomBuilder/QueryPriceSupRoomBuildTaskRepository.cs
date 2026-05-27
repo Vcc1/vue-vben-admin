@@ -61,25 +61,25 @@ public sealed class QueryPriceSupRoomBuildTaskRepository : IQueryPriceSupRoomBui
     }
 
     public async Task<IReadOnlyList<QueryPriceSupRoomBuildTaskModel>> ClaimAsync(
-        int batchSize,
         string targetSuppliers,
+        DateTime attemptBefore,
         CancellationToken cancellationToken)
     {
         var now = DateTime.Now;
         var tasks = await _dbContext.QueryPriceSupRoomBuildTasks
             .AsTracking()
             .Where(x => x.Status == QueryPriceSupRoomBuildTaskStatus.Pending
+                || x.Status == QueryPriceSupRoomBuildTaskStatus.Processing
                 || x.Status == QueryPriceSupRoomBuildTaskStatus.RetryWaiting)
+            .Where(x => x.LastAttemptAt == null || x.LastAttemptAt < attemptBefore)
             .OrderBy(x => x.LastAttemptAt ?? DateTime.MinValue)
             .ThenBy(x => x.Id)
-            .Take(batchSize)
             .ToListAsync(cancellationToken);
 
         foreach (var task in tasks)
         {
             task.Status = QueryPriceSupRoomBuildTaskStatus.Processing;
             task.TargetSuppliers = targetSuppliers;
-            task.LastAttemptAt = now;
             task.AttemptCount++;
             task.UpdatedAt = now;
         }
@@ -99,6 +99,7 @@ public sealed class QueryPriceSupRoomBuildTaskRepository : IQueryPriceSupRoomBui
         var now = DateTime.Now;
         task.Status = QueryPriceSupRoomBuildTaskStatus.Completed;
         task.IsRoomBuilt = true;
+        task.LastAttemptAt = now;
         task.LastPriceHitAt = now;
         task.LastQueuedAt = now;
         task.LastCompletedAt = now;
@@ -115,8 +116,10 @@ public sealed class QueryPriceSupRoomBuildTaskRepository : IQueryPriceSupRoomBui
             return;
         }
 
+        var now = DateTime.Now;
         task.Status = QueryPriceSupRoomBuildTaskStatus.RetryWaiting;
-        task.UpdatedAt = DateTime.Now;
+        task.LastAttemptAt = now;
+        task.UpdatedAt = now;
         await _dbContext.SaveChangesAsync(cancellationToken);
     }
 
@@ -136,7 +139,8 @@ public sealed class QueryPriceSupRoomBuildTaskRepository : IQueryPriceSupRoomBui
             ? QueryPriceSupRoomBuildTaskStatus.Failed
             : QueryPriceSupRoomBuildTaskStatus.RetryWaiting;
         task.LastError = Truncate(error, 2000);
-        task.UpdatedAt = DateTime.Now;
+        task.LastAttemptAt = DateTime.Now;
+        task.UpdatedAt = task.LastAttemptAt.Value;
         await _dbContext.SaveChangesAsync(cancellationToken);
     }
 

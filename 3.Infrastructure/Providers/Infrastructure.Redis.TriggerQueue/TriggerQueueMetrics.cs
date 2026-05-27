@@ -1,16 +1,17 @@
 using System.Diagnostics.Metrics;
-using QueryPriceSupRoomBuilder;
 using VBase.AppMetrics;
 
 namespace Infrastructure.Redis.TriggerQueue;
 
 public sealed class TriggerQueueMetrics
 {
+    const string Scope = "Infrastructure.Redis.TriggerQueue";
+
     readonly Counter<long> _queueOperationTotal;
 
     public TriggerQueueMetrics(IMetricsFactory metricsFactory)
     {
-        var meter = metricsFactory.Create(QueryPriceSupRoomBuilderMetricScopes.TriggerQueue).Meter;
+        var meter = metricsFactory.Create(Scope).Meter;
         _queueOperationTotal = meter.CreateCounter<long>("trigger_queue_operation_total", unit: "items");
     }
 

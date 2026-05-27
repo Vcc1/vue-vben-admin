@@ -37,13 +37,13 @@
     <Project Path="3.Infrastructure/Taap/Infrastructure.ExpediaChaseRoomApp/Infrastructure.ExpediaChaseRoomApp.csproj" />
   </Folder>
   <Folder Name="/3.Infrastructure/Providers/">
-    <Project Path="3.Infrastructure/Providers/Infrastructure.HTTP.SupStaticData/Infrastructure.HTTP.SupStaticData.csproj" Id="f8ad0402-711b-42ab-9c53-7b979733f0f2" />
     <Project Path="3.Infrastructure/Providers/Infrastructure.HTTP.QueryPrice/Infrastructure.HTTP.QueryPrice.csproj" />
+    <Project Path="3.Infrastructure/Providers/Infrastructure.HTTP.SupStaticData/Infrastructure.HTTP.SupStaticData.csproj" Id="f8ad0402-711b-42ab-9c53-7b979733f0f2" />
     <Project Path="3.Infrastructure/Providers/Infrastructure.Redis.RoomMatchingRedis/Infrastructure.Redis.RoomMatchingRedis.csproj" Id="c5478d2c-1836-4673-9d51-30de376f8c62" />
     <Project Path="3.Infrastructure/Providers/Infrastructure.Redis.SupPriceCahce/Infrastructure.Redis.SupPriceCahce.csproj" />
-    <Project Path="3.Infrastructure/Providers/Infrastructure.Redis.TriggerQueue/Infrastructure.Redis.TriggerQueue.csproj" />
     <Project Path="3.Infrastructure/Providers/Infrastructure.Redis.SupRoomInfo.CachePriceDiscovery/Infrastructure.Redis.SupRoomInfo.CachePriceDiscovery.csproj" />
     <Project Path="3.Infrastructure/Providers/Infrastructure.Redis.SupRoomInfo.DirectPriceDiscovery/Infrastructure.Redis.SupRoomInfo.DirectPriceDiscovery.csproj" />
+    <Project Path="3.Infrastructure/Providers/Infrastructure.Redis.TriggerQueue/Infrastructure.Redis.TriggerQueue.csproj" />
     <Project Path="3.Infrastructure/Providers/Infrastructure.Sql.MengTuAPI/Infrastructure.Sql.MengTuAPI.csproj" Id="531bea02-a581-4c76-8a52-b2982c322da4" />
     <Project Path="3.Infrastructure/Providers/Infrastructure.Sql.MengTuSup/Infrastructure.Sql.MengTuSup.csproj" />
     <Project Path="3.Infrastructure/Providers/Infrastructure.Sql.MengTuYDOTA/Infrastructure.Sql.MengTuYDOTA.csproj" Id="f9a7706a-ccdd-4b71-8080-debf08e4b8b3" />
@@ -63,7 +63,6 @@
   <Folder Name="/4.Presentation/RoomMatchings/">
     <Project Path="4.Presentation/RoomMatchings/OTARoomInfoCompletion/OTARoomInfoCompletion.csproj" />
     <Project Path="4.Presentation/RoomMatchings/RoomMatching/RoomMatching.csproj" Id="ab3a3ec8-11a5-4429-a37f-bbc4d7bb04bc" />
-    <Project Path="4.Presentation/RoomMatchings/SupRoomInfoRedisToSql/SupRoomInfoRedisToSql.csproj" />
   </Folder>
   <Folder Name="/4.Presentation/Taap/">
     <Project Path="4.Presentation/Taap/ExpediaChaseRooms/ExpediaChaseRooms.csproj" />

@@ -21,6 +21,9 @@ public sealed record QueryPriceRoom
     public string? SupRoomCode { get; init; }
     public string? SupHotelCode { get; init; }
     public string? SupBedInfo { get; init; }
+
+
+
     public string? BedInfoKey { get; init; }
     public int Person { get; init; }
     public string? CheckIn { get; init; }

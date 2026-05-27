@@ -11,7 +11,8 @@
     <PackageReference Include="Microsoft.Extensions.Hosting" Version="10.0.0" />
     <PackageReference Include="Microsoft.Extensions.Options.ConfigurationExtensions" Version="10.0.0" />
     <PackageReference Include="Microsoft.Extensions.Options.DataAnnotations" Version="10.0.0" />
-    <PackageReference Include="VBase.AppMetrics" Version="1.0.6" />
+    <PackageReference Include="System.Threading.RateLimiting" Version="10.0.0" />
+    <PackageReference Include="VBase.AppMetrics" Version="1.0.8" />
   </ItemGroup>
 
   <ItemGroup>

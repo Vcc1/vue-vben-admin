@@ -15,7 +15,7 @@ public sealed class TriggerQueueRedisContext : RedisContextBase, ITriggerQueueCl
         IConfiguration configuration,
         TriggerQueueMetrics metrics,
         ILogger<TriggerQueueRedisContext> logger)
-        : base(configuration, "TriggerQueueRedis")
+        : base(configuration, "BaseDataTriggerQueue")
     {
         _metrics = metrics;
         _logger = logger;

@@ -44,7 +44,15 @@ public sealed class SupQueryPriceApi : IQueryPriceClient
             using var response = await SendAsync(httpRequest, 120000, cancellationToken);
             var responseBody = await ReadResponseBodyAsync(response, cancellationToken);
             var result = JsonSerializer.Deserialize<HotelPriceScreenResponse>(responseBody, QueryPriceJson.Options);
-            outcome = result?.ListPrice.Count > 0 ? "priced" : "no_price";
+            if (!IsSuccessCode(result?.Code))
+            {
+                outcome = "error_code";
+                _metrics.RecordErrorCode(request.SupId, request.ListMTHotelCode.Count, result?.Code.ToString());
+            }
+            else
+            {
+                outcome = result?.ListPrice.Count > 0 ? "priced" : "no_price";
+            }
 
             _logger.LogTrace(
                 "{HotelCodes} {CheckIn} - {CheckOut} {Outcome} code:{Code} msg:{Message}",
@@ -192,5 +200,10 @@ public sealed class SupQueryPriceApi : IQueryPriceClient
             SupTotalPrice = price.SupTotalPrice,
             SupTotalPriceRMB = price.SupTotalPriceRMB
         };
+    }
+
+    static bool IsSuccessCode(int? code)
+    {
+        return code is null or 0 or 1;
     }
 }

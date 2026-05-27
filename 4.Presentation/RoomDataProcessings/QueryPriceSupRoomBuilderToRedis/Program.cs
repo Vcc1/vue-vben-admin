@@ -2,12 +2,13 @@ using Framework.Core.IOC;
 using Infrastructure.HTTP.QueryPrice.Sup;
 using Infrastructure.QueryPriceSupRoomBuilder;
 using Infrastructure.Redis.TriggerQueue;
+using Infrastructure.Sql.RoomMapping;
 using MengTu.Connectmate.Client;
 using MengTu.Connectmate.Client.Tool;
+using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using QueryPriceSupRoomBuilder;
-using RoomMatch.Core;
 using System.Diagnostics;
 using System.Reflection;
 using VBase.AppMetrics;
@@ -29,9 +30,9 @@ var host = Serve.Run(new RunOptions
 {
     services.AddConnectmateDatabaseSerializer<ConnectmateFallbackSerializer>();
     services.AddConnectmateRemoteConfiguration(configuration);
+    services.AddSingleton<IConfiguration>(configuration);
+    services.AddAppMetrics(configuration);
     services
-        .AddAppMetrics(configuration)
-        .AddRoomMatchInfrastructure(configuration)
         .AddQueryPriceSupRoomBuilder(configuration)
         .AddQueryPriceSupRoomBuilderInfrastructure()
         .AddSupQueryPrice()
@@ -40,7 +41,10 @@ var host = Serve.Run(new RunOptions
         {
             typeof(RoomBuildTaskOptions).Assembly,
         })
-        .AddBusiness(Array.Empty<Assembly>());
+        .AddBusiness(new Assembly[]
+        {
+            typeof(RoomMappingDbContext).Assembly,
+        });
 });
 
 await host.RunAsync();

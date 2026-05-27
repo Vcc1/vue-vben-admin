@@ -7,8 +7,8 @@ public interface IQueryPriceSupRoomBuildTaskRepository
     Task<int> UpsertTriggeredAsync(IReadOnlyList<string> mtHotelCodes, CancellationToken cancellationToken);
 
     Task<IReadOnlyList<QueryPriceSupRoomBuildTaskModel>> ClaimAsync(
-        int batchSize,
         string targetSuppliers,
+        DateTime attemptBefore,
         CancellationToken cancellationToken);
 
     Task MarkCompletedAsync(int id, int queuedCount, CancellationToken cancellationToken);
