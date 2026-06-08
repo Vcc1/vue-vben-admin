@@ -5,6 +5,7 @@ using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using RoomMatch.Core;
 using System.Diagnostics;
+using VBase.AppMetrics;
 using VBaseFramework.ServiceDefaults;
 
 var processModule = Process.GetCurrentProcess().MainModule;
@@ -22,7 +23,17 @@ var host = Serve.Run(new RunOptions
 {
     services.AddConnectmateDatabaseSerializer<ConnectmateFallbackSerializer>();
     services.AddConnectmateRemoteConfiguration(configuration);
+    services.AddAppMetrics(configuration, options =>
+    {
+        options.ServiceName = "RoomMatching";
+        options.MeterName = "AppMetrics";
+        options.AdditionalMeterNames = options.AdditionalMeterNames
+            .Concat(new[] { "RoomMatching" })
+            .Distinct()
+            .ToArray();
+    });
     services.AddRoomMatchInfrastructure(configuration);
+    services.AddSingleton<RoomMatchingMetrics>();
     services.AddHostedService<Worker>();
 }, (WebApplication app) =>
 {

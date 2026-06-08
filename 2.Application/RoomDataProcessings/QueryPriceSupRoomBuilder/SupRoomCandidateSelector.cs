@@ -1,3 +1,5 @@
+using System.Text.Encodings.Web;
+using System.Text.Json;
 using System.Text.RegularExpressions;
 
 namespace QueryPriceSupRoomBuilder;
@@ -7,6 +9,10 @@ public sealed class SupRoomCandidateSelector
     static readonly Regex ReadableEnglishRoomName = new(
         @"^[\p{IsBasicLatin}]+$",
         RegexOptions.Compiled | RegexOptions.CultureInvariant);
+    static readonly JsonSerializerOptions BedInfoJsonOptions = new()
+    {
+        Encoder = JavaScriptEncoder.UnsafeRelaxedJsonEscaping
+    };
 
     public IReadOnlyList<SupRoomRedisMessage> Select(
         IEnumerable<QueryPriceRoom> prices,
@@ -49,7 +55,7 @@ public sealed class SupRoomCandidateSelector
             MTHotelCode = TrimToNull(price.MTHotelCode),
             RoomCode = TrimToNull(price.SupRoomCode),
             BedType = null,
-            BedInfo = TrimToNull(price.SupBedInfo),
+            BedInfo = BuildBedInfo(price),
             BedInfoKey = TrimToNull(price.BedInfoKey),
             AcreageFrom = 0,
             AcreageTo = 0,
@@ -58,6 +64,16 @@ public sealed class SupRoomCandidateSelector
             SupId = supId,
             CreateTime = DateTime.Now.ToString("yyyy-MM-dd HH:mm:ss")
         };
+    }
+
+    static string? BuildBedInfo(QueryPriceRoom price)
+    {
+        if (price.MTBeds?.Any(static group => group.Beds.Count > 0) == true)
+        {
+            return JsonSerializer.Serialize(price.MTBeds, BedInfoJsonOptions);
+        }
+
+        return TrimToNull(price.SupBedInfo);
     }
 
     static string? GetFilterReason(SupRoomRedisMessage room)

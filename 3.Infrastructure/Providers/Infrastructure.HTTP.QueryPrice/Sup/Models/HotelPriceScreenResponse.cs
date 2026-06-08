@@ -1,5 +1,6 @@
 using System.Text.Json;
 using System.Text.Json.Serialization;
+using QueryPriceSupRoomBuilder;
 
 namespace Infrastructure.HTTP.QueryPrice.Sup.Models;
 
@@ -41,6 +42,7 @@ internal sealed class PriceResult
     public string? SupRoomCode { get; set; }
     public string? SupHotelCode { get; set; }
     public string? SupBedInfo { get; set; }
+    public List<BedGroup>? MTBeds { get; set; }
     public string? BedInfoKey { get; set; }
     public string[]? PriceTags { get; set; }
     public JsonElement? CancellationPolicy { get; set; }

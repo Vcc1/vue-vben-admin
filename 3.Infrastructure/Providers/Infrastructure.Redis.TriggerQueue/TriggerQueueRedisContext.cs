@@ -11,6 +11,8 @@ public sealed class TriggerQueueRedisContext : RedisContextBase, ITriggerQueueCl
     readonly TriggerQueueMetrics _metrics;
     readonly ILogger<TriggerQueueRedisContext> _logger;
 
+    public string RoomBuildHotelQueueKey { get; }
+
     public TriggerQueueRedisContext(
         IConfiguration configuration,
         TriggerQueueMetrics metrics,
@@ -19,6 +21,11 @@ public sealed class TriggerQueueRedisContext : RedisContextBase, ITriggerQueueCl
     {
         _metrics = metrics;
         _logger = logger;
+        RoomBuildHotelQueueKey = configuration["TriggerQueue:RoomBuildHotelKey"]?.Trim();
+        if (string.IsNullOrWhiteSpace(RoomBuildHotelQueueKey))
+        {
+            RoomBuildHotelQueueKey = TriggerQueueKeys.RoomBuildHotel;
+        }
     }
 
     public async Task EnqueueAsync(string queueKey, string value, CancellationToken cancellationToken)
@@ -60,11 +67,11 @@ public sealed class TriggerQueueRedisContext : RedisContextBase, ITriggerQueueCl
 
     public Task EnqueueRoomBuildHotelAsync(string mtHotelCode, CancellationToken cancellationToken)
     {
-        return EnqueueAsync(TriggerQueueKeys.RoomBuildHotel, mtHotelCode, cancellationToken);
+        return EnqueueAsync(RoomBuildHotelQueueKey, mtHotelCode, cancellationToken);
     }
 
     public Task<IReadOnlyList<string>> DequeueRoomBuildHotelsAsync(int batchSize, CancellationToken cancellationToken)
     {
-        return DequeueAsync(TriggerQueueKeys.RoomBuildHotel, batchSize, cancellationToken);
+        return DequeueAsync(RoomBuildHotelQueueKey, batchSize, cancellationToken);
     }
 }

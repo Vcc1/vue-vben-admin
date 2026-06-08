@@ -21,15 +21,25 @@ public sealed record QueryPriceRoom
     public string? SupRoomCode { get; init; }
     public string? SupHotelCode { get; init; }
     public string? SupBedInfo { get; init; }
-
-
-
+    public IReadOnlyList<BedGroup>? MTBeds { get; init; }
     public string? BedInfoKey { get; init; }
     public int Person { get; init; }
     public string? CheckIn { get; init; }
     public string? CheckOut { get; init; }
     public decimal SupTotalPrice { get; init; }
     public decimal SupTotalPriceRMB { get; init; }
+}
+
+public sealed class BedGroup
+{
+    public List<BedInfo> Beds { get; set; } = new();
+}
+
+public sealed class BedInfo
+{
+    public int MTBedId { get; set; }
+    public string? Description { get; set; }
+    public int Num { get; set; }
 }
 
 public sealed record SupRoomRedisMessage

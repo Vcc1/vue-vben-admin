@@ -8,6 +8,9 @@
     <Project Path="1.Domain/OTADomain/OTADomain.csproj" Id="6fee78ca-3838-4c9d-b2c0-e154a16ae5e5" />
   </Folder>
   <Folder Name="/2.Application/" />
+  <Folder Name="/2.Application/MetricsAndAlerts/">
+    <Project Path="2.Application/MetricsAndAlerts/GrafanaAlertApp/GrafanaAlertApp.csproj" />
+  </Folder>
   <Folder Name="/2.Application/HotelInfo/" />
   <Folder Name="/2.Application/RoomMatchings/">
     <Project Path="2.Application/RoomMatchings/RoomMatch.Core/RoomMatch.Core.csproj" />
@@ -23,6 +26,9 @@
   </Folder>
   <Folder Name="/3.Infrastructure/" />
   <Folder Name="/3.Infrastructure/Core/" />
+  <Folder Name="/3.Infrastructure/Core/MetricsAndAlerts/">
+    <Project Path="3.Infrastructure/Core/MetricsAndAlerts/Infrastructure.GrafanaAlertApp/Infrastructure.GrafanaAlertApp.csproj" />
+  </Folder>
   <Folder Name="/3.Infrastructure/Core/HotelInfo/" />
   <Folder Name="/3.Infrastructure/Core/RoomMatchings/">
     <Project Path="3.Infrastructure/RoomMatchings/Infrastructure.RoomMatchApp/Infrastructure.RoomMatchApp.csproj" />
@@ -39,6 +45,7 @@
   <Folder Name="/3.Infrastructure/Providers/">
     <Project Path="3.Infrastructure/Providers/Infrastructure.HTTP.QueryPrice/Infrastructure.HTTP.QueryPrice.csproj" />
     <Project Path="3.Infrastructure/Providers/Infrastructure.HTTP.SupStaticData/Infrastructure.HTTP.SupStaticData.csproj" Id="f8ad0402-711b-42ab-9c53-7b979733f0f2" />
+    <Project Path="3.Infrastructure/Providers/Infrastructure.HTTP.WorkWechatAlert/Infrastructure.HTTP.WorkWechatAlert.csproj" />
     <Project Path="3.Infrastructure/Providers/Infrastructure.Redis.RoomMatchingRedis/Infrastructure.Redis.RoomMatchingRedis.csproj" Id="c5478d2c-1836-4673-9d51-30de376f8c62" />
     <Project Path="3.Infrastructure/Providers/Infrastructure.Redis.SupPriceCahce/Infrastructure.Redis.SupPriceCahce.csproj" />
     <Project Path="3.Infrastructure/Providers/Infrastructure.Redis.SupRoomInfo.CachePriceDiscovery/Infrastructure.Redis.SupRoomInfo.CachePriceDiscovery.csproj" />
@@ -53,6 +60,9 @@
     <Project Path="3.Infrastructure/Providers/Infrastructure.Web.Taap/Infrastructure.Web.Taap.csproj" Id="29b92600-4701-4d7c-9245-40e841b2dde9" />
   </Folder>
   <Folder Name="/4.Presentation/" />
+  <Folder Name="/4.Presentation/MetricsAndAlerts/">
+    <Project Path="4.Presentation/MetricsAndAlerts/GrafanaAlertWebhook/GrafanaAlertWebhook.csproj" />
+  </Folder>
   <Folder Name="/4.Presentation/DataStatistics/">
     <Project Path="4.Presentation/DataStatistics/RoomMappingSupStaticRoomInfoStatistics/RoomMappingSupStaticRoomInfoStatistics.csproj" />
   </Folder>

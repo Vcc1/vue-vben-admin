@@ -42,7 +42,7 @@ public sealed class TriggerQueueWorker : BackgroundService
             {
                 var options = _optionsMonitor.CurrentValue;
                 var values = await _triggerQueue.DequeueRoomBuildHotelsAsync(options.TriggerBatchSize, stoppingToken);
-                _metrics.RecordTriggerQueuePop("trigger:room-build:hotel", values.Count);
+                _metrics.RecordTriggerQueuePop(_triggerQueue.RoomBuildHotelQueueKey, values.Count);
                 if (values.Count > 0)
                 {
                     using var scope = _scopeFactory.CreateScope();

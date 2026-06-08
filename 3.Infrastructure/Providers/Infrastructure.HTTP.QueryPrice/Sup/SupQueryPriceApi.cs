@@ -193,6 +193,7 @@ public sealed class SupQueryPriceApi : IQueryPriceClient
             SupRoomCode = price.SupRoomCode,
             SupHotelCode = price.SupHotelCode,
             SupBedInfo = price.SupBedInfo,
+            MTBeds = price.MTBeds,
             BedInfoKey = price.BedInfoKey,
             Person = price.Person,
             CheckIn = price.CheckIn,

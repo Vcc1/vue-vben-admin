@@ -34,11 +34,13 @@ public class Worker : BackgroundService
     IServiceProvider serviceProvider { get; set; }
     IRoomAnalyzer roomAnalysis { get; set; }
     ILogger<Worker> logger { get; set; }
-    public Worker(IServiceProvider serviceProvider, IRoomAnalyzer roomAnalysis, ILogger<Worker> logger)
+    RoomMatchingMetrics metrics { get; set; }
+    public Worker(IServiceProvider serviceProvider, IRoomAnalyzer roomAnalysis, ILogger<Worker> logger, RoomMatchingMetrics metrics)
     {
         this.serviceProvider = serviceProvider;
         this.roomAnalysis = roomAnalysis;
         this.logger = logger;
+        this.metrics = metrics;
     }
     /// <summary>
     /// 待匹配处理数据队列
@@ -78,16 +80,19 @@ public class Worker : BackgroundService
             {
                 logger.LogInformation("匹配任务开始执行");
                 QueueReload();
+                metrics.StartRound();
                 //读取：按 batch 读取
                 _ = ReadData(stoppingToken);
                 //解析：按 batch 操作
                 _ = ExeDataAsync(stoppingToken);
                 //入库：按 batch 操作
                 await BulkInsertData(stoppingToken);
+                metrics.CompleteRound();
                 logger.LogInformation("匹配任务执行完成");
             }
             catch (Exception e)
             {
+                metrics.FailRound("execute");
                 logger.LogError(e, $"匹配任务严重异常退出");
             }
 
@@ -117,15 +122,16 @@ public class Worker : BackgroundService
             SingleWriter = false,
             SingleReader = true
         });
+        metrics.SetQueueDepths(0, 0);
         #endregion
     }
 
     private async Task ReadData(CancellationToken stoppingToken)
     {
+        metrics.SetReading();
 
         var scope = serviceProvider.CreateScope();
         var MengTuSupContext = scope.ServiceProvider.GetService<MengTuSupContext>();
-        var MengTuAPIContext = scope.ServiceProvider.GetService<MengTuAPIDbContext>();
         var RoomMappingDbContext = scope.ServiceProvider.GetService<RoomMappingDbContext>();
         var stopwatch = new Stopwatch();
         // 计时：读取数据耗时
@@ -153,6 +159,8 @@ public class Worker : BackgroundService
 
 
         stopwatch.Stop();
+        metrics.SetHotelTotal(mtHotelCodeList.Count);
+        metrics.RecordReadDuration("hotel_codes", stopwatch.ElapsedMilliseconds);
         logger.LogTrace($"读取MTHotelCode数据耗时: {stopwatch.ElapsedMilliseconds} ms");
         var readProducer = Task.Run(async () =>
         {
@@ -165,6 +173,7 @@ public class Worker : BackgroundService
                 if (mrooms == null)
                 {
                     logger.LogError("数据读取失败 GetOTARoomInfo");
+                    metrics.RecordError("read_ota_rooms");
                     continue;
                 }
 
@@ -173,6 +182,7 @@ public class Worker : BackgroundService
                 if (crooms == null)
                 {
                     logger.LogError("数据读取失败 GetSupRoomInfo");
+                    metrics.RecordError("read_sup_rooms");
                     continue;
                 }
 
@@ -187,8 +197,11 @@ public class Worker : BackgroundService
                 }).ToList();
 
                 stopwatch.Stop();
+                metrics.AddHotelsRead(pairs.Count);
+                metrics.RecordReadDuration("rooms_batch", stopwatch.ElapsedMilliseconds);
                 logger.LogTrace($"读取第{page++}批房型数据耗时: {stopwatch.ElapsedMilliseconds} ms");
                 await readQueue.Writer.WriteAsync(pairs, stoppingToken);
+                metrics.SetQueueDepths(readQueue.Reader.Count, writeQueue.Reader.Count);
             }
             logger.LogTrace($"房型数据读取全部完成");
             readQueue.Writer.Complete(); // 结束信号
@@ -225,6 +238,7 @@ public class Worker : BackgroundService
                     }
                     catch (Exception)
                     {
+                        metrics.RecordError("read_queue");
                     }
                     finally
                     {
@@ -234,54 +248,78 @@ public class Worker : BackgroundService
                     List<RoomMatching> roomMatchings = new List<RoomMatching>();
                     var idx = Interlocked.Increment(ref index);
                     var sw = Stopwatch.StartNew();
+                    metrics.SetMatching();
+                    metrics.IncrementActiveMatchWorkers();
+                    metrics.SetQueueDepths(readQueue.Reader.Count, writeQueue.Reader.Count);
                     logger.LogTrace($"线程 {Thread.CurrentThread.ManagedThreadId} 第 {idx} 批匹配开始  读取队列剩余：{readQueue.Reader.Count} 写入队列剩余:{writeQueue.Reader.Count}");
-                    foreach (var pair in batch)
+                    try
                     {
-
-                        var result = RoomMatch.Core.RoomMatch.RoomMatch_A.MatchRoom(pair.MRooms, pair.CRooms, roomAnalysis);
-                        if (pair.CRooms == null || pair.CRooms.Count == 0)
+                        foreach (var pair in batch)
                         {
-                            //写空Redis
-                            //redis.Push(pair.MTHotelCode, new List<HotelMappingDto>());
-                            //redis2.Push(pair.MTHotelCode, new List<HotelMappingDto>());
-                            //redis3.Push(pair.MTHotelCode, new List<HotelMappingDto>());
-                            //redis4.Push(pair.MTHotelCode, new List<HotelMappingDto>());
 
+                            var result = RoomMatch.Core.RoomMatch.RoomMatch_A.MatchRoom(pair.MRooms, pair.CRooms, roomAnalysis);
+                            if (pair.CRooms == null || pair.CRooms.Count == 0)
+                            {
+                                //写空Redis
+                                //redis.Push(pair.MTHotelCode, new List<HotelMappingDto>());
+                                //redis2.Push(pair.MTHotelCode, new List<HotelMappingDto>());
+                                //redis3.Push(pair.MTHotelCode, new List<HotelMappingDto>());
+                                //redis4.Push(pair.MTHotelCode, new List<HotelMappingDto>());
+                                metrics.RecordRedisPush("skipped", 4);
+
+                            }
+                            foreach (var item in result)
+                            {
+                                if (!string.IsNullOrEmpty(item.CRoom.CreateBy))
+                                {
+                                    var mroom = pair.MRooms.FirstOrDefault(e => e.Id == item.CRoom.OTARoomId);
+                                    roomMatchings.Add(new RoomMatching()
+                                    {
+                                        MTHoteCode = item.CRoom.MTHotelCode,
+                                        CRoom = item.CRoom,
+                                        MRoom = mroom,
+                                        CRoomId = item.CRoom.Id,
+                                        MRoomId = mroom?.Id,
+                                        RoomMatchingStatus = RoomMatchStatus.TextMatch,
+                                        SupId = item.CRoom.SupId,
+                                        Laval = item.Lavel
+                                    });
+                                }
+                                else
+                                {
+                                    roomMatchings.Add(new RoomMatching()
+                                    {
+                                        MTHoteCode = item.CRoom.MTHotelCode,
+                                        CRoom = item.CRoom,
+                                        MRoom = item.MRoom,
+                                        CRoomId = item.CRoom.Id,
+                                        MRoomId = item.MRoom?.Id,
+                                        RoomMatchingStatus = item.RoomMatchStatus,
+                                        SupId = item.CRoom.SupId,
+                                        Laval = item.Lavel
+                                    });
+                                }
+                            }
                         }
-                        foreach (var item in result)
+                        foreach (var statusGroup in roomMatchings.GroupBy(e => e.RoomMatchingStatus))
                         {
-                            if (!string.IsNullOrEmpty(item.CRoom.CreateBy))
-                            {
-                                var mroom = pair.MRooms.FirstOrDefault(e => e.Id == item.CRoom.OTARoomId);
-                                roomMatchings.Add(new RoomMatching()
-                                {
-                                    MTHoteCode = item.CRoom.MTHotelCode,
-                                    CRoom = item.CRoom,
-                                    MRoom = mroom,
-                                    CRoomId = item.CRoom.Id,
-                                    MRoomId = mroom?.Id,
-                                    RoomMatchingStatus = RoomMatchStatus.TextMatch,
-                                    SupId = item.CRoom.SupId,
-                                    Laval = item.Lavel
-                                });
-                            }
-                            else
-                            {
-                                roomMatchings.Add(new RoomMatching()
-                                {
-                                    MTHoteCode = item.CRoom.MTHotelCode,
-                                    CRoom = item.CRoom,
-                                    MRoom = item.MRoom,
-                                    CRoomId = item.CRoom.Id,
-                                    MRoomId = item.MRoom?.Id,
-                                    RoomMatchingStatus = item.RoomMatchStatus,
-                                    SupId = item.CRoom.SupId,
-                                    Laval = item.Lavel
-                                });
-                            }
+                            metrics.RecordMatchResult(statusGroup.Key, statusGroup.Count());
                         }
+                        metrics.AddHotelsMatched(batch.Count);
+                        metrics.AddRoomsGenerated(roomMatchings.Count);
+                    }
+                    catch
+                    {
+                        metrics.RecordError("match");
+                        throw;
+                    }
+                    finally
+                    {
+                        metrics.DecrementActiveMatchWorkers();
                     }
                     await writeQueue.Writer.WriteAsync(roomMatchings);
+                    metrics.RecordMatchDuration(sw.ElapsedMilliseconds);
+                    metrics.SetQueueDepths(readQueue.Reader.Count, writeQueue.Reader.Count);
                     logger.LogTrace($"线程 {Thread.CurrentThread.ManagedThreadId} 第 {idx} 批匹配完成，用时 {sw.ElapsedMilliseconds} ms 读取队列剩余：{readQueue.Reader.Count} 写入队列剩余:{writeQueue.Reader.Count}");
                 }
 
@@ -310,12 +348,17 @@ public class Worker : BackgroundService
             catch (Exception e)
             {
 
+                metrics.RecordError("write_queue_read");
                 logger.LogError(e, $"队列读取失败");
                 continue;
             }
             Stopwatch stopwatch = Stopwatch.StartNew();
+            metrics.SetWriting();
+            metrics.SetQueueDepths(readQueue.Reader.Count, writeQueue.Reader.Count);
             await SaveDataAsync(buffer, stoppingToken);
             stopwatch.Stop();
+            metrics.RecordWriteDuration("save_batch", stopwatch.ElapsedMilliseconds);
+            metrics.SetQueueDepths(readQueue.Reader.Count, writeQueue.Reader.Count);
             logger.LogTrace($"第{(index++)}批数据 {buffer.Count}条数据写入完成耗时：{stopwatch.ElapsedMilliseconds} ms");
         }
         logger.LogTrace($"匹配结束时间: {DateTime.Now.ToString("HH:mm:ss")}");
@@ -384,7 +427,10 @@ public class Worker : BackgroundService
                     table.Rows.Add(row);
                 }
 
+                var bulkCopyStopwatch = Stopwatch.StartNew();
                 await bulkCopy.WriteToServerAsync(table);
+                bulkCopyStopwatch.Stop();
+                metrics.RecordWriteDuration("sql_bulk_copy", bulkCopyStopwatch.ElapsedMilliseconds);
             }
 
 
@@ -423,9 +469,14 @@ public class Worker : BackgroundService
 
             using (var cmd = new SqlCommand(sql, conn, transaction))
             {
+                var mergeStopwatch = Stopwatch.StartNew();
                 await cmd.ExecuteNonQueryAsync();
+                mergeStopwatch.Stop();
+                metrics.RecordWriteDuration("sql_merge", mergeStopwatch.ElapsedMilliseconds);
             }
             await transaction.CommitAsync();
+            metrics.AddHotelsWritten(list.Select(e => e.MTHoteCode).Distinct().Count());
+            metrics.AddRoomsPersisted(list.Count(e => string.IsNullOrEmpty(e.CRoom.CreateBy)));
 
 
             #region 写redis
@@ -474,12 +525,14 @@ public class Worker : BackgroundService
                 //redis2.Push(hotelCode, roomMatching);
                 //redis3.Push(hotelCode, roomMatching);
                 //redis4.Push(hotelCode, roomMatching);
+                metrics.RecordRedisPush("skipped", roomMatching.Count);
             }
             //#endif
             #endregion
         }
         catch (Exception e)
         {
+            metrics.RecordError("save_data");
             logger.LogError(e, "写入数据时发生错误");
             //throw;
         }
@@ -509,6 +562,7 @@ public class Worker : BackgroundService
         }
         catch (Exception e)
         {
+            metrics.RecordError("read_ota_rooms");
             logger.LogError(e, "数据读取失败 SELECT * FROM CtripHotelRoomInfo(NOLock) WHERE MTHotelCode IN ");
             return null;
         }
@@ -613,6 +667,7 @@ public class Worker : BackgroundService
         catch (Exception e)
         {
 
+            metrics.RecordError("read_sup_rooms");
             logger.LogError(e, "数据读取失败 SELECT * FROM V_SupRoomInfo WHERE MTHotelCode IN");
             return null;
         }

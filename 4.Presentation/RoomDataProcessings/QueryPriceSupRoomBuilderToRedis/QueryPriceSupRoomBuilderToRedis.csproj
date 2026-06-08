@@ -1,4 +1,4 @@
-<Project Sdk="Microsoft.NET.Sdk">
+﻿<Project Sdk="Microsoft.NET.Sdk;Microsoft.NET.Sdk.Publish">
 
   <PropertyGroup>
     <OutputType>Exe</OutputType>
@@ -50,7 +50,8 @@
       <HintPath>..\..\..\999.DLL\Connectmate\net10.0\MengTu.Connectmate.Client.dll</HintPath>
     </Reference>
     <Reference Include="VBaseFramework.ApiSecurity.ClientSdk">
-      <HintPath>..\..\..\..\mengtu.theforce\code\MengtuDataV\999.DLL\MengTu.Connectmate.Client\net10.0\VBaseFramework.ApiSecurity.ClientSdk.dll</HintPath>
+      <HintPath>..\..\..\999.DLL\Connectmate\net10.0\VBaseFramework.ApiSecurity.ClientSdk.dll</HintPath>
+      <Private>true</Private>
     </Reference>
   </ItemGroup>
 
