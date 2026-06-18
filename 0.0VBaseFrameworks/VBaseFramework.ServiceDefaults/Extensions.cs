@@ -12,6 +12,7 @@ using Swashbuckle.AspNetCore.SwaggerGen;
 using System.ComponentModel;
 using VBaseFramework.Api.Core;
 using VBaseFramework.Core.NLog;
+using System.Reflection;
 
 namespace Microsoft.Extensions.Hosting;
 
@@ -34,6 +35,7 @@ public static class Extensions
         builder.Services.AddControllers(opetation =>
         {
             opetation.Filters.Add<BaseExpextFilter>();
+            opetation.Filters.Add(new WrapApiResultAttribute());
         }).AddJsonOptions(options =>
         {
             var json = options.JsonSerializerOptions;
@@ -109,6 +111,7 @@ public static class Extensions
             options.SwaggerDoc("OTAHotelRoomMatch", new Microsoft.OpenApi.Models.OpenApiInfo { Title = "房型匹配", Version = "v1" });
             options.SwaggerDoc("OTATool", new Microsoft.OpenApi.Models.OpenApiInfo { Title = "OTA相关工具", Version = "v1" });
             options.SwaggerDoc("System", new Microsoft.OpenApi.Models.OpenApiInfo { Title = "系统API", Version = "v1" });
+            AddSwaggerXmlComments(options);
         });
         //builder.Services.AddSwaggerGen();
 
@@ -194,16 +197,29 @@ public static class Extensions
         .AllowAnyMethod()
         .AllowAnyHeader());
 
+        app.MapGet("/", context =>
+        {
+            context.Response.Redirect("/swagger");
+            return Task.CompletedTask;
+        });
+
         app.UseSwagger();
         app.UseSwaggerUI(c =>
         {
-            c.SwaggerEndpoint("/swagger/OTATool/swagger.json", "OTA工具");
-            c.SwaggerEndpoint("/swagger/OTAHotelRoomMatch/swagger.json", "房型匹配");
-            c.SwaggerEndpoint("/swagger/System/swagger.json", "系统API");
+            c.SwaggerEndpoint("/swagger/v1/swagger.json", "API v1");
         });
 
         app.UseMiddleware<LoggingMiddleware>();
         return app;
+    }
+
+    public static void AddSwaggerXmlComments(SwaggerGenOptions options)
+    {
+        var baseDirectory = AppContext.BaseDirectory;
+        foreach (var xmlPath in Directory.EnumerateFiles(baseDirectory, "*.xml", SearchOption.TopDirectoryOnly))
+        {
+            options.IncludeXmlComments(xmlPath, includeControllerXmlComments: true);
+        }
     }
 }
 public class AddAuthTokenHeaderParameter : IOperationFilter

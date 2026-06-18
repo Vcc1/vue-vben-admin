@@ -10,6 +10,7 @@
   <Folder Name="/2.Application/" />
   <Folder Name="/2.Application/MetricsAndAlerts/">
     <Project Path="2.Application/MetricsAndAlerts/GrafanaAlertApp/GrafanaAlertApp.csproj" />
+    <Project Path="2.Application/MetricsAndAlerts/MetricsAndAlertsApp/MetricsAndAlertsApp.csproj" />
   </Folder>
   <Folder Name="/2.Application/HotelInfo/" />
   <Folder Name="/2.Application/RoomMatchings/">
@@ -28,6 +29,7 @@
   <Folder Name="/3.Infrastructure/Core/" />
   <Folder Name="/3.Infrastructure/Core/MetricsAndAlerts/">
     <Project Path="3.Infrastructure/Core/MetricsAndAlerts/Infrastructure.GrafanaAlertApp/Infrastructure.GrafanaAlertApp.csproj" />
+    <Project Path="3.Infrastructure/Core/MetricsAndAlerts/Infrastructure.MetricsAndAlertsApp/Infrastructure.MetricsAndAlertsApp.csproj" />
   </Folder>
   <Folder Name="/3.Infrastructure/Core/HotelInfo/" />
   <Folder Name="/3.Infrastructure/Core/RoomMatchings/">
@@ -43,6 +45,7 @@
     <Project Path="3.Infrastructure/Taap/Infrastructure.ExpediaChaseRoomApp/Infrastructure.ExpediaChaseRoomApp.csproj" />
   </Folder>
   <Folder Name="/3.Infrastructure/Providers/">
+    <Project Path="3.Infrastructure/Providers/Infrastructure.HTTP.Prometheus/Infrastructure.HTTP.Prometheus.csproj" />
     <Project Path="3.Infrastructure/Providers/Infrastructure.HTTP.QueryPrice/Infrastructure.HTTP.QueryPrice.csproj" />
     <Project Path="3.Infrastructure/Providers/Infrastructure.HTTP.SupStaticData/Infrastructure.HTTP.SupStaticData.csproj" Id="f8ad0402-711b-42ab-9c53-7b979733f0f2" />
     <Project Path="3.Infrastructure/Providers/Infrastructure.HTTP.WorkWechatAlert/Infrastructure.HTTP.WorkWechatAlert.csproj" />
@@ -54,6 +57,7 @@
     <Project Path="3.Infrastructure/Providers/Infrastructure.Sql.MengTuAPI/Infrastructure.Sql.MengTuAPI.csproj" Id="531bea02-a581-4c76-8a52-b2982c322da4" />
     <Project Path="3.Infrastructure/Providers/Infrastructure.Sql.MengTuSup/Infrastructure.Sql.MengTuSup.csproj" />
     <Project Path="3.Infrastructure/Providers/Infrastructure.Sql.MengTuYDOTA/Infrastructure.Sql.MengTuYDOTA.csproj" Id="f9a7706a-ccdd-4b71-8080-debf08e4b8b3" />
+    <Project Path="3.Infrastructure/Providers/Infrastructure.Sql.MetricsAndAlerts/Infrastructure.Sql.MetricsAndAlerts.csproj" />
     <Project Path="3.Infrastructure/Providers/Infrastructure.Sql.MixedData/Infrastructure.Sql.MixedData.csproj" Id="220d98af-cc48-4711-863e-83f1330452a9" />
     <Project Path="3.Infrastructure/Providers/Infrastructure.Sql.RoomMapping/Infrastructure.Sql.RoomMapping.csproj" Id="071b4704-9365-406a-9128-0eff436be5f5" />
     <Project Path="3.Infrastructure/Providers/Infrastructure.Sql.SupCacheDB/Infrastructure.Sql.SupCacheDB.csproj" />
@@ -62,6 +66,8 @@
   <Folder Name="/4.Presentation/" />
   <Folder Name="/4.Presentation/MetricsAndAlerts/">
     <Project Path="4.Presentation/MetricsAndAlerts/GrafanaAlertWebhook/GrafanaAlertWebhook.csproj" />
+    <Project Path="4.Presentation/MetricsAndAlerts/MetricsAndAlerts/MetricsAndAlerts.csproj" />
+    <Project Path="4.Presentation/MetricsAndAlerts/TestMetrics/TestMetrics.csproj" Id="7130c2f8-f08f-4511-acc4-4f779430add9" />
   </Folder>
   <Folder Name="/4.Presentation/DataStatistics/">
     <Project Path="4.Presentation/DataStatistics/RoomMappingSupStaticRoomInfoStatistics/RoomMappingSupStaticRoomInfoStatistics.csproj" />

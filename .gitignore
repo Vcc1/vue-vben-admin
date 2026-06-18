@@ -144,3 +144,5 @@ docker-compose.override.yml
 .tmp-compile/compile.rsp
 .tmp-compile/Infrastructure.Web.Taap.dll
 .codex/
+tmp/
+4.Presentation/MetricsAndAlerts/TestMetrics.zip

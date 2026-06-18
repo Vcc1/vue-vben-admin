@@ -15,6 +15,7 @@ using System.ComponentModel;
 using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
+using VBaseFramework.Api.Core;
 using VBaseFramework.ServiceDefaults.Core.Auth;
 using VBaseFramework.Core.EF.Log;
 using VBaseFramework.Core.NLog;
@@ -64,11 +65,12 @@ namespace VBaseFramework.ServiceDefaults
                 // 创建 WebApplication，注册 controller 等
                 var builder = WebApplication.CreateBuilder(options.Args);
 
-                builder.Services.AddSwaggerGen();
+                builder.Services.AddSwaggerGen(Extensions.AddSwaggerXmlComments);
                 // 注册 controller 等 Web 内容
                 builder.Services.AddControllers(options =>
                 {
-                    //options.Filters.Add<HttpAuthFilter>();
+                    options.Filters.Add<BaseExpextFilter>();
+                    options.Filters.Add(new WrapApiResultAttribute());
                 });
                 builder.Logging.ClearProviders();
                 builder.Logging.AddNLog("Configs/nlog.config");

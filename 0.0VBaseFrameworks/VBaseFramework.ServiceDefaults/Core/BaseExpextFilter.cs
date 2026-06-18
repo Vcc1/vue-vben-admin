@@ -19,20 +19,18 @@ namespace VBaseFramework.Api.Core
                 var err = context.Exception as VBaseException;
                 if (err != null)
                 {
-                    context.Result = new JsonResult(new ErrorResponse
+                    context.Result = new JsonResult(ApiResult.Error(err.Code, err.Message))
                     {
-                        Message = err.Message,
-                        Code = err.Code
-                    });
+                        StatusCode = StatusCodes.Status200OK
+                    };
                     context.ExceptionHandled = true; //表示错误已经处理过
                 }
                 else
                 {
-                    context.Result = new JsonResult(new ErrorResponse
+                    context.Result = new JsonResult(ApiResult.Error(500, context.Exception.Message))
                     {
-                        Message = context.Exception.Message,
-                        Code = 500
-                    });
+                        StatusCode = StatusCodes.Status500InternalServerError
+                    };
                     logger.LogError(context.Exception.Message);
                     context.ExceptionHandled = true; //表示错误已经处理过
                 }

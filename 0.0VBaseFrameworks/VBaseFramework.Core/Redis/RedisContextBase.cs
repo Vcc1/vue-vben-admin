@@ -51,7 +51,6 @@ namespace VBaseFramework.Core.Redis
                 DB = RedisMultiplexer.GetDatabase();
                 ConnString = conn;
             }
-
         }
 
         private static string NormalizeRedisConnectionString(string redisConnection)

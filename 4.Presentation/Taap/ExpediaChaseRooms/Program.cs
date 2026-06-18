@@ -1,7 +1,8 @@
+using ExpediaChaseRoomApp;
 using MengTu.Connectmate.Client;
 using MengTu.Connectmate.Client.Tool;
+using Microsoft.Extensions.Primitives;
 using System.Diagnostics;
-using ExpediaChaseRoomApp;
 using VBase.AppMetrics;
 using VBaseFramework.ServiceDefaults;
 
@@ -16,6 +17,12 @@ var host = Serve.Run(
     new RunOptions { Args = args, ServiceName = "MT-ExpediaChaseRooms" },
     (services, configuration) =>
     {
+        //ChangeToken.OnChange(() => configuration.GetReloadToken(), () =>
+        //{
+        //    Console.WriteLine("Configuration changed, reloading...");
+        //    // You can add any additional logic here if needed when the configuration changes
+        //});
+  
         services.AddConnectmateDatabaseSerializer<ConnectmateFallbackSerializer>();
         services.AddConnectmateRemoteConfiguration(configuration);
         services
