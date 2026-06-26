@@ -38,7 +38,15 @@ namespace RoomMatch.Core.RoomMatchingStrategies
 
             // === 增益词：ota 缺失的 ===
             var boostSup = sup.TypeWordDic.GetValueOrDefault(WordCategory.Positive)?.Select(w => w.WordAttr).ToList() ?? new();
+            var boostSupIds = boostSup.Select(static w => w.Id).ToHashSet();
             var boostOtaIds = ota.TypeWordDic.GetValueOrDefault(WordCategory.Positive)?.Select(w => w.WordAttr.Id).ToHashSet() ?? new();
+
+            foreach (var otaPositiveId in boostOtaIds)
+            {
+                if (!IsCompatibleMatch(otaPositiveId, boostSupIds))
+                    return MatchResult.NotMatched(Name);
+            }
+
             foreach (var attr in boostSup)
             {
                 if (!IsCompatibleMatch(attr.Id, boostOtaIds))

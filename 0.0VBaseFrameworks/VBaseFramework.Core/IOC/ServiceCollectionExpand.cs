@@ -57,7 +57,22 @@ namespace Framework.Core.IOC
                     }
 
                     var type = serviceType.Type;
-                    var serviceClassType = serviceType.Attr.ServiceType ?? type;
+                    var registrationServiceType = type;
+                    var registrationImplementationType = type;
+                    if (serviceType.Attr.ServiceType != null)
+                    {
+                        if (type.IsInterface)
+                        {
+                            registrationServiceType = type;
+                            registrationImplementationType = serviceType.Attr.ServiceType;
+                        }
+                        else
+                        {
+                            registrationServiceType = serviceType.Attr.ServiceType;
+                            registrationImplementationType = type;
+                        }
+                    }
+
                     var factoryType = serviceType.Attr.FactoryType;
                     if (factoryType != null && typeof(IServiceFactory).IsAssignableFrom(factoryType))
                     {
@@ -94,13 +109,13 @@ namespace Framework.Core.IOC
                         switch (lifetime)
                         {
                             case ServiceLifetime.Transient:
-                                services.AddTransient(type, serviceClassType);
+                                services.AddTransient(registrationServiceType, registrationImplementationType);
                                 break;
                             case ServiceLifetime.Singleton:
-                                services.AddSingleton(type, serviceClassType);
+                                services.AddSingleton(registrationServiceType, registrationImplementationType);
                                 break;
                             case ServiceLifetime.Scoped:
-                                services.AddScoped(type, serviceClassType);
+                                services.AddScoped(registrationServiceType, registrationImplementationType);
                                 break;
                         }
 

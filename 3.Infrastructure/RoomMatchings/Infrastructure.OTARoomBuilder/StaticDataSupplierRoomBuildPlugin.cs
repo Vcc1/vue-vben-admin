@@ -1,0 +1,97 @@
+using Infrastructure.Sql.MengTuSup.Entitys;
+using Microsoft.Extensions.Logging;
+using OTARoomBuilder;
+using RoomMatch.Core.RoomMatchingStrategies;
+using SupplierStaticDataApp;
+using SupplierStaticDataApp.Contracts;
+
+namespace Infrastructure.OTARoomBuilder;
+
+public sealed class StaticDataSupplierRoomBuildPlugin : BaseSupplierRoomBuildPlugin<StrictEqualMatcher>
+{
+    readonly int _supId;
+    readonly int _priority;
+    readonly ISupplierStaticDataService _supplierStaticDataService;
+    readonly ILogger<StaticDataSupplierRoomBuildPlugin> _logger;
+
+    public StaticDataSupplierRoomBuildPlugin(
+        int supId,
+        int priority,
+        ISupplierStaticDataService supplierStaticDataService,
+        ILogger<StaticDataSupplierRoomBuildPlugin> logger)
+    {
+        _supId = supId;
+        _priority = priority;
+        _supplierStaticDataService = supplierStaticDataService;
+        _logger = logger;
+    }
+
+    public override int SupId => _supId;
+
+    public override int Priority => _priority;
+
+    public override bool CanEnrich(SupRoomInfo room)
+    {
+        return !string.IsNullOrWhiteSpace(room.SHotelCode) && !string.IsNullOrWhiteSpace(room.SRoomCode);
+    }
+
+    public override async Task<SupplierRoomEnrichmentResult> EnrichAsync(
+        SupplierRoomBuildContext context,
+        CancellationToken cancellationToken)
+    {
+        if (!CanEnrich(context.SupplierRoom))
+        {
+            return SupplierRoomEnrichmentResult.NotSupported;
+        }
+
+        var result = await _supplierStaticDataService.GetHotelAndRoomsBySupplierHotelCodeAsync(
+            SupId,
+            context.SHotelCode!,
+            new SupplierStaticDataRequestOptions
+            {
+                ForceRefresh = false
+            },
+            cancellationToken);
+
+        if (!result.Success || result.Data is null)
+        {
+            _logger.LogWarning(
+                "Failed to load supplier static data for MaxAdt enrichment. SupId={SupId}, MTHotelCode={MTHotelCode}, SHotelCode={SHotelCode}, SRoomCode={SRoomCode}, ErrorCode={ErrorCode}",
+                SupId,
+                context.MTHotelCode,
+                context.SHotelCode,
+                context.SRoomCode,
+                result.ErrorCode);
+            return SupplierRoomEnrichmentResult.NotSupported;
+        }
+
+        var room = result.Data.Rooms.FirstOrDefault(item =>
+            string.Equals(item.RoomCode, context.SRoomCode, StringComparison.OrdinalIgnoreCase));
+        if (room is null)
+        {
+            _logger.LogWarning(
+                "Supplier static room not found for MaxAdt enrichment. SupId={SupId}, MTHotelCode={MTHotelCode}, SHotelCode={SHotelCode}, SRoomCode={SRoomCode}",
+                SupId,
+                context.MTHotelCode,
+                context.SHotelCode,
+                context.SRoomCode);
+            return SupplierRoomEnrichmentResult.NotSupported;
+        }
+
+        var maxAdt = room.MaxOccupancy ?? 0;
+        if (maxAdt <= 0)
+        {
+            return SupplierRoomEnrichmentResult.NotSupported;
+        }
+
+        return new SupplierRoomEnrichmentResult
+        {
+            Success = true,
+            MaxAdt = maxAdt,
+            DataKind = global::OTARoomBuilder.SupplierStaticDataKind.HotelAndRoom,
+            CacheHotelCode = context.SHotelCode,
+            CacheRoomCode = context.SRoomCode,
+            PayloadFormat = "json"
+        };
+    }
+}
