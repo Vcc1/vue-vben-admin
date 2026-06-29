@@ -80,8 +80,8 @@ namespace RoomMatch.Core.RoomMatch
                           {
                               EnsureWordDictionary(context);
                               var exactMatch = TryGetExactTextMatch(context, exactOriginalLookup, exactCleanedLookup);
-                              var r = exactMatch != null
-                                  ? (exactMatch, RoomMatchStatus.TextMatch, 0)
+                              (RoomContext<OTARoomInfo> RoomContext, RoomMatchStatus RoomMatchStatus, int Lavel) r = exactMatch != null
+                                  ? (RoomContext: exactMatch, RoomMatchStatus: RoomMatchStatus.TextMatch, Lavel: 0)
                                   : RoomMatch(mroomContexts, context);
                               if (r.RoomMatchStatus != RoomMatchStatus.NotMatch)
                               {
@@ -105,8 +105,8 @@ namespace RoomMatch.Core.RoomMatch
                           {
                               EnsureWordDictionary(context);
                               var exactMatch = TryGetExactTextMatch(context, exactOriginalLookup, exactCleanedLookup);
-                              var r = exactMatch != null
-                                  ? (exactMatch, RoomMatchStatus.TextMatch, 0)
+                              (RoomContext<OTARoomInfo> RoomContext, RoomMatchStatus RoomMatchStatus, int Lavel) r = exactMatch != null
+                                  ? (RoomContext: exactMatch, RoomMatchStatus: RoomMatchStatus.TextMatch, Lavel: 0)
                                   : RoomMatch(mroomContexts, context);
                               if (r.RoomMatchStatus != RoomMatchStatus.NotMatch)
                               {
@@ -266,8 +266,6 @@ namespace RoomMatch.Core.RoomMatch
         private static void 构建字典2(RoomContext cRoomContext)
         {
             var dict = new Dictionary<WordCategory, List<RoomWord>>();
-            bool seen2790 = false;
-
             foreach (var word in cRoomContext.RoomNameWords)
             {
                 if (word.WordAttr.Id <= -2)

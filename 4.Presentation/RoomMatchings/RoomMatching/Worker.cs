@@ -1,6 +1,4 @@
 ﻿using Cronos;
-using Infrastructure.Redis.SupRoomInfo;
-using Infrastructure.Redis.SupRoomInfo.Entitys;
 using Infrastructure.Sql.MengTuAPI;
 using Infrastructure.Sql.MengTuSup.Entitys;
 using Infrastructure.Sql.MixedData;

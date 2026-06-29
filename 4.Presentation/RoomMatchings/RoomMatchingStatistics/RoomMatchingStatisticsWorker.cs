@@ -42,7 +42,6 @@ public sealed class RoomMatchingStatisticsWorker : BackgroundService
                 _logger.LogInformation("Room matching statistics waiting for next run. Delay={Delay}", delay);
                 await Task.Delay(delay, stoppingToken);
             }
-
             runImmediately = false;
 
             var startedAt = DateTimeOffset.UtcNow;
