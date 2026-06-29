@@ -48,8 +48,19 @@ namespace RoomMatch.Core.RoomMatch
                   .Where(e => e != null)
                   .OrderBy(e => e.SourceData.Id)
                   .Select(e => roomAnalysis.Analysis(e))
-                  .Where(e => e.RoomNameWords.Count() > 0)
+                  .Where(e => e.RoomNameWords.Count > 0)
                   .ToList();
+
+            foreach (var item in mroomContexts)
+            {
+                EnsureWordDictionary(item);
+            }
+
+            var otaRoomById = mrooms
+                .GroupBy(e => e.Id)
+                .ToDictionary(e => e.Key, e => e.First());
+            var exactOriginalLookup = BuildExactLookup(mroomContexts, e => e.RoomNameOriginal);
+            var exactCleanedLookup = BuildExactLookup(mroomContexts, e => e.RoomNameCleaned);
 
             var list = crooms
                   //.Where(e => string.IsNullOrEmpty(e.CreateBy))
@@ -57,37 +68,55 @@ namespace RoomMatch.Core.RoomMatch
                   {
                       if (!string.IsNullOrEmpty(e.CreateBy))
                       {
-                          var ota = mrooms.Where(m => m.Id == e.OTARoomId).FirstOrDefault();
+                          var ota = e.OTARoomId.HasValue && otaRoomById.TryGetValue(e.OTARoomId.Value, out var manualMatchedRoom)
+                              ? manualMatchedRoom
+                              : null;
                           return (e, ota, RoomMatchStatus.FullMatch, 0);
                       }
                       else if (!string.IsNullOrEmpty(e.SRoomNameEN))
                       {
-
                           var context = roomAnalysis.Analysis(cPool.Get().Reset(e.SRoomNameEN, e, setting));
-                          var r = RoomMatch(mroomContexts, context);
-                          if (r.RoomMatchStatus != RoomMatchStatus.NotMatch)
+                          try
                           {
-                              //已匹配
-                              return (context.SourceData, r.RoomContext.SourceData, r.RoomMatchStatus, r.Lavel);
+                              EnsureWordDictionary(context);
+                              var exactMatch = TryGetExactTextMatch(context, exactOriginalLookup, exactCleanedLookup);
+                              var r = exactMatch != null
+                                  ? (exactMatch, RoomMatchStatus.TextMatch, 0)
+                                  : RoomMatch(mroomContexts, context);
+                              if (r.RoomMatchStatus != RoomMatchStatus.NotMatch)
+                              {
+                                  return (context.SourceData, r.RoomContext.SourceData, r.RoomMatchStatus, r.Lavel);
+                              }
+                              if (e.SRoomNameEN == e.SRoomNameCN)
+                              {
+                                  return (e, null, RoomMatchStatus.NotMatch, 0);
+                              }
                           }
-                          if (e.SRoomNameEN == e.SRoomNameCN)
+                          finally
                           {
-                              ///返回不匹配
-                              return (e, null, RoomMatchStatus.NotMatch, 0);
+                              cPool.Return(context);
                           }
-                          cPool.Return(context);
                       }
 
                       if (!string.IsNullOrEmpty(e.SRoomNameCN))
                       {
                           var context = roomAnalysis.Analysis(cPool.Get().Reset(e.SRoomNameCN, e, setting));
-                          var r = RoomMatch(mroomContexts, context);
-                          if (r.RoomMatchStatus != RoomMatchStatus.NotMatch)
+                          try
                           {
-                              //已匹配
-                              return (context.SourceData, r.RoomContext.SourceData, r.RoomMatchStatus, r.Lavel);
+                              EnsureWordDictionary(context);
+                              var exactMatch = TryGetExactTextMatch(context, exactOriginalLookup, exactCleanedLookup);
+                              var r = exactMatch != null
+                                  ? (exactMatch, RoomMatchStatus.TextMatch, 0)
+                                  : RoomMatch(mroomContexts, context);
+                              if (r.RoomMatchStatus != RoomMatchStatus.NotMatch)
+                              {
+                                  return (context.SourceData, r.RoomContext.SourceData, r.RoomMatchStatus, r.Lavel);
+                              }
                           }
-                          cPool.Return(context);
+                          finally
+                          {
+                              cPool.Return(context);
+                          }
                       }
                       return (e, null, RoomMatchStatus.NotMatch, 0);
                   }).ToList();
@@ -121,11 +150,7 @@ namespace RoomMatch.Core.RoomMatch
             RoomContext<MT> bestMatch = null;
             RoomMatchStatus bestStatus = RoomMatchStatus.NotMatch;
             int bestDistance = int.MaxValue;
-            mRoomContextList.ForEach(roomContext =>
-            {
-                构建字典2(roomContext);
-            });
-            构建字典2(cRoomContext);
+            EnsureWordDictionary(cRoomContext);
 
             foreach (var mRoom in mRoomContextList)
             {
@@ -155,6 +180,53 @@ namespace RoomMatch.Core.RoomMatch
             }
 
             return (null, RoomMatchStatus.NotMatch, int.MaxValue);
+        }
+
+        private static Dictionary<string, RoomContext<OTARoomInfo>> BuildExactLookup(
+            IEnumerable<RoomContext<OTARoomInfo>> contexts,
+            Func<RoomContext<OTARoomInfo>, string> keySelector)
+        {
+            var lookup = new Dictionary<string, RoomContext<OTARoomInfo>>(StringComparer.Ordinal);
+            foreach (var context in contexts)
+            {
+                var key = keySelector(context);
+                if (string.IsNullOrWhiteSpace(key))
+                {
+                    continue;
+                }
+
+                lookup.TryAdd(key, context);
+            }
+
+            return lookup;
+        }
+
+        private static RoomContext<OTARoomInfo> TryGetExactTextMatch(
+            RoomContext<SupRoomInfoView> context,
+            IReadOnlyDictionary<string, RoomContext<OTARoomInfo>> exactOriginalLookup,
+            IReadOnlyDictionary<string, RoomContext<OTARoomInfo>> exactCleanedLookup)
+        {
+            if (!string.IsNullOrWhiteSpace(context.RoomNameOriginal) &&
+                exactOriginalLookup.TryGetValue(context.RoomNameOriginal, out var originalMatch))
+            {
+                return originalMatch;
+            }
+
+            if (!string.IsNullOrWhiteSpace(context.RoomNameCleaned) &&
+                exactCleanedLookup.TryGetValue(context.RoomNameCleaned, out var cleanedMatch))
+            {
+                return cleanedMatch;
+            }
+
+            return null;
+        }
+
+        private static void EnsureWordDictionary(RoomContext context)
+        {
+            if (context.TypeWordDic == null || context.TypeWordDic.Count == 0)
+            {
+                构建字典2(context);
+            }
         }
 
         private static void 构建字典<CT>(RoomContext<CT> cRoomContext)
@@ -397,20 +469,14 @@ namespace RoomMatch.Core.RoomMatch
         /// <returns></returns>
         public static (RoomMatchStatus, int) RoomMatch2(RoomContext mRoomInfo, RoomContext cRoomInfo)
         {
-            if (mRoomInfo.TypeWordDic.Count == 0)
-            {
-                构建字典2(mRoomInfo);
-            }
-            if (cRoomInfo.TypeWordDic.Count == 0)
-            {
-                构建字典2(cRoomInfo);
-            }
+            EnsureWordDictionary(mRoomInfo);
+            EnsureWordDictionary(cRoomInfo);
 
-            if (mRoomInfo.TypeWordDic.Count == 0)
+            if (mRoomInfo.TypeWordDic == null || mRoomInfo.TypeWordDic.Count == 0)
             {
                 return (RoomMatchStatus.NotMatch, 0);
             }
-            if (cRoomInfo.TypeWordDic.Count == 0)
+            if (cRoomInfo.TypeWordDic == null || cRoomInfo.TypeWordDic.Count == 0)
             {
                 return (RoomMatchStatus.NotMatch, 0);
             }
