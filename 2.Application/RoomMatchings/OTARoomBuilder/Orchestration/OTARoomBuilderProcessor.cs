@@ -158,11 +158,7 @@ public sealed class OTARoomBuilderProcessor
             try
             {
                 cancellationToken.ThrowIfCancellationRequested();
-                var createdRooms = await BuildOtaRoomsAsync(
-                    hotel.OtaRooms,
-                    hotel.SupplierRooms,
-                    hotel.RoomMaps,
-                    cancellationToken);
+                var createdRooms = await BuildOtaRoomsForHotelAsync(hotel, cancellationToken);
 
                 if (createdRooms.Count == 0)
                 {
@@ -170,7 +166,7 @@ public sealed class OTARoomBuilderProcessor
                     continue;
                 }
 
-                await PersistAsync(createdRooms, batchContext.OutputMode, cancellationToken);
+                await PersistCreatedRoomsAsync(createdRooms, batchContext.OutputMode, cancellationToken);
                 _metrics.RecordCreated(createdRooms.Count, batchContext.OutputMode);
             }
             finally
@@ -178,6 +174,27 @@ public sealed class OTARoomBuilderProcessor
                 _metrics.DecrementPendingHotels();
             }
         }
+    }
+
+    public Task<List<OTARoomInfoPre>> BuildOtaRoomsForHotelAsync(
+        HotelRoomBuildContext hotel,
+        CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(hotel);
+
+        return BuildOtaRoomsAsync(
+            hotel.OtaRooms,
+            hotel.SupplierRooms,
+            hotel.RoomMaps,
+            cancellationToken);
+    }
+
+    public Task PersistCreatedRoomsAsync(
+        List<OTARoomInfoPre> rooms,
+        string outputMode,
+        CancellationToken cancellationToken)
+    {
+        return PersistAsync(rooms, outputMode, cancellationToken);
     }
 
     async Task<List<OTARoomInfoPre>> BuildOtaRoomsAsync(
@@ -258,6 +275,14 @@ public sealed class OTARoomBuilderProcessor
 
             if ((candidate.Room.MaxAdt ?? 0) == 0 && plugin.CanEnrich(candidate.Room))
             {
+                _logger.LogInformation(
+                    "OTARoomBuilder enrich start. Plugin={Plugin}, SupId={SupId}, MTHotelCode={MTHotelCode}, SHotelCode={SHotelCode}, SRoomCode={SRoomCode}, SupplierRoomId={SupplierRoomId}",
+                    plugin.GetType().Name,
+                    candidate.Room.SupId,
+                    candidate.Room.MTHotelCode,
+                    candidate.Room.SHotelCode,
+                    candidate.Room.SRoomCode,
+                    candidate.Room.Id);
                 var enrichmentResult = await plugin.EnrichAsync(
                     new SupplierRoomBuildContext
                     {
@@ -269,6 +294,15 @@ public sealed class OTARoomBuilderProcessor
                 if (enrichmentResult.Success && enrichmentResult.MaxAdt is int maxAdt && maxAdt > 0)
                 {
                     candidate.Room.MaxAdt = maxAdt;
+                    _logger.LogInformation(
+                        "OTARoomBuilder enrich success. Plugin={Plugin}, SupId={SupId}, MTHotelCode={MTHotelCode}, SHotelCode={SHotelCode}, SRoomCode={SRoomCode}, SupplierRoomId={SupplierRoomId}, MaxAdt={MaxAdt}",
+                        plugin.GetType().Name,
+                        candidate.Room.SupId,
+                        candidate.Room.MTHotelCode,
+                        candidate.Room.SHotelCode,
+                        candidate.Room.SRoomCode,
+                        candidate.Room.Id,
+                        maxAdt);
                 }
             }
 

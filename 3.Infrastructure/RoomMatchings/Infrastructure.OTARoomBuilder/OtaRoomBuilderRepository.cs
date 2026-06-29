@@ -2,8 +2,10 @@ using EFCore.BulkExtensions;
 using Infrastructure.Sql.MengTuSup.Entitys;
 using Infrastructure.Sql.RoomMapping;
 using Infrastructure.Sql.RoomMapping.Entitys;
+using Microsoft.Data.SqlClient;
 using Microsoft.EntityFrameworkCore;
 using OTARoomBuilder.Contracts;
+using System.Data;
 
 namespace Infrastructure.OTARoomBuilder;
 
@@ -26,26 +28,34 @@ public sealed class OtaRoomBuilderRepository : IOtaRoomBuilderRepository
         var cursorId = cursor?.LastId ?? 0;
         var uniqueHotelTarget = Math.Max(1, batchSize);
         var take = Math.Max(uniqueHotelTarget, uniqueHotelTarget * 5);
-        var cursorDateText = cursorDate.ToString("yyyy-MM-dd HH:mm:ss.fffffff");
+        var sql = """
+    SELECT TOP (@Take)
+        a.MTHotelCode,
+        a.LastUpdate_Date AS LastUpdateDate,
+        a.Id
+    FROM dbo.SupRoomInfo a
+    WHERE a.SupId IN (51, 32, 1, 75)
+      AND a.MTHotelCode IS NOT NULL
+      AND LTRIM(RTRIM(a.MTHotelCode)) <> ''
+      AND
+      (
+          a.LastUpdate_Date > @CursorDate
+          OR
+          (
+              a.LastUpdate_Date = @CursorDate
+              AND a.Id > @CursorId
+          )
+      )
+    ORDER BY a.LastUpdate_Date ASC, a.Id ASC;
+    """;
 
-        var sql = $"""
-            SELECT TOP ({take})
-                a.MTHotelCode,
-                a.LastUpdate_Date AS LastUpdateDate,
-                a.Id
-            FROM SupRoomInfo a
-            WHERE a.SupId IN (51,32,1,75)
-              AND a.MTHotelCode IS NOT NULL
-              AND LTRIM(RTRIM(a.MTHotelCode)) <> ''
-              AND (
-                    a.LastUpdate_Date > '{cursorDateText}'
-                    OR (a.LastUpdate_Date = '{cursorDateText}' AND a.Id > {cursorId})
-              )
-            ORDER BY a.LastUpdate_Date ASC, a.Id ASC;
-            """;
+        var parameters = new[]
+        {   new SqlParameter("@Take", SqlDbType.Int){Value = take},
+            new SqlParameter("@CursorDate", SqlDbType.DateTime2){ Value = cursorDate},
+            new SqlParameter("@CursorId", SqlDbType.BigInt){ Value = cursorId}};
 
         var items = await _dbContext.Database
-            .SqlQueryRaw<IncrementalHotelRow>(sql)
+            .SqlQueryRaw<IncrementalHotelRow>(sql, parameters)
             .ToListAsync(cancellationToken);
 
         if (items.Count == 0)

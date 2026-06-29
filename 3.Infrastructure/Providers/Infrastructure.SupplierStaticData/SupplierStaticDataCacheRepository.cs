@@ -29,6 +29,7 @@ public sealed class SupplierStaticDataCacheRepository : ISupplierStaticDataCache
     public SupplierStaticDataCacheRepository(RoomMappingDbContext dbContext)
     {
         _dbContext = dbContext;
+        _dbContext.Database.SetCommandTimeout(TimeSpan.FromMinutes(3));
     }
 
     public async Task<IReadOnlyDictionary<string, SupplierStaticDataEnvelope>> GetHotelAndRoomsAsync(
