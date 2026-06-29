@@ -90,6 +90,7 @@
     <Project Path="4.Presentation/RoomMatchings/OTARoomBuilder/OTARoomBuilder.csproj" />
     <Project Path="4.Presentation/RoomMatchings/OTARoomInfoCompletion/OTARoomInfoCompletion.csproj" />
     <Project Path="4.Presentation/RoomMatchings/RoomMatching/RoomMatching.csproj" Id="ab3a3ec8-11a5-4429-a37f-bbc4d7bb04bc" />
+    <Project Path="4.Presentation/RoomMatchings/RoomMatchingStatistics/RoomMatchingStatistics.csproj" />
   </Folder>
   <Folder Name="/4.Presentation/Taap/">
     <Project Path="4.Presentation/Taap/ExpediaChaseRooms/ExpediaChaseRooms.csproj" />
