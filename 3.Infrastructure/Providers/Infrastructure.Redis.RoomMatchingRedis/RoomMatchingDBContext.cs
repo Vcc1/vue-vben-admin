@@ -23,6 +23,7 @@ namespace Infrastructures.RoomMatchingRedis
     public class RoomMappingRedis : RedisContextBase
     {
         private readonly ILogger<RoomMappingRedis> _logger;
+
         public RoomMappingRedis(IConfiguration configuration, ILogger<RoomMappingRedis> logger) : base(configuration, "RoomMappingRedis")
         {
 
@@ -155,6 +156,73 @@ namespace Infrastructures.RoomMatchingRedis
             return keys;
         }
 
+        public async Task VisitKeyStatisticsAsync(
+            Func<RoomMappingRedisKeyStatistics, int, int, Task> visitor,
+            string pattern = "RM_*",
+            CancellationToken cancellationToken = default)
+        {
+            var now = DateTimeOffset.UtcNow;
+            var keys = new List<RedisKey>();
+
+            _logger.LogInformation("Room matching redis statistics reading keys started. Pattern={Pattern}", pattern);
+
+            foreach (var endpoint in RedisMultiplexer.GetEndPoints())
+            {
+                cancellationToken.ThrowIfCancellationRequested();
+
+                var server = RedisMultiplexer.GetServer(endpoint);
+                if (!server.IsConnected)
+                {
+                    _logger.LogWarning("Room matching redis endpoint skipped because it is not connected. Endpoint={Endpoint}", endpoint);
+                    continue;
+                }
+
+                var endpointKeys = server.Keys(DB.Database, pattern: pattern, pageSize: 200).ToList();
+                _logger.LogInformation(
+                    "Room matching redis keys loaded from endpoint. Endpoint={Endpoint}, KeyCount={KeyCount}",
+                    endpoint,
+                    endpointKeys.Count);
+
+                keys.AddRange(endpointKeys);
+            }
+
+            _logger.LogInformation("Room matching redis statistics reading keys completed. TotalKeyCount={KeyCount}", keys.Count);
+
+            for (var index = 0; index < keys.Count; index++)
+            {
+                cancellationToken.ThrowIfCancellationRequested();
+
+                var redisKey = keys[index];
+
+                try
+                {
+                    var key = redisKey.ToString();
+                    var ttl = await DB.KeyTimeToLiveAsync(redisKey);
+                    var value = await DB.StringGetAsync(redisKey);
+
+                    RoomMappingRedisKeyStatistics stat;
+                    if (value.IsNullOrEmpty)
+                    {
+                        stat = new RoomMappingRedisKeyStatistics(key, ttl, null, 0);
+                    }
+                    else
+                    {
+                        var roomCache = StringCompression.DecompressString(value);
+                        var redisRoom = roomCache.FromJson<RedisRoomCache2>();
+                        var itemCount = redisRoom?.SupRooms?.Sum(room => room.Value?.Count ?? 0) ?? 0;
+                        DateTimeOffset? expireAtUtc = ttl.HasValue ? now.Add(ttl.Value) : null;
+                        stat = new RoomMappingRedisKeyStatistics(key, ttl, expireAtUtc, itemCount);
+                    }
+
+                    await visitor(stat, index + 1, keys.Count);
+                }
+                catch (Exception ex)
+                {
+                    _logger.LogError(ex, "Failed to read room matching redis statistics for key {RedisKey}", redisKey);
+                }
+            }
+        }
+
         public List<RoomMappingRedisModel> Get(string MTHotelCode)
         {
             var cacheKey = $"RM_{MTHotelCode}";
@@ -205,4 +273,10 @@ namespace Infrastructures.RoomMatchingRedis
         }
 
     }
+
+    public sealed record RoomMappingRedisKeyStatistics(
+        string Key,
+        TimeSpan? TimeToLive,
+        DateTimeOffset? ExpireAtUtc,
+        int ItemCount);
 }

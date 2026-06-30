@@ -21,6 +21,8 @@ public sealed class RoomMatchingStatisticsMetrics
     long _lastRunCompleted;
     long _lastErrorAtUnix;
     long _lastDurationMs;
+    long _currentKeyIndex;
+    long _currentTotalKeyCount;
     long _totalCount;
     long _expiredCount;
     long _unknownCreateDateCount;
@@ -41,6 +43,8 @@ public sealed class RoomMatchingStatisticsMetrics
         meter.CreateObservableGauge("room_matching_statistics_last_run_completed", () => Interlocked.Read(ref _lastRunCompleted));
         meter.CreateObservableGauge("room_matching_statistics_last_error_at", () => Interlocked.Read(ref _lastErrorAtUnix));
         meter.CreateObservableGauge("room_matching_statistics_last_duration_ms", () => Interlocked.Read(ref _lastDurationMs), unit: "ms");
+        meter.CreateObservableGauge("room_matching_statistics_current_key_index", () => Interlocked.Read(ref _currentKeyIndex), unit: "keys");
+        meter.CreateObservableGauge("room_matching_statistics_current_total_key_count", () => Interlocked.Read(ref _currentTotalKeyCount), unit: "keys");
         meter.CreateObservableGauge("room_matching_statistics_total", () => Interlocked.Read(ref _totalCount), unit: "rows");
         meter.CreateObservableGauge("room_matching_statistics_expired_total", () => Interlocked.Read(ref _expiredCount), unit: "rows");
         meter.CreateObservableGauge("room_matching_statistics_unknown_create_date_total", () => Interlocked.Read(ref _unknownCreateDateCount), unit: "rows");
@@ -62,10 +66,12 @@ public sealed class RoomMatchingStatisticsMetrics
         Interlocked.Exchange(ref _currentRunStartedAtUnix, startedAt.ToUnixTimeSeconds());
         Interlocked.Exchange(ref _lastRunCompleted, 0);
         Interlocked.Exchange(ref _lastRunSucceeded, 0);
+        Interlocked.Exchange(ref _currentKeyIndex, 0);
+        Interlocked.Exchange(ref _currentTotalKeyCount, 0);
         _runCounter.Add(1, Tag("outcome", "started"));
     }
 
-    public void CompleteRun(RoomMatchingStatisticsSnapshot snapshot, DateTimeOffset completedAt, TimeSpan duration)
+    public void UpdateRunningSnapshot(RoomMatchingStatisticsSnapshot snapshot, TimeSpan elapsed, int currentKeyIndex, int totalKeyCount)
     {
         lock (_snapshotLock)
         {
@@ -76,12 +82,19 @@ public sealed class RoomMatchingStatisticsMetrics
         Interlocked.Exchange(ref _totalCount, snapshot.TotalCount);
         Interlocked.Exchange(ref _expiredCount, snapshot.ExpiredCount);
         Interlocked.Exchange(ref _unknownCreateDateCount, snapshot.UnknownCreateDateCount);
+        Interlocked.Exchange(ref _lastDurationMs, Math.Max(0, (long)elapsed.TotalMilliseconds));
+        Interlocked.Exchange(ref _currentKeyIndex, currentKeyIndex);
+        Interlocked.Exchange(ref _currentTotalKeyCount, totalKeyCount);
+    }
+
+    public void CompleteRun(RoomMatchingStatisticsSnapshot snapshot, DateTimeOffset completedAt, TimeSpan duration)
+    {
+        UpdateRunningSnapshot(snapshot, duration, (int)snapshot.ProcessedKeyCount, (int)snapshot.TotalKeyCount);
         Interlocked.Exchange(ref _workerState, 2);
         Interlocked.Exchange(ref _lastRunCompletedAtUnix, completedAt.ToUnixTimeSeconds());
         Interlocked.Exchange(ref _lastSuccessfulCompletedAtUnix, completedAt.ToUnixTimeSeconds());
         Interlocked.Exchange(ref _lastRunSucceeded, 1);
         Interlocked.Exchange(ref _lastRunCompleted, 1);
-        Interlocked.Exchange(ref _lastDurationMs, Math.Max(0, (long)duration.TotalMilliseconds));
 
         _runCounter.Add(1, Tag("outcome", "completed"));
         _durationMs.Record(Math.Max(0, duration.TotalMilliseconds));
@@ -108,6 +121,8 @@ public sealed class RoomMatchingStatisticsMetrics
     public void SetWaiting()
     {
         Interlocked.Exchange(ref _workerState, 4);
+        Interlocked.Exchange(ref _currentKeyIndex, 0);
+        Interlocked.Exchange(ref _currentTotalKeyCount, 0);
     }
 
     IEnumerable<Measurement<long>> ObserveRemainingDayBuckets()
@@ -134,4 +149,6 @@ public sealed record RoomMatchingStatisticsSnapshot(
     long TotalCount,
     long ExpiredCount,
     long UnknownCreateDateCount,
-    IReadOnlyDictionary<int, long> RemainingDayBuckets);
+    IReadOnlyDictionary<int, long> RemainingDayBuckets,
+    long ProcessedKeyCount,
+    long TotalKeyCount);

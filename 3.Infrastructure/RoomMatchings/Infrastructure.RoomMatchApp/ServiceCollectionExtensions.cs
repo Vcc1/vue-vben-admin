@@ -1,4 +1,5 @@
 using Infrastructure.HTTP.SupStaticData.EAN;
+using Infrastructures.RoomMatchingRedis;
 using Infrastructure.Redis.SupRoomInfo.DirectPriceDiscovery;
 using Infrastructure.Sql.MengTuAPI;
 using Infrastructure.Sql.RoomMapping;
@@ -23,6 +24,7 @@ public static class RoomMatchInfrastructureServiceCollectionExtensions
                 typeof(RoomMappingDbContext).Assembly,
                 typeof(MengTuApiQueryService).Assembly,
                 typeof(EANStaticDataContext).Assembly,
+                typeof(RoomMappingRedis).Assembly,
                 typeof(SupRoomInfoDBContext).Assembly,
                 typeof(RoomDictionarySingleton).Assembly
             ]);

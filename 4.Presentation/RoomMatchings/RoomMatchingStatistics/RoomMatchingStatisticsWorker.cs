@@ -1,27 +1,24 @@
 using Cronos;
-using Infrastructure.Sql.RoomMapping;
-using Microsoft.EntityFrameworkCore;
-using Microsoft.Extensions.DependencyInjection;
+using Infrastructures.RoomMatchingRedis;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
-using System.Data;
 using System.Diagnostics;
 
 public sealed class RoomMatchingStatisticsWorker : BackgroundService
 {
-    readonly IServiceProvider _serviceProvider;
+    readonly RoomMappingRedis _roomMappingRedis;
     readonly ILogger<RoomMatchingStatisticsWorker> _logger;
     readonly IOptionsMonitor<RoomMatchingStatisticsOptions> _optionsMonitor;
     readonly RoomMatchingStatisticsMetrics _metrics;
 
     public RoomMatchingStatisticsWorker(
-        IServiceProvider serviceProvider,
+        RoomMappingRedis roomMappingRedis,
         ILogger<RoomMatchingStatisticsWorker> logger,
         IOptionsMonitor<RoomMatchingStatisticsOptions> optionsMonitor,
         RoomMatchingStatisticsMetrics metrics)
     {
-        _serviceProvider = serviceProvider;
+        _roomMappingRedis = roomMappingRedis;
         _logger = logger;
         _optionsMonitor = optionsMonitor;
         _metrics = metrics;
@@ -84,104 +81,116 @@ public sealed class RoomMatchingStatisticsWorker : BackgroundService
         RoomMatchingStatisticsOptions options,
         CancellationToken cancellationToken)
     {
-        await using var scope = _serviceProvider.CreateAsyncScope();
-        var dbContext = scope.ServiceProvider.GetRequiredService<RoomMappingDbContext>();
-        var connection = dbContext.Database.GetDbConnection();
+        var startedAt = DateTimeOffset.UtcNow;
+        var expirationWindowDays = Math.Max(1, options.ExpirationWindowDays);
+        long totalCount = 0;
+        long expiredCount = 0;
+        long unknownExpireTimeCount = 0;
+        int processedKeyCount = 0;
+        int totalKeyCount = 0;
+        var buckets = Enumerable.Range(1, 7).ToDictionary(day => day, _ => 0L);
 
-        if (connection.State != ConnectionState.Open)
+        void PublishSnapshot(int currentKeyIndex, int totalKeyCount)
         {
-            await connection.OpenAsync(cancellationToken);
+            _metrics.UpdateRunningSnapshot(
+                new RoomMatchingStatisticsSnapshot(
+                    totalCount,
+                    expiredCount,
+                    unknownExpireTimeCount,
+                    new Dictionary<int, long>(buckets),
+                    currentKeyIndex,
+                    totalKeyCount),
+                DateTimeOffset.UtcNow - startedAt,
+                currentKeyIndex,
+                totalKeyCount);
         }
 
-        await using var command = connection.CreateCommand();
-        command.CommandText =
-            """
-            SELECT
-                COUNT_BIG(*) AS TotalCount,
-                COALESCE(SUM(CASE WHEN CreateDate IS NULL THEN 1 ELSE 0 END), 0) AS UnknownCreateDateCount,
-                COALESCE(SUM(CASE
-                    WHEN CreateDate IS NOT NULL
-                     AND DATEADD(day, @expirationWindowDays, CreateDate) <= @now
-                    THEN 1 ELSE 0 END), 0) AS ExpiredCount,
-                COALESCE(SUM(CASE
-                    WHEN CreateDate IS NOT NULL
-                     AND DATEADD(day, @expirationWindowDays, CreateDate) > @now
-                     AND DATEDIFF_BIG(second, @now, DATEADD(day, @expirationWindowDays, CreateDate)) / 86400.0 <= 1
-                    THEN 1 ELSE 0 END), 0) AS Day1Count,
-                COALESCE(SUM(CASE
-                    WHEN CreateDate IS NOT NULL
-                     AND DATEADD(day, @expirationWindowDays, CreateDate) > @now
-                     AND DATEDIFF_BIG(second, @now, DATEADD(day, @expirationWindowDays, CreateDate)) / 86400.0 > 1
-                     AND DATEDIFF_BIG(second, @now, DATEADD(day, @expirationWindowDays, CreateDate)) / 86400.0 <= 2
-                    THEN 1 ELSE 0 END), 0) AS Day2Count,
-                COALESCE(SUM(CASE
-                    WHEN CreateDate IS NOT NULL
-                     AND DATEADD(day, @expirationWindowDays, CreateDate) > @now
-                     AND DATEDIFF_BIG(second, @now, DATEADD(day, @expirationWindowDays, CreateDate)) / 86400.0 > 2
-                     AND DATEDIFF_BIG(second, @now, DATEADD(day, @expirationWindowDays, CreateDate)) / 86400.0 <= 3
-                    THEN 1 ELSE 0 END), 0) AS Day3Count,
-                COALESCE(SUM(CASE
-                    WHEN CreateDate IS NOT NULL
-                     AND DATEADD(day, @expirationWindowDays, CreateDate) > @now
-                     AND DATEDIFF_BIG(second, @now, DATEADD(day, @expirationWindowDays, CreateDate)) / 86400.0 > 3
-                     AND DATEDIFF_BIG(second, @now, DATEADD(day, @expirationWindowDays, CreateDate)) / 86400.0 <= 4
-                    THEN 1 ELSE 0 END), 0) AS Day4Count,
-                COALESCE(SUM(CASE
-                    WHEN CreateDate IS NOT NULL
-                     AND DATEADD(day, @expirationWindowDays, CreateDate) > @now
-                     AND DATEDIFF_BIG(second, @now, DATEADD(day, @expirationWindowDays, CreateDate)) / 86400.0 > 4
-                     AND DATEDIFF_BIG(second, @now, DATEADD(day, @expirationWindowDays, CreateDate)) / 86400.0 <= 5
-                    THEN 1 ELSE 0 END), 0) AS Day5Count,
-                COALESCE(SUM(CASE
-                    WHEN CreateDate IS NOT NULL
-                     AND DATEADD(day, @expirationWindowDays, CreateDate) > @now
-                     AND DATEDIFF_BIG(second, @now, DATEADD(day, @expirationWindowDays, CreateDate)) / 86400.0 > 5
-                     AND DATEDIFF_BIG(second, @now, DATEADD(day, @expirationWindowDays, CreateDate)) / 86400.0 <= 6
-                    THEN 1 ELSE 0 END), 0) AS Day6Count,
-                COALESCE(SUM(CASE
-                    WHEN CreateDate IS NOT NULL
-                     AND DATEADD(day, @expirationWindowDays, CreateDate) > @now
-                     AND DATEDIFF_BIG(second, @now, DATEADD(day, @expirationWindowDays, CreateDate)) / 86400.0 > 6
-                    THEN 1 ELSE 0 END), 0) AS Day7Count
-            FROM RoomMap WITH (NOLOCK);
-            """;
-
-        var nowParameter = command.CreateParameter();
-        nowParameter.ParameterName = "@now";
-        nowParameter.Value = DateTime.Now;
-        command.Parameters.Add(nowParameter);
-
-        var expirationWindowParameter = command.CreateParameter();
-        expirationWindowParameter.ParameterName = "@expirationWindowDays";
-        expirationWindowParameter.Value = Math.Max(1, options.ExpirationWindowDays);
-        command.Parameters.Add(expirationWindowParameter);
-
-        await using var reader = await command.ExecuteReaderAsync(cancellationToken);
-        if (!await reader.ReadAsync(cancellationToken))
+        _logger.LogInformation("Room matching statistics started streaming redis key statistics.");
+        await _roomMappingRedis.VisitKeyStatisticsAsync(async (stat, currentIndex, totalKeys) =>
         {
-            return new RoomMatchingStatisticsSnapshot(
-                0,
-                0,
-                0,
-                Enumerable.Range(1, 7).ToDictionary(day => day, _ => 0L));
-        }
+            processedKeyCount = currentIndex;
+            totalKeyCount = totalKeys;
 
-        var buckets = new Dictionary<int, long>
-        {
-            [1] = reader.GetInt64(reader.GetOrdinal("Day1Count")),
-            [2] = reader.GetInt64(reader.GetOrdinal("Day2Count")),
-            [3] = reader.GetInt64(reader.GetOrdinal("Day3Count")),
-            [4] = reader.GetInt64(reader.GetOrdinal("Day4Count")),
-            [5] = reader.GetInt64(reader.GetOrdinal("Day5Count")),
-            [6] = reader.GetInt64(reader.GetOrdinal("Day6Count")),
-            [7] = reader.GetInt64(reader.GetOrdinal("Day7Count"))
-        };
+            _logger.LogInformation(
+                "Room matching statistics processing redis key. Current={CurrentIndex}, Total={TotalKeys}, Key={RedisKey}",
+                currentIndex,
+                totalKeys,
+                stat.Key);
+
+            totalCount += stat.ItemCount;
+
+            if (!stat.TimeToLive.HasValue)
+            {
+                unknownExpireTimeCount += stat.ItemCount;
+                PublishSnapshot(currentIndex, totalKeys);
+                _logger.LogInformation(
+                    "Room matching statistics progress. Current={CurrentIndex}, Total={TotalKeys}, Key={RedisKey}, ItemCount={ItemCount}, TotalCount={TotalCount}, ExpiredCount={ExpiredCount}, UnknownExpireTimeCount={UnknownExpireTimeCount}",
+                    currentIndex,
+                    totalKeys,
+                    stat.Key,
+                    stat.ItemCount,
+                    totalCount,
+                    expiredCount,
+                    unknownExpireTimeCount);
+                await Task.CompletedTask;
+                return;
+            }
+
+            var ttl = stat.TimeToLive.Value;
+            if (ttl <= TimeSpan.Zero)
+            {
+                expiredCount += stat.ItemCount;
+                PublishSnapshot(currentIndex, totalKeys);
+                _logger.LogInformation(
+                    "Room matching statistics progress. Current={CurrentIndex}, Total={TotalKeys}, Key={RedisKey}, ItemCount={ItemCount}, TotalCount={TotalCount}, ExpiredCount={ExpiredCount}, UnknownExpireTimeCount={UnknownExpireTimeCount}",
+                    currentIndex,
+                    totalKeys,
+                    stat.Key,
+                    stat.ItemCount,
+                    totalCount,
+                    expiredCount,
+                    unknownExpireTimeCount);
+                await Task.CompletedTask;
+                return;
+            }
+
+            var remainingDays = ttl.TotalDays;
+            if (remainingDays <= expirationWindowDays)
+            {
+                var bucket = (int)Math.Ceiling(remainingDays);
+                bucket = Math.Clamp(bucket, 1, 7);
+                buckets[bucket] += stat.ItemCount;
+            }
+
+            PublishSnapshot(currentIndex, totalKeys);
+
+            _logger.LogInformation(
+                "Room matching statistics progress. Current={CurrentIndex}, Total={TotalKeys}, Key={RedisKey}, ItemCount={ItemCount}, TotalCount={TotalCount}, ExpiredCount={ExpiredCount}, UnknownExpireTimeCount={UnknownExpireTimeCount}",
+                currentIndex,
+                totalKeys,
+                stat.Key,
+                stat.ItemCount,
+                totalCount,
+                expiredCount,
+                unknownExpireTimeCount);
+            await Task.CompletedTask;
+        }, cancellationToken: cancellationToken);
+
+        PublishSnapshot(processedKeyCount, totalKeyCount);
+
+        _logger.LogInformation(
+            "Room matching statistics finished streaming redis key statistics. TotalCount={TotalCount}, ExpiredCount={ExpiredCount}, UnknownExpireTimeCount={UnknownExpireTimeCount}",
+            totalCount,
+            expiredCount,
+            unknownExpireTimeCount);
 
         return new RoomMatchingStatisticsSnapshot(
-            reader.GetInt64(reader.GetOrdinal("TotalCount")),
-            reader.GetInt64(reader.GetOrdinal("ExpiredCount")),
-            reader.GetInt64(reader.GetOrdinal("UnknownCreateDateCount")),
-            buckets);
+            totalCount,
+            expiredCount,
+            unknownExpireTimeCount,
+            buckets,
+            processedKeyCount,
+            totalKeyCount);
     }
 
     TimeSpan GetDelay(RoomMatchingStatisticsOptions options)

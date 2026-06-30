@@ -183,7 +183,7 @@ namespace Framework.Core.IOC
                     else
                     {
 
-                        Console.WriteLine($"不支持的数据库类型: {DetectDbType(connStr)}:{connStr}");
+                        Console.WriteLine($"不支持的数据库类型 DBName:{e.Attr.ConfigKey},{DetectDbType(connStr)}:{connStr}");
                     }
                 };
                 var method = FindAddDbContextMethod();
