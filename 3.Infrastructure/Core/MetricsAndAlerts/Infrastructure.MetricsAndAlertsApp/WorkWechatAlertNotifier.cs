@@ -31,6 +31,11 @@ public sealed class WorkWechatAlertNotifier : IAlertNotifier
         return SendAsync(message, cancellationToken);
     }
 
+    public Task<NotifyResult> SendMessageAsync(AlertMessage message, CancellationToken cancellationToken = default)
+    {
+        return SendAsync(message, cancellationToken);
+    }
+
     async Task<NotifyResult> SendAsync(AlertMessage message, CancellationToken cancellationToken)
     {
         var options = _options.CurrentValue;

@@ -34,10 +34,17 @@ public static class ServiceCollectionExtensions
         services.AddScoped<MonitorTargetService>();
         services.AddScoped<TargetAliveAlertRuleService>();
         services.AddScoped<TargetUrlMonitorRuleService>();
+        services.AddScoped<MetricAlertRuleService>();
+        services.AddScoped<ScheduledMetricMessageRuleService>();
         services.AddScoped<AlertStateService>();
         services.AddScoped<AlertQueryService>();
+        services.AddScoped<ITemplateRenderer, TemplateRenderer>();
+        services.AddScoped<IMetricQueryRunner, MetricQueryRunner>();
+        services.AddScoped<IMetricFormulaEvaluator, MetricFormulaEvaluator>();
         services.AddHostedService<TargetAliveAlertWorker>();
         services.AddHostedService<TargetUrlMonitorWorker>();
+        services.AddHostedService<MetricAlertWorker>();
+        services.AddHostedService<ScheduledMetricMessageWorker>();
         return services;
     }
 }
@@ -208,14 +215,17 @@ public sealed class MonitorTargetService
         var existing = await _repository.GetTargetAliveAlertRuleAsync(request.TargetKey.Trim(), request.TargetType, cancellationToken);
         await _repository.UpsertTargetAliveAlertRuleAsync(new TargetAliveAlertRule
         {
+            Id = existing?.Id ?? 0,
             TargetKey = request.TargetKey.Trim(),
             TargetType = request.TargetType,
+            RuleName = existing?.RuleName ?? "在线实例数",
             MinAliveCount = Math.Max(1, request.MinAliveCount.Value),
             OfflineSeconds = Math.Max(1, request.OfflineSeconds ?? existing?.OfflineSeconds ?? 60),
             DurationMinutes = Math.Max(0, request.DurationMinutes ?? existing?.DurationMinutes ?? 0),
             NotifyMinuteQueue = request.NotifyMinuteQueue.Count > 0
                 ? MetricsAndAlertsUtilities.FormatNotifyMinuteQueue(request.NotifyMinuteQueue)
                 : existing?.NotifyMinuteQueue ?? "0,5,10,120",
+            NotifyUsers = existing?.NotifyUsers,
             IsEnabled = request.IsEnabled,
             CreatedAt = now,
             UpdatedAt = now
@@ -240,6 +250,7 @@ public sealed class MonitorTargetService
             Id = existing?.Id ?? 0,
             TargetKey = request.TargetKey.Trim(),
             TargetType = request.TargetType,
+            RuleName = existing?.RuleName,
             UrlName = string.IsNullOrWhiteSpace(request.CheckUrlName) ? existing?.UrlName : request.CheckUrlName.Trim(),
             Url = request.CheckUrl.Trim(),
             HttpMethod = string.IsNullOrWhiteSpace(request.HttpMethod) ? existing?.HttpMethod ?? "GET" : request.HttpMethod.Trim().ToUpperInvariant(),
@@ -252,6 +263,7 @@ public sealed class MonitorTargetService
             NotifyMinuteQueue = request.NotifyMinuteQueue.Count > 0
                 ? MetricsAndAlertsUtilities.FormatNotifyMinuteQueue(request.NotifyMinuteQueue)
                 : existing?.NotifyMinuteQueue ?? "0,5,10,120",
+            NotifyUsers = existing?.NotifyUsers,
             IsEnabled = request.IsEnabled,
             CreatedAt = now,
             UpdatedAt = now
@@ -279,12 +291,15 @@ public sealed class TargetAliveAlertRuleService
         var now = DateTime.UtcNow;
         var rule = await _repository.UpsertTargetAliveAlertRuleAsync(new TargetAliveAlertRule
         {
+            Id = request.Id,
             TargetKey = request.TargetKey.Trim(),
             TargetType = request.TargetType,
+            RuleName = string.IsNullOrWhiteSpace(request.RuleName) ? "在线实例数" : request.RuleName.Trim(),
             MinAliveCount = Math.Max(1, request.MinAliveCount),
             OfflineSeconds = Math.Max(1, request.OfflineSeconds),
             DurationMinutes = Math.Max(0, request.DurationMinutes),
             NotifyMinuteQueue = MetricsAndAlertsUtilities.FormatNotifyMinuteQueue(request.NotifyMinuteQueue),
+            NotifyUsers = MetricsAndAlertsUtilities.FormatNotifyUsers(request.NotifyUsers),
             IsEnabled = request.IsEnabled,
             CreatedAt = now,
             UpdatedAt = now
@@ -299,6 +314,17 @@ public sealed class TargetAliveAlertRuleService
         return rule is null ? null : ToDto(rule);
     }
 
+    public async Task<IReadOnlyList<TargetAliveAlertRuleDto>> ListAsync(string targetKey, MonitorTargetType targetType, CancellationToken cancellationToken = default)
+    {
+        var rules = await _repository.ListTargetAliveAlertRulesAsync(targetKey.Trim(), targetType, cancellationToken);
+        return rules.Select(ToDto).ToArray();
+    }
+
+    public Task<bool> DeleteAsync(long id, CancellationToken cancellationToken = default)
+    {
+        return _repository.DisableTargetAliveAlertRuleAsync(id, cancellationToken);
+    }
+
     static TargetAliveAlertRuleDto ToDto(TargetAliveAlertRule rule)
     {
         return new TargetAliveAlertRuleDto
@@ -306,11 +332,15 @@ public sealed class TargetAliveAlertRuleService
             Id = rule.Id,
             TargetKey = rule.TargetKey,
             TargetType = rule.TargetType,
+            RuleName = rule.RuleName,
             MinAliveCount = rule.MinAliveCount,
             OfflineSeconds = rule.OfflineSeconds,
             DurationMinutes = rule.DurationMinutes,
             NotifyMinuteQueue = MetricsAndAlertsUtilities.ParseNotifyMinuteQueue(rule.NotifyMinuteQueue),
-            IsEnabled = rule.IsEnabled
+            NotifyUsers = MetricsAndAlertsUtilities.ParseNotifyUsers(rule.NotifyUsers),
+            IsEnabled = rule.IsEnabled,
+            CreatedAt = rule.CreatedAt,
+            UpdatedAt = rule.UpdatedAt
         };
     }
 }
@@ -344,6 +374,9 @@ public sealed class TargetUrlMonitorRuleService
             Id = request.Id,
             TargetKey = request.TargetKey.Trim(),
             TargetType = request.TargetType,
+            RuleName = string.IsNullOrWhiteSpace(request.RuleName)
+                ? string.IsNullOrWhiteSpace(request.UrlName) ? request.Url.Trim() : request.UrlName.Trim()
+                : request.RuleName.Trim(),
             UrlName = string.IsNullOrWhiteSpace(request.UrlName) ? null : request.UrlName.Trim(),
             Url = request.Url.Trim(),
             HttpMethod = method,
@@ -352,6 +385,7 @@ public sealed class TargetUrlMonitorRuleService
             ExpectedStatusCodes = MetricsAndAlertsUtilities.FormatExpectedStatusCodes(request.ExpectedStatusCodes),
             DurationMinutes = Math.Max(0, request.DurationMinutes),
             NotifyMinuteQueue = MetricsAndAlertsUtilities.FormatNotifyMinuteQueue(request.NotifyMinuteQueue),
+            NotifyUsers = MetricsAndAlertsUtilities.FormatNotifyUsers(request.NotifyUsers),
             IsEnabled = request.IsEnabled,
             CreatedAt = now,
             UpdatedAt = now
@@ -378,6 +412,7 @@ public sealed class TargetUrlMonitorRuleService
             Id = rule.Id,
             TargetKey = rule.TargetKey,
             TargetType = rule.TargetType,
+            RuleName = rule.RuleName,
             UrlName = rule.UrlName,
             Url = rule.Url,
             HttpMethod = rule.HttpMethod,
@@ -386,8 +421,11 @@ public sealed class TargetUrlMonitorRuleService
             ExpectedStatusCodes = MetricsAndAlertsUtilities.ParseExpectedStatusCodes(rule.ExpectedStatusCodes).OrderBy(x => x).ToList(),
             DurationMinutes = rule.DurationMinutes,
             NotifyMinuteQueue = MetricsAndAlertsUtilities.ParseNotifyMinuteQueue(rule.NotifyMinuteQueue),
+            NotifyUsers = MetricsAndAlertsUtilities.ParseNotifyUsers(rule.NotifyUsers),
             IsEnabled = rule.IsEnabled,
-            LastCheckAt = rule.LastCheckAt
+            LastCheckAt = rule.LastCheckAt,
+            CreatedAt = rule.CreatedAt,
+            UpdatedAt = rule.UpdatedAt
         };
     }
 }
@@ -416,15 +454,18 @@ public sealed class AlertStateService
 {
     readonly IMetricsAndAlertsRepository _repository;
     readonly IAlertNotifier _notifier;
+    readonly ITemplateRenderer _templateRenderer;
     readonly ILogger<AlertStateService> _logger;
 
     public AlertStateService(
         IMetricsAndAlertsRepository repository,
         IAlertNotifier notifier,
+        ITemplateRenderer templateRenderer,
         ILogger<AlertStateService> logger)
     {
         _repository = repository;
         _notifier = notifier;
+        _templateRenderer = templateRenderer;
         _logger = logger;
     }
 
@@ -433,23 +474,31 @@ public sealed class AlertStateService
         ArgumentNullException.ThrowIfNull(result);
 
         var now = DateTime.UtcNow;
-        var alertKey = MetricsAndAlertsUtilities.BuildAlertKey(result.AlertType, result.RuleId);
-        var state = await _repository.GetAlertStateByKeyAsync(alertKey, cancellationToken)
-            ?? new AlertState
-            {
-                AlertType = result.AlertType,
-                RuleId = result.RuleId,
-                TargetKey = result.TargetKey,
-                TargetType = result.TargetType,
-                AlertKey = alertKey
-            };
+        var alertKey = string.IsNullOrWhiteSpace(result.AlertKey)
+            ? MetricsAndAlertsUtilities.BuildAlertKey(result.AlertType, result.RuleId)
+            : result.AlertKey.Trim();
+        var state = await _repository.GetAlertStateByKeyAsync(alertKey, cancellationToken);
+        if (state is null && result.IsNormal)
+        {
+            return;
+        }
+
+        state ??= new AlertState
+        {
+            AlertType = result.AlertType,
+            RuleId = result.RuleId,
+            TargetKey = result.TargetKey,
+            TargetType = result.TargetType,
+            AlertKey = alertKey
+        };
 
         state.AlertType = result.AlertType;
         state.RuleId = result.RuleId;
         state.TargetKey = result.TargetKey;
         state.TargetType = result.TargetType;
-        state.CurrentValue = result.CurrentValue;
-        state.ThresholdValue = result.ThresholdValue;
+        state.AlertKey = alertKey;
+        state.CurrentValue = TrimStateValue(result.CurrentValue);
+        state.ThresholdValue = TrimStateValue(result.ThresholdValue);
         state.LastError = result.ErrorMessage;
         state.UpdatedAt = now;
 
@@ -470,7 +519,7 @@ public sealed class AlertStateService
             state.RecoveredAt = now;
             state = await _repository.SaveAlertStateAsync(state, cancellationToken);
 
-            var message = await BuildMessageAsync(result, NotifyType.Recover, cancellationToken);
+            var message = await BuildMessageAsync(state, result, NotifyType.Recover, cancellationToken);
             var notifyResult = await _notifier.SendRecoverAsync(message, cancellationToken);
             await AddNotifyLogAsync(state, message, null, notifyResult, cancellationToken);
         }
@@ -524,7 +573,7 @@ public sealed class AlertStateService
             return;
         }
 
-        var message = await BuildMessageAsync(result, NotifyType.Alert, cancellationToken);
+        var message = await BuildMessageAsync(state, result, NotifyType.Alert, cancellationToken);
         var notifyResult = await _notifier.SendAlertAsync(message, cancellationToken);
         await AddNotifyLogAsync(state, message, dueMinute, notifyResult, cancellationToken);
 
@@ -534,20 +583,22 @@ public sealed class AlertStateService
         await _repository.SaveAlertStateAsync(state, cancellationToken);
     }
 
-    async Task<AlertMessage> BuildMessageAsync(AlertCheckResult result, NotifyType notifyType, CancellationToken cancellationToken)
+    async Task<AlertMessage> BuildMessageAsync(AlertState state, AlertCheckResult result, NotifyType notifyType, CancellationToken cancellationToken)
     {
         var target = await _repository.GetMonitorTargetAsync(result.TargetKey, result.TargetType, cancellationToken);
         var targetName = MetricsAndAlertsUtilities.GetDisplayName(result.TargetKey, target?.TargetName);
         var targetTypeName = MetricsAndAlertsUtilities.GetTargetTypeName(result.TargetType);
         var isRecover = notifyType == NotifyType.Recover;
         var title = BuildTitle(result, targetName, isRecover);
-        var content = BuildContent(result, targetName, targetTypeName, isRecover);
+        var content = BuildContent(state, result, targetName, targetTypeName, isRecover);
+        var targetNotifyUsers = MetricsAndAlertsUtilities.ParseNotifyUsers(target?.NotifyUsers);
+        var toUsers = result.NotifyUsers.Count > 0 ? result.NotifyUsers : targetNotifyUsers;
 
         return new AlertMessage
         {
             AlertType = result.AlertType,
             NotifyType = notifyType,
-            ToUsers = MetricsAndAlertsUtilities.ParseNotifyUsers(target?.NotifyUsers),
+            ToUsers = toUsers,
             TargetKey = result.TargetKey,
             TargetName = targetName,
             TargetType = result.TargetType,
@@ -561,6 +612,20 @@ public sealed class AlertStateService
 
     string BuildTitle(AlertCheckResult result, string targetName, bool isRecover)
     {
+        if (result.AlertType == AlertType.MetricFormulaAlert)
+        {
+            var ruleName = string.IsNullOrWhiteSpace(result.RuleName) ? result.Formula : result.RuleName;
+            var title = isRecover
+                ? "\u3010\u6062\u590d\u3011\u6307\u6807\u544a\u8b66\u5df2\u6062\u590d\uff1a"
+                : "\u3010\u544a\u8b66\u3011\u6307\u6807\u89c4\u5219\u5f02\u5e38\uff1a";
+            if (!result.AggregateInstances && !string.IsNullOrWhiteSpace(result.Instance))
+            {
+                return string.Concat(title, ruleName, " [", result.Instance, "]");
+            }
+
+            return string.Concat(title, ruleName);
+        }
+
         if (result.AlertType == AlertType.TargetUrlMonitorFailed)
         {
             var urlName = string.IsNullOrWhiteSpace(result.UrlName) ? result.Url : result.UrlName;
@@ -581,8 +646,37 @@ public sealed class AlertStateService
             : $"【告警】应用在线实例数量不足：{targetName}";
     }
 
-    static string BuildContent(AlertCheckResult result, string targetName, string targetTypeName, bool isRecover)
+    string BuildContent(AlertState state, AlertCheckResult result, string targetName, string targetTypeName, bool isRecover)
     {
+        if (result.AlertType == AlertType.MetricFormulaAlert)
+        {
+            var template = isRecover
+                ? result.RecoverTemplate
+                : result.MessageTemplate;
+            if (string.IsNullOrWhiteSpace(template))
+            {
+                template = isRecover
+                    ? MetricRuleHelpers.DefaultMetricRecoverTemplate
+                    : MetricRuleHelpers.DefaultMetricAlertTemplate;
+            }
+
+            return _templateRenderer.Render(template, MetricRuleHelpers.BuildMetricTemplateContext(
+                result.TargetKey,
+                targetName,
+                result.TargetType,
+                result.RuleName,
+                result.Formula,
+                result.AggregateInstances,
+                result.MetricCurrentInstance,
+                result.MetricInstances,
+                result.MetricAbnormalInstances,
+                state.FirstAbnormalAt,
+                state.FiringAt,
+                state.RecoveredAt,
+                null,
+                result.ErrorMessage));
+        }
+
         var lines = new List<string>
         {
             $"目标类型：{targetTypeName}",
@@ -647,6 +741,11 @@ public sealed class AlertStateService
             ErrorMessage = notifyResult.ErrorMessage,
             CreatedAt = DateTime.UtcNow
         }, cancellationToken);
+    }
+
+    static string? TrimStateValue(string? value)
+    {
+        return value is { Length: > 256 } ? value[..256] : value;
     }
 }
 
@@ -713,7 +812,9 @@ public sealed class TargetAliveAlertWorker : BackgroundService
                     NotifyMinuteQueue = MetricsAndAlertsUtilities.ParseNotifyMinuteQueue(rule.NotifyMinuteQueue),
                     CurrentValue = onlineCount.ToString(),
                     ThresholdValue = rule.MinAliveCount.ToString(),
-                    OfflineSeconds = rule.OfflineSeconds
+                    OfflineSeconds = rule.OfflineSeconds,
+                    RuleName = rule.RuleName,
+                    NotifyUsers = MetricsAndAlertsUtilities.ParseNotifyUsers(rule.NotifyUsers)
                 };
             }
             catch (Exception ex)
@@ -730,7 +831,9 @@ public sealed class TargetAliveAlertWorker : BackgroundService
                     CurrentValue = "query_error",
                     ThresholdValue = rule.MinAliveCount.ToString(),
                     ErrorMessage = ex.Message,
-                    OfflineSeconds = rule.OfflineSeconds
+                    OfflineSeconds = rule.OfflineSeconds,
+                    RuleName = rule.RuleName,
+                    NotifyUsers = MetricsAndAlertsUtilities.ParseNotifyUsers(rule.NotifyUsers)
                 };
             }
 
@@ -806,8 +909,10 @@ public sealed class TargetUrlMonitorWorker : BackgroundService
                 CurrentValue = check.StatusCode?.ToString() ?? "request_error",
                 ThresholdValue = rule.ExpectedStatusCodes,
                 ErrorMessage = check.ErrorMessage,
+                RuleName = rule.RuleName,
                 UrlName = rule.UrlName,
-                Url = rule.Url
+                Url = rule.Url,
+                NotifyUsers = MetricsAndAlertsUtilities.ParseNotifyUsers(rule.NotifyUsers)
             }, cancellationToken);
         }
     }

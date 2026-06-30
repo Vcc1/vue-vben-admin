@@ -58,12 +58,14 @@ public sealed class MetricsAndAlertsDbContext : DbContext
         {
             entity.ToTable("TargetAliveAlertRule", "dbo");
             entity.HasKey(x => x.Id);
-            entity.HasIndex(x => new { x.TargetKey, x.TargetType }).IsUnique().HasDatabaseName("UX_TargetAliveAlertRule_Target");
+            entity.HasIndex(x => new { x.TargetKey, x.TargetType }).HasDatabaseName("IX_TargetAliveAlertRule_Target");
             entity.Property(x => x.TargetKey).HasMaxLength(512).IsRequired();
             entity.Property(x => x.TargetType).HasConversion<int>();
+            entity.Property(x => x.RuleName).HasMaxLength(256);
             entity.Property(x => x.MinAliveCount).HasDefaultValue(1);
             entity.Property(x => x.OfflineSeconds).HasDefaultValue(60);
             entity.Property(x => x.NotifyMinuteQueue).HasMaxLength(256).HasDefaultValue("0,5,10,120");
+            entity.Property(x => x.NotifyUsers).HasMaxLength(1024);
             entity.Property(x => x.IsEnabled).HasDefaultValue(true);
             entity.Property(x => x.CreatedAt).HasDefaultValueSql("SYSUTCDATETIME()");
             entity.Property(x => x.UpdatedAt).HasDefaultValueSql("SYSUTCDATETIME()");
@@ -77,6 +79,7 @@ public sealed class MetricsAndAlertsDbContext : DbContext
             entity.HasIndex(x => new { x.IsEnabled, x.LastCheckAt }).HasDatabaseName("IX_TargetUrlMonitorRule_Enabled_LastCheck");
             entity.Property(x => x.TargetKey).HasMaxLength(512).IsRequired();
             entity.Property(x => x.TargetType).HasConversion<int>();
+            entity.Property(x => x.RuleName).HasMaxLength(256);
             entity.Property(x => x.UrlName).HasMaxLength(256);
             entity.Property(x => x.Url).HasMaxLength(1024).IsRequired();
             entity.Property(x => x.HttpMethod).HasMaxLength(16).HasDefaultValue("GET");
@@ -84,6 +87,7 @@ public sealed class MetricsAndAlertsDbContext : DbContext
             entity.Property(x => x.CheckIntervalSeconds).HasDefaultValue(30);
             entity.Property(x => x.ExpectedStatusCodes).HasMaxLength(128).HasDefaultValue("200");
             entity.Property(x => x.NotifyMinuteQueue).HasMaxLength(256).HasDefaultValue("0,5,10,120");
+            entity.Property(x => x.NotifyUsers).HasMaxLength(1024);
             entity.Property(x => x.IsEnabled).HasDefaultValue(true);
             entity.Property(x => x.CreatedAt).HasDefaultValueSql("SYSUTCDATETIME()");
             entity.Property(x => x.UpdatedAt).HasDefaultValueSql("SYSUTCDATETIME()");
@@ -117,6 +121,57 @@ public sealed class MetricsAndAlertsDbContext : DbContext
             entity.Property(x => x.Content).IsRequired();
             entity.Property(x => x.CreatedAt).HasDefaultValueSql("SYSUTCDATETIME()");
         });
+
+        modelBuilder.Entity<MetricAlertRule>(entity =>
+        {
+            entity.ToTable("MetricAlertRule", "dbo");
+            entity.HasKey(x => x.Id);
+            entity.HasIndex(x => new { x.TargetKey, x.TargetType, x.IsEnabled }).HasDatabaseName("IX_MetricAlertRule_Target_Enabled");
+            entity.Property(x => x.TargetKey).HasMaxLength(512).IsRequired();
+            entity.Property(x => x.TargetType).HasConversion<int>();
+            entity.Property(x => x.RuleName).HasMaxLength(256).IsRequired();
+            entity.Property(x => x.QueryItemsJson).IsRequired();
+            entity.Property(x => x.Formula).HasMaxLength(2048).IsRequired();
+            entity.Property(x => x.NotifyMinuteQueue).HasMaxLength(256).HasDefaultValue("0,5,10,120");
+            entity.Property(x => x.NotifyUsers).HasMaxLength(1024);
+            entity.Property(x => x.AggregateInstances).HasDefaultValue(false);
+            entity.Property(x => x.IsEnabled).HasDefaultValue(true);
+            entity.Property(x => x.CreatedAt).HasDefaultValueSql("SYSUTCDATETIME()");
+            entity.Property(x => x.UpdatedAt).HasDefaultValueSql("SYSUTCDATETIME()");
+        });
+
+        modelBuilder.Entity<ScheduledMetricMessageRule>(entity =>
+        {
+            entity.ToTable("ScheduledMetricMessageRule", "dbo");
+            entity.HasKey(x => x.Id);
+            entity.HasIndex(x => new { x.TargetKey, x.TargetType, x.IsEnabled }).HasDatabaseName("IX_ScheduledMetricMessageRule_Target_Enabled");
+            entity.HasIndex(x => new { x.IsEnabled, x.NextRunAt }).HasDatabaseName("IX_ScheduledMetricMessageRule_Due");
+            entity.Property(x => x.TargetKey).HasMaxLength(512).IsRequired();
+            entity.Property(x => x.TargetType).HasConversion<int>();
+            entity.Property(x => x.RuleName).HasMaxLength(256).IsRequired();
+            entity.Property(x => x.QueryItemsJson).IsRequired();
+            entity.Property(x => x.MessageTemplate).IsRequired();
+            entity.Property(x => x.Cron).HasMaxLength(128).IsRequired();
+            entity.Property(x => x.TimeZoneId).HasMaxLength(128).HasDefaultValue("Asia/Shanghai");
+            entity.Property(x => x.NotifyUsers).HasMaxLength(1024);
+            entity.Property(x => x.AggregateInstances).HasDefaultValue(false);
+            entity.Property(x => x.IsEnabled).HasDefaultValue(true);
+            entity.Property(x => x.CreatedAt).HasDefaultValueSql("SYSUTCDATETIME()");
+            entity.Property(x => x.UpdatedAt).HasDefaultValueSql("SYSUTCDATETIME()");
+        });
+
+        modelBuilder.Entity<ScheduledMessageSendLog>(entity =>
+        {
+            entity.ToTable("ScheduledMessageSendLog", "dbo");
+            entity.HasKey(x => x.Id);
+            entity.HasIndex(x => new { x.RuleId, x.CreatedAt }).HasDatabaseName("IX_ScheduledMessageSendLog_Rule_CreatedAt");
+            entity.HasIndex(x => new { x.TargetKey, x.TargetType, x.CreatedAt }).HasDatabaseName("IX_ScheduledMessageSendLog_Target_CreatedAt");
+            entity.Property(x => x.TargetKey).HasMaxLength(512).IsRequired();
+            entity.Property(x => x.TargetType).HasConversion<int>();
+            entity.Property(x => x.Title).HasMaxLength(256).IsRequired();
+            entity.Property(x => x.Content).IsRequired();
+            entity.Property(x => x.CreatedAt).HasDefaultValueSql("SYSUTCDATETIME()");
+        });
     }
 
     public DbSet<MonitorTargetGroup> MonitorTargetGroups => Set<MonitorTargetGroup>();
@@ -125,4 +180,7 @@ public sealed class MetricsAndAlertsDbContext : DbContext
     public DbSet<TargetUrlMonitorRule> TargetUrlMonitorRules => Set<TargetUrlMonitorRule>();
     public DbSet<AlertState> AlertStates => Set<AlertState>();
     public DbSet<AlertNotifyLog> AlertNotifyLogs => Set<AlertNotifyLog>();
+    public DbSet<MetricAlertRule> MetricAlertRules => Set<MetricAlertRule>();
+    public DbSet<ScheduledMetricMessageRule> ScheduledMetricMessageRules => Set<ScheduledMetricMessageRule>();
+    public DbSet<ScheduledMessageSendLog> ScheduledMessageSendLogs => Set<ScheduledMessageSendLog>();
 }
