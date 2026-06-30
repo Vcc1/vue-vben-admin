@@ -29,7 +29,8 @@ public enum AlertType
     /// <summary>
     /// URL 巡检失败。
     /// </summary>
-    TargetUrlMonitorFailed = 2
+    TargetUrlMonitorFailed = 2,
+    MetricFormulaAlert = 3
 }
 
 public enum NotifyType
@@ -67,10 +68,12 @@ public sealed class TargetAliveAlertRule
     public long Id { get; set; }
     public string TargetKey { get; set; } = "";
     public MonitorTargetType TargetType { get; set; }
+    public string? RuleName { get; set; }
     public int MinAliveCount { get; set; } = 1;
     public int OfflineSeconds { get; set; } = 60;
     public int DurationMinutes { get; set; }
     public string NotifyMinuteQueue { get; set; } = "0,5,10,120";
+    public string? NotifyUsers { get; set; }
     public bool IsEnabled { get; set; } = true;
     public DateTime CreatedAt { get; set; }
     public DateTime UpdatedAt { get; set; }
@@ -81,6 +84,7 @@ public sealed class TargetUrlMonitorRule
     public long Id { get; set; }
     public string TargetKey { get; set; } = "";
     public MonitorTargetType TargetType { get; set; }
+    public string? RuleName { get; set; }
     public string? UrlName { get; set; }
     public string Url { get; set; } = "";
     public string HttpMethod { get; set; } = "GET";
@@ -89,6 +93,7 @@ public sealed class TargetUrlMonitorRule
     public string ExpectedStatusCodes { get; set; } = "200";
     public int DurationMinutes { get; set; }
     public string NotifyMinuteQueue { get; set; } = "0,5,10,120";
+    public string? NotifyUsers { get; set; }
     public bool IsEnabled { get; set; } = true;
     public DateTime? LastCheckAt { get; set; }
     public DateTime CreatedAt { get; set; }
@@ -144,6 +149,8 @@ public sealed class AlertOptions
     public string DefaultNotifyMinuteQueue { get; set; } = "0,5,10,120";
     public int TargetAliveWorkerIntervalSeconds { get; set; } = 30;
     public int UrlMonitorWorkerScanIntervalSeconds { get; set; } = 5;
+    public int MetricAlertWorkerIntervalSeconds { get; set; } = 30;
+    public int ScheduledMessageWorkerScanIntervalSeconds { get; set; } = 15;
 }
 
 public sealed class AlertNotificationOptions
@@ -219,6 +226,7 @@ public sealed class UpsertMonitorTargetRequest
     /// 目标类型。
     /// </summary>
     public MonitorTargetType TargetType { get; set; }
+    public string? RuleName { get; set; }
     /// <summary>
     /// 排序值，越小越靠前。
     /// </summary>
@@ -424,6 +432,7 @@ public sealed class TargetInstanceDto
 /// </summary>
 public sealed class UpsertTargetAliveAlertRuleRequest
 {
+    public long Id { get; set; }
     /// <summary>
     /// 目标唯一键。
     /// </summary>
@@ -432,6 +441,7 @@ public sealed class UpsertTargetAliveAlertRuleRequest
     /// 目标类型。
     /// </summary>
     public MonitorTargetType TargetType { get; set; }
+    public string? RuleName { get; set; }
     /// <summary>
     /// 最小在线实例数阈值。
     /// </summary>
@@ -448,6 +458,7 @@ public sealed class UpsertTargetAliveAlertRuleRequest
     /// 通知分钟队列。
     /// </summary>
     public List<int> NotifyMinuteQueue { get; set; } = new();
+    public List<string> NotifyUsers { get; set; } = new();
     /// <summary>
     /// 是否启用。
     /// </summary>
@@ -459,11 +470,15 @@ public sealed class TargetAliveAlertRuleDto
     public long Id { get; set; }
     public string TargetKey { get; set; } = "";
     public MonitorTargetType TargetType { get; set; }
+    public string? RuleName { get; set; }
     public int MinAliveCount { get; set; }
     public int OfflineSeconds { get; set; }
     public int DurationMinutes { get; set; }
     public List<int> NotifyMinuteQueue { get; set; } = new();
+    public List<string> NotifyUsers { get; set; } = new();
     public bool IsEnabled { get; set; }
+    public DateTime CreatedAt { get; set; }
+    public DateTime UpdatedAt { get; set; }
 }
 
 /// <summary>
@@ -483,6 +498,7 @@ public sealed class UpsertTargetUrlMonitorRuleRequest
     /// 目标类型。
     /// </summary>
     public MonitorTargetType TargetType { get; set; }
+    public string? RuleName { get; set; }
     /// <summary>
     /// URL 名称。
     /// </summary>
@@ -515,6 +531,7 @@ public sealed class UpsertTargetUrlMonitorRuleRequest
     /// 通知分钟队列。
     /// </summary>
     public List<int> NotifyMinuteQueue { get; set; } = new();
+    public List<string> NotifyUsers { get; set; } = new();
     /// <summary>
     /// 是否启用。
     /// </summary>
@@ -526,6 +543,7 @@ public sealed class TargetUrlMonitorRuleDto
     public long Id { get; set; }
     public string TargetKey { get; set; } = "";
     public MonitorTargetType TargetType { get; set; }
+    public string? RuleName { get; set; }
     public string? UrlName { get; set; }
     public string Url { get; set; } = "";
     public string HttpMethod { get; set; } = "GET";
@@ -534,8 +552,11 @@ public sealed class TargetUrlMonitorRuleDto
     public List<int> ExpectedStatusCodes { get; set; } = new();
     public int DurationMinutes { get; set; }
     public List<int> NotifyMinuteQueue { get; set; } = new();
+    public List<string> NotifyUsers { get; set; } = new();
     public bool IsEnabled { get; set; }
     public DateTime? LastCheckAt { get; set; }
+    public DateTime CreatedAt { get; set; }
+    public DateTime UpdatedAt { get; set; }
 }
 
 public sealed class AlertStateListQuery
@@ -595,6 +616,7 @@ public sealed class AlertCheckResult
 {
     public AlertType AlertType { get; set; }
     public long RuleId { get; set; }
+    public string? AlertKey { get; set; }
     public string TargetKey { get; set; } = "";
     public MonitorTargetType TargetType { get; set; }
     public bool IsNormal { get; set; }
@@ -606,6 +628,18 @@ public sealed class AlertCheckResult
     public int? OfflineSeconds { get; set; }
     public string? UrlName { get; set; }
     public string? Url { get; set; }
+    public string? RuleName { get; set; }
+    public string? Formula { get; set; }
+    public string? Instance { get; set; }
+    public string? CurrentValues { get; set; }
+    public string? AbnormalInstances { get; set; }
+    public string? MessageTemplate { get; set; }
+    public string? RecoverTemplate { get; set; }
+    public bool AggregateInstances { get; set; }
+    public MetricInstanceQueryValues? MetricCurrentInstance { get; set; }
+    public List<MetricInstanceQueryValues> MetricInstances { get; set; } = new();
+    public List<MetricInstanceFormulaResult> MetricAbnormalInstances { get; set; } = new();
+    public List<string> NotifyUsers { get; set; } = new();
 }
 
 public sealed class AlertMessage
@@ -664,7 +698,9 @@ public interface IMetricsAndAlertsRepository
 
     Task<TargetAliveAlertRule> UpsertTargetAliveAlertRuleAsync(TargetAliveAlertRule rule, CancellationToken cancellationToken = default);
     Task<TargetAliveAlertRule?> GetTargetAliveAlertRuleAsync(string targetKey, MonitorTargetType targetType, CancellationToken cancellationToken = default);
+    Task<IReadOnlyList<TargetAliveAlertRule>> ListTargetAliveAlertRulesAsync(string targetKey, MonitorTargetType targetType, CancellationToken cancellationToken = default);
     Task<IReadOnlyList<TargetAliveAlertRule>> ListEnabledTargetAliveAlertRulesAsync(CancellationToken cancellationToken = default);
+    Task<bool> DisableTargetAliveAlertRuleAsync(long id, CancellationToken cancellationToken = default);
 
     Task<TargetUrlMonitorRule> UpsertTargetUrlMonitorRuleAsync(TargetUrlMonitorRule rule, CancellationToken cancellationToken = default);
     Task<TargetUrlMonitorRule?> GetFirstTargetUrlMonitorRuleAsync(string targetKey, MonitorTargetType targetType, CancellationToken cancellationToken = default);
@@ -674,7 +710,9 @@ public interface IMetricsAndAlertsRepository
     Task UpdateTargetUrlMonitorLastCheckAsync(long id, DateTime nowUtc, CancellationToken cancellationToken = default);
 
     Task<AlertState?> GetAlertStateByKeyAsync(string alertKey, CancellationToken cancellationToken = default);
+    Task<IReadOnlyList<AlertState>> ListAlertStatesByRuleAsync(AlertType alertType, long ruleId, CancellationToken cancellationToken = default);
     Task<AlertState> SaveAlertStateAsync(AlertState state, CancellationToken cancellationToken = default);
+    Task DeleteAlertStatesAsync(IReadOnlyCollection<long> stateIds, CancellationToken cancellationToken = default);
     Task AddAlertNotifyLogAsync(AlertNotifyLog log, CancellationToken cancellationToken = default);
     Task<IReadOnlyList<AlertStateDto>> ListAlertStatesAsync(AlertStateListQuery query, CancellationToken cancellationToken = default);
     Task<IReadOnlyList<AlertNotifyLogDto>> ListAlertNotifyLogsAsync(AlertNotifyLogListQuery query, CancellationToken cancellationToken = default);
@@ -684,12 +722,14 @@ public interface IPrometheusQueryClient
 {
     Task<int> GetOnlineCountAsync(string targetKey, MonitorTargetType targetType, int offlineSeconds, CancellationToken cancellationToken = default);
     Task<IReadOnlyList<TargetInstanceDto>> GetInstancesAsync(string targetKey, MonitorTargetType targetType, CancellationToken cancellationToken = default);
+    Task<IReadOnlyList<PrometheusMetricSample>> QueryInstantAsync(string promql, CancellationToken cancellationToken = default);
 }
 
 public interface IAlertNotifier
 {
     Task<NotifyResult> SendAlertAsync(AlertMessage message, CancellationToken cancellationToken = default);
     Task<NotifyResult> SendRecoverAsync(AlertMessage message, CancellationToken cancellationToken = default);
+    Task<NotifyResult> SendMessageAsync(AlertMessage message, CancellationToken cancellationToken = default);
 }
 
 public interface IUrlMonitorClient
@@ -714,4 +754,10 @@ public static partial class LoggerMessages
 
     [LoggerMessage(EventId = 30002, Level = LogLevel.Error, Message = "URL monitor worker failed.")]
     public static partial void UrlMonitorWorkerFailed(this ILogger logger, Exception exception);
+
+    [LoggerMessage(EventId = 30003, Level = LogLevel.Error, Message = "Metric alert worker failed.")]
+    public static partial void MetricAlertWorkerFailed(this ILogger logger, Exception exception);
+
+    [LoggerMessage(EventId = 30004, Level = LogLevel.Error, Message = "Scheduled metric message worker failed.")]
+    public static partial void ScheduledMetricMessageWorkerFailed(this ILogger logger, Exception exception);
 }

@@ -1,4 +1,6 @@
 using System.Globalization;
+using System.Security.Cryptography;
+using System.Text;
 
 namespace MetricsAndAlertsApp;
 
@@ -121,14 +123,33 @@ public static class MetricsAndAlertsUtilities
             .Replace("\"", "\\\"", StringComparison.Ordinal);
     }
 
-    public static string BuildAlertKey(AlertType alertType, long ruleId)
+    public static string BuildAlertKey(AlertType alertType, long ruleId, string? scopeKey = null)
     {
         return alertType switch
         {
             AlertType.TargetAliveCountLow => $"alive-count:{ruleId}",
             AlertType.TargetUrlMonitorFailed => $"url-monitor:{ruleId}",
+            AlertType.MetricFormulaAlert => BuildMetricFormulaAlertKey(ruleId, scopeKey),
             _ => $"{(int)alertType}:{ruleId}"
         };
+    }
+
+    static string BuildMetricFormulaAlertKey(long ruleId, string? scopeKey)
+    {
+        if (string.IsNullOrWhiteSpace(scopeKey))
+        {
+            return $"metric-formula:{ruleId}";
+        }
+
+        var normalizedScopeKey = scopeKey.Trim();
+        if (normalizedScopeKey.Length > 320)
+        {
+            var bytes = Encoding.UTF8.GetBytes(normalizedScopeKey);
+            var hash = Convert.ToHexString(SHA256.HashData(bytes));
+            normalizedScopeKey = $"{normalizedScopeKey[..128]}#{hash}";
+        }
+
+        return $"metric-formula:{ruleId}:{normalizedScopeKey}";
     }
 
     public static long ToUnixTimeSeconds(DateTime utc)

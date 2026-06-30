@@ -89,6 +89,43 @@ public sealed class PrometheusQueryClient : IPrometheusQueryClient
         return instances.OrderBy(x => x.InstanceKey, StringComparer.OrdinalIgnoreCase).ToArray();
     }
 
+    public async Task<IReadOnlyList<PrometheusMetricSample>> QueryInstantAsync(
+        string promql,
+        CancellationToken cancellationToken = default)
+    {
+        if (string.IsNullOrWhiteSpace(promql))
+        {
+            throw new ArgumentException("Promql is required.", nameof(promql));
+        }
+
+        var result = await QueryResultsAsync(promql.Trim(), cancellationToken);
+        var samples = new List<PrometheusMetricSample>();
+
+        foreach (var item in result.EnumerateArray())
+        {
+            if (!item.TryGetProperty("metric", out var metric) ||
+                !TryGetPrometheusValue(item, out var value))
+            {
+                continue;
+            }
+
+            var labels = ReadLabels(metric);
+            var instanceKey = TryGetString(metric, "exported_instance")
+                ?? TryGetString(metric, "instance")
+                ?? TryGetString(metric, "instance_key")
+                ?? "_global";
+
+            samples.Add(new PrometheusMetricSample
+            {
+                InstanceKey = instanceKey,
+                Value = value,
+                Labels = labels
+            });
+        }
+
+        return samples;
+    }
+
     async Task<JsonElement> QueryResultsAsync(
         string query,
         CancellationToken cancellationToken)
@@ -180,6 +217,20 @@ public sealed class PrometheusQueryClient : IPrometheusQueryClient
         return element.TryGetProperty(name, out var value) && value.ValueKind == JsonValueKind.String
             ? value.GetString()
             : null;
+    }
+
+    static IReadOnlyDictionary<string, string> ReadLabels(JsonElement metric)
+    {
+        var labels = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+        foreach (var property in metric.EnumerateObject())
+        {
+            if (property.Value.ValueKind == JsonValueKind.String)
+            {
+                labels[property.Name] = property.Value.GetString() ?? "";
+            }
+        }
+
+        return labels;
     }
 
     static bool TryGetPrometheusValue(JsonElement resultItem, out double value)

@@ -7,7 +7,9 @@ public static class ServiceCollectionExtensions
 {
     public static IServiceCollection AddMetricsAndAlertsSqlProvider(this IServiceCollection services)
     {
-        services.AddScoped<IMetricsAndAlertsRepository, MetricsAndAlertsRepository>();
+        services.AddScoped<MetricsAndAlertsRepository>();
+        services.AddScoped<IMetricsAndAlertsRepository>(sp => sp.GetRequiredService<MetricsAndAlertsRepository>());
+        services.AddScoped<IMetricRulesRepository>(sp => sp.GetRequiredService<MetricsAndAlertsRepository>());
         return services;
     }
 }

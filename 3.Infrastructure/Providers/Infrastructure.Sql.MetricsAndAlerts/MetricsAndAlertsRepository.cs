@@ -4,7 +4,7 @@ using Microsoft.EntityFrameworkCore.Update;
 
 namespace Infrastructure.Sql.MetricsAndAlerts;
 
-public sealed class MetricsAndAlertsRepository : IMetricsAndAlertsRepository
+public sealed class MetricsAndAlertsRepository : IMetricsAndAlertsRepository, IMetricRulesRepository
 {
     readonly MetricsAndAlertsDbContext _db;
 
@@ -153,11 +153,15 @@ public sealed class MetricsAndAlertsRepository : IMetricsAndAlertsRepository
 
         return targets.Select(target =>
         {
-            var aliveRule = aliveRules.FirstOrDefault(x => x.TargetKey == target.TargetKey && x.TargetType == target.TargetType);
-            var aliveAlerting = aliveRule is not null && states.Any(x =>
+            var targetAliveRules = aliveRules
+                .Where(x => x.TargetKey == target.TargetKey && x.TargetType == target.TargetType)
+                .OrderBy(x => x.Id)
+                .ToArray();
+            var aliveRule = targetAliveRules.FirstOrDefault();
+            var aliveAlerting = targetAliveRules.Any(rule => states.Any(x =>
                 x.AlertType == AlertType.TargetAliveCountLow &&
-                x.RuleId == aliveRule.Id &&
-                x.IsActive);
+                x.RuleId == rule.Id &&
+                x.IsActive));
 
             var targetUrlRules = urlRules
                 .Where(x => x.TargetKey == target.TargetKey && x.TargetType == target.TargetType)
@@ -188,7 +192,7 @@ public sealed class MetricsAndAlertsRepository : IMetricsAndAlertsRepository
                     : primaryUrlRule is not null
                         ? MetricsAndAlertsUtilities.ParseNotifyMinuteQueue(primaryUrlRule.NotifyMinuteQueue)
                         : new List<int>(),
-                AliveAlertEnabled = aliveRule?.IsEnabled == true,
+                AliveAlertEnabled = targetAliveRules.Any(x => x.IsEnabled),
                 AliveAlerting = aliveAlerting,
                 CheckUrlRuleId = primaryUrlRule?.Id,
                 CheckUrlName = primaryUrlRule?.UrlName,
@@ -207,9 +211,11 @@ public sealed class MetricsAndAlertsRepository : IMetricsAndAlertsRepository
 
     public async Task<TargetAliveAlertRule> UpsertTargetAliveAlertRuleAsync(TargetAliveAlertRule rule, CancellationToken cancellationToken = default)
     {
-        var entity = await _db.TargetAliveAlertRules.AsTracking().FirstOrDefaultAsync(
-            x => x.TargetKey == rule.TargetKey && x.TargetType == rule.TargetType,
-            cancellationToken);
+        TargetAliveAlertRule? entity = null;
+        if (rule.Id > 0)
+        {
+            entity = await _db.TargetAliveAlertRules.AsTracking().FirstOrDefaultAsync(x => x.Id == rule.Id, cancellationToken);
+        }
 
         var now = DateTime.UtcNow;
         if (entity is null)
@@ -218,10 +224,12 @@ public sealed class MetricsAndAlertsRepository : IMetricsAndAlertsRepository
             {
                 TargetKey = rule.TargetKey,
                 TargetType = rule.TargetType,
+                RuleName = rule.RuleName,
                 MinAliveCount = rule.MinAliveCount,
                 OfflineSeconds = rule.OfflineSeconds,
                 DurationMinutes = rule.DurationMinutes,
                 NotifyMinuteQueue = rule.NotifyMinuteQueue,
+                NotifyUsers = rule.NotifyUsers,
                 IsEnabled = rule.IsEnabled,
                 CreatedAt = now,
                 UpdatedAt = now
@@ -230,10 +238,14 @@ public sealed class MetricsAndAlertsRepository : IMetricsAndAlertsRepository
         }
         else
         {
+            entity.TargetKey = rule.TargetKey;
+            entity.TargetType = rule.TargetType;
+            entity.RuleName = rule.RuleName;
             entity.MinAliveCount = rule.MinAliveCount;
             entity.OfflineSeconds = rule.OfflineSeconds;
             entity.DurationMinutes = rule.DurationMinutes;
             entity.NotifyMinuteQueue = rule.NotifyMinuteQueue;
+            entity.NotifyUsers = rule.NotifyUsers;
             entity.IsEnabled = rule.IsEnabled;
             entity.UpdatedAt = now;
         }
@@ -244,12 +256,36 @@ public sealed class MetricsAndAlertsRepository : IMetricsAndAlertsRepository
 
     public Task<TargetAliveAlertRule?> GetTargetAliveAlertRuleAsync(string targetKey, MonitorTargetType targetType, CancellationToken cancellationToken = default)
     {
-        return _db.TargetAliveAlertRules.FirstOrDefaultAsync(x => x.TargetKey == targetKey && x.TargetType == targetType, cancellationToken);
+        return _db.TargetAliveAlertRules
+            .OrderBy(x => x.Id)
+            .FirstOrDefaultAsync(x => x.TargetKey == targetKey && x.TargetType == targetType, cancellationToken);
+    }
+
+    public async Task<IReadOnlyList<TargetAliveAlertRule>> ListTargetAliveAlertRulesAsync(string targetKey, MonitorTargetType targetType, CancellationToken cancellationToken = default)
+    {
+        return await _db.TargetAliveAlertRules
+            .Where(x => x.TargetKey == targetKey && x.TargetType == targetType)
+            .OrderBy(x => x.Id)
+            .ToArrayAsync(cancellationToken);
     }
 
     public async Task<IReadOnlyList<TargetAliveAlertRule>> ListEnabledTargetAliveAlertRulesAsync(CancellationToken cancellationToken = default)
     {
         return await _db.TargetAliveAlertRules.Where(x => x.IsEnabled).ToArrayAsync(cancellationToken);
+    }
+
+    public async Task<bool> DisableTargetAliveAlertRuleAsync(long id, CancellationToken cancellationToken = default)
+    {
+        var entity = await _db.TargetAliveAlertRules.AsTracking().FirstOrDefaultAsync(x => x.Id == id, cancellationToken);
+        if (entity is null)
+        {
+            return false;
+        }
+
+        entity.IsEnabled = false;
+        entity.UpdatedAt = DateTime.UtcNow;
+        await _db.SaveChangesAsync(cancellationToken);
+        return true;
     }
 
     public async Task<TargetUrlMonitorRule> UpsertTargetUrlMonitorRuleAsync(TargetUrlMonitorRule rule, CancellationToken cancellationToken = default)
@@ -267,6 +303,7 @@ public sealed class MetricsAndAlertsRepository : IMetricsAndAlertsRepository
             {
                 TargetKey = rule.TargetKey,
                 TargetType = rule.TargetType,
+                RuleName = rule.RuleName,
                 UrlName = rule.UrlName,
                 Url = rule.Url,
                 HttpMethod = rule.HttpMethod,
@@ -275,6 +312,7 @@ public sealed class MetricsAndAlertsRepository : IMetricsAndAlertsRepository
                 ExpectedStatusCodes = rule.ExpectedStatusCodes,
                 DurationMinutes = rule.DurationMinutes,
                 NotifyMinuteQueue = rule.NotifyMinuteQueue,
+                NotifyUsers = rule.NotifyUsers,
                 IsEnabled = rule.IsEnabled,
                 CreatedAt = now,
                 UpdatedAt = now
@@ -285,6 +323,7 @@ public sealed class MetricsAndAlertsRepository : IMetricsAndAlertsRepository
         {
             entity.TargetKey = rule.TargetKey;
             entity.TargetType = rule.TargetType;
+            entity.RuleName = rule.RuleName;
             entity.UrlName = rule.UrlName;
             entity.Url = rule.Url;
             entity.HttpMethod = rule.HttpMethod;
@@ -293,6 +332,7 @@ public sealed class MetricsAndAlertsRepository : IMetricsAndAlertsRepository
             entity.ExpectedStatusCodes = rule.ExpectedStatusCodes;
             entity.DurationMinutes = rule.DurationMinutes;
             entity.NotifyMinuteQueue = rule.NotifyMinuteQueue;
+            entity.NotifyUsers = rule.NotifyUsers;
             entity.IsEnabled = rule.IsEnabled;
             entity.UpdatedAt = now;
         }
@@ -356,6 +396,14 @@ public sealed class MetricsAndAlertsRepository : IMetricsAndAlertsRepository
         return _db.AlertStates.FirstOrDefaultAsync(x => x.AlertKey == alertKey, cancellationToken);
     }
 
+    public async Task<IReadOnlyList<AlertState>> ListAlertStatesByRuleAsync(AlertType alertType, long ruleId, CancellationToken cancellationToken = default)
+    {
+        return await _db.AlertStates
+            .Where(x => x.AlertType == alertType && x.RuleId == ruleId)
+            .OrderBy(x => x.Id)
+            .ToArrayAsync(cancellationToken);
+    }
+
     public async Task<AlertState> SaveAlertStateAsync(AlertState state, CancellationToken cancellationToken = default)
     {
         var isInsert = state.Id == 0;
@@ -401,6 +449,38 @@ public sealed class MetricsAndAlertsRepository : IMetricsAndAlertsRepository
             await _db.SaveChangesAsync(cancellationToken);
             return existing;
         }
+    }
+
+    public async Task DeleteAlertStatesAsync(IReadOnlyCollection<long> stateIds, CancellationToken cancellationToken = default)
+    {
+        if (stateIds.Count == 0)
+        {
+            return;
+        }
+
+        var ids = stateIds.Distinct().ToArray();
+        var logs = await _db.AlertNotifyLogs
+            .Where(x => ids.Contains(x.AlertStateId))
+            .ToArrayAsync(cancellationToken);
+        if (logs.Length > 0)
+        {
+            _db.AlertNotifyLogs.RemoveRange(logs);
+        }
+
+        var states = await _db.AlertStates
+            .Where(x => ids.Contains(x.Id))
+            .ToArrayAsync(cancellationToken);
+        if (states.Length > 0)
+        {
+            _db.AlertStates.RemoveRange(states);
+        }
+
+        if (logs.Length == 0 && states.Length == 0)
+        {
+            return;
+        }
+
+        await _db.SaveChangesAsync(cancellationToken);
     }
 
     static bool IsAlertKeyConflict(DbUpdateException exception)
@@ -511,5 +591,240 @@ public sealed class MetricsAndAlertsRepository : IMetricsAndAlertsRepository
                 CreatedAt = x.CreatedAt
             })
             .ToArrayAsync(cancellationToken);
+    }
+
+    public async Task<MetricAlertRule> UpsertMetricAlertRuleAsync(MetricAlertRule rule, CancellationToken cancellationToken = default)
+    {
+        MetricAlertRule? entity = null;
+        if (rule.Id > 0)
+        {
+            entity = await _db.MetricAlertRules.AsTracking().FirstOrDefaultAsync(x => x.Id == rule.Id, cancellationToken);
+        }
+
+        var now = DateTime.UtcNow;
+        if (entity is null)
+        {
+            entity = new MetricAlertRule
+            {
+                TargetKey = rule.TargetKey,
+                TargetType = rule.TargetType,
+                RuleName = rule.RuleName,
+                QueryItemsJson = rule.QueryItemsJson,
+                Formula = rule.Formula,
+                DurationMinutes = rule.DurationMinutes,
+                NotifyMinuteQueue = rule.NotifyMinuteQueue,
+                NotifyUsers = rule.NotifyUsers,
+                MessageTemplate = rule.MessageTemplate,
+                RecoverTemplate = rule.RecoverTemplate,
+                LastValuesJson = rule.LastValuesJson,
+                AggregateInstances = rule.AggregateInstances,
+                IsEnabled = rule.IsEnabled,
+                CreatedAt = now,
+                UpdatedAt = now
+            };
+            _db.MetricAlertRules.Add(entity);
+        }
+        else
+        {
+            var queryItemsChanged = !string.Equals(entity.QueryItemsJson, rule.QueryItemsJson, StringComparison.Ordinal);
+            entity.TargetKey = rule.TargetKey;
+            entity.TargetType = rule.TargetType;
+            entity.RuleName = rule.RuleName;
+            entity.QueryItemsJson = rule.QueryItemsJson;
+            entity.Formula = rule.Formula;
+            entity.DurationMinutes = rule.DurationMinutes;
+            entity.NotifyMinuteQueue = rule.NotifyMinuteQueue;
+            entity.NotifyUsers = rule.NotifyUsers;
+            entity.MessageTemplate = rule.MessageTemplate;
+            entity.RecoverTemplate = rule.RecoverTemplate;
+            entity.AggregateInstances = rule.AggregateInstances;
+            if (queryItemsChanged)
+            {
+                entity.LastValuesJson = null;
+            }
+            entity.IsEnabled = rule.IsEnabled;
+            entity.UpdatedAt = now;
+        }
+
+        await _db.SaveChangesAsync(cancellationToken);
+        return entity;
+    }
+
+    public async Task<IReadOnlyList<MetricAlertRule>> ListMetricAlertRulesAsync(MetricAlertRuleListQuery query, CancellationToken cancellationToken = default)
+    {
+        var dbQuery = _db.MetricAlertRules.AsQueryable();
+        if (!query.IncludeDisabled)
+        {
+            dbQuery = dbQuery.Where(x => x.IsEnabled);
+        }
+
+        if (!string.IsNullOrWhiteSpace(query.TargetKey))
+        {
+            dbQuery = dbQuery.Where(x => x.TargetKey == query.TargetKey);
+        }
+
+        if (query.TargetType.HasValue)
+        {
+            dbQuery = dbQuery.Where(x => x.TargetType == query.TargetType.Value);
+        }
+
+        return await dbQuery
+            .OrderBy(x => x.TargetKey)
+            .ThenBy(x => x.RuleName)
+            .ThenBy(x => x.Id)
+            .ToArrayAsync(cancellationToken);
+    }
+
+    public async Task<IReadOnlyList<MetricAlertRule>> ListEnabledMetricAlertRulesAsync(CancellationToken cancellationToken = default)
+    {
+        return await _db.MetricAlertRules
+            .Where(x => x.IsEnabled)
+            .OrderBy(x => x.Id)
+            .ToArrayAsync(cancellationToken);
+    }
+
+    public async Task<bool> DisableMetricAlertRuleAsync(long id, CancellationToken cancellationToken = default)
+    {
+        var entity = await _db.MetricAlertRules.AsTracking().FirstOrDefaultAsync(x => x.Id == id, cancellationToken);
+        if (entity is null)
+        {
+            return false;
+        }
+
+        entity.IsEnabled = false;
+        entity.UpdatedAt = DateTime.UtcNow;
+        await _db.SaveChangesAsync(cancellationToken);
+        return true;
+    }
+
+    public async Task UpdateMetricAlertRuleLastValuesAsync(long id, string lastValuesJson, CancellationToken cancellationToken = default)
+    {
+        var entity = await _db.MetricAlertRules.AsTracking().FirstOrDefaultAsync(x => x.Id == id, cancellationToken);
+        if (entity is null)
+        {
+            return;
+        }
+
+        entity.LastValuesJson = lastValuesJson;
+        entity.UpdatedAt = DateTime.UtcNow;
+        await _db.SaveChangesAsync(cancellationToken);
+    }
+
+    public async Task<ScheduledMetricMessageRule> UpsertScheduledMetricMessageRuleAsync(ScheduledMetricMessageRule rule, CancellationToken cancellationToken = default)
+    {
+        ScheduledMetricMessageRule? entity = null;
+        if (rule.Id > 0)
+        {
+            entity = await _db.ScheduledMetricMessageRules.AsTracking().FirstOrDefaultAsync(x => x.Id == rule.Id, cancellationToken);
+        }
+
+        var now = DateTime.UtcNow;
+        if (entity is null)
+        {
+            entity = new ScheduledMetricMessageRule
+            {
+                TargetKey = rule.TargetKey,
+                TargetType = rule.TargetType,
+                RuleName = rule.RuleName,
+                QueryItemsJson = rule.QueryItemsJson,
+                MessageTemplate = rule.MessageTemplate,
+                Cron = rule.Cron,
+                TimeZoneId = rule.TimeZoneId,
+                NextRunAt = rule.NextRunAt,
+                LastRunAt = rule.LastRunAt,
+                NotifyUsers = rule.NotifyUsers,
+                AggregateInstances = rule.AggregateInstances,
+                IsEnabled = rule.IsEnabled,
+                CreatedAt = now,
+                UpdatedAt = now
+            };
+            _db.ScheduledMetricMessageRules.Add(entity);
+        }
+        else
+        {
+            entity.TargetKey = rule.TargetKey;
+            entity.TargetType = rule.TargetType;
+            entity.RuleName = rule.RuleName;
+            entity.QueryItemsJson = rule.QueryItemsJson;
+            entity.MessageTemplate = rule.MessageTemplate;
+            entity.Cron = rule.Cron;
+            entity.TimeZoneId = rule.TimeZoneId;
+            entity.NextRunAt = rule.NextRunAt;
+            entity.NotifyUsers = rule.NotifyUsers;
+            entity.AggregateInstances = rule.AggregateInstances;
+            entity.IsEnabled = rule.IsEnabled;
+            entity.UpdatedAt = now;
+        }
+
+        await _db.SaveChangesAsync(cancellationToken);
+        return entity;
+    }
+
+    public async Task<IReadOnlyList<ScheduledMetricMessageRule>> ListScheduledMetricMessageRulesAsync(ScheduledMetricMessageRuleListQuery query, CancellationToken cancellationToken = default)
+    {
+        var dbQuery = _db.ScheduledMetricMessageRules.AsQueryable();
+        if (!query.IncludeDisabled)
+        {
+            dbQuery = dbQuery.Where(x => x.IsEnabled);
+        }
+
+        if (!string.IsNullOrWhiteSpace(query.TargetKey))
+        {
+            dbQuery = dbQuery.Where(x => x.TargetKey == query.TargetKey);
+        }
+
+        if (query.TargetType.HasValue)
+        {
+            dbQuery = dbQuery.Where(x => x.TargetType == query.TargetType.Value);
+        }
+
+        return await dbQuery
+            .OrderBy(x => x.TargetKey)
+            .ThenBy(x => x.RuleName)
+            .ThenBy(x => x.Id)
+            .ToArrayAsync(cancellationToken);
+    }
+
+    public async Task<IReadOnlyList<ScheduledMetricMessageRule>> ListDueScheduledMetricMessageRulesAsync(DateTime nowUtc, CancellationToken cancellationToken = default)
+    {
+        return await _db.ScheduledMetricMessageRules
+            .Where(x => x.IsEnabled && (!x.NextRunAt.HasValue || x.NextRunAt <= nowUtc))
+            .OrderBy(x => x.NextRunAt)
+            .ThenBy(x => x.Id)
+            .ToArrayAsync(cancellationToken);
+    }
+
+    public async Task<bool> DisableScheduledMetricMessageRuleAsync(long id, CancellationToken cancellationToken = default)
+    {
+        var entity = await _db.ScheduledMetricMessageRules.AsTracking().FirstOrDefaultAsync(x => x.Id == id, cancellationToken);
+        if (entity is null)
+        {
+            return false;
+        }
+
+        entity.IsEnabled = false;
+        entity.UpdatedAt = DateTime.UtcNow;
+        await _db.SaveChangesAsync(cancellationToken);
+        return true;
+    }
+
+    public async Task UpdateScheduledMetricMessageRuleRunAsync(long id, DateTime lastRunAtUtc, DateTime? nextRunAtUtc, CancellationToken cancellationToken = default)
+    {
+        var entity = await _db.ScheduledMetricMessageRules.AsTracking().FirstOrDefaultAsync(x => x.Id == id, cancellationToken);
+        if (entity is null)
+        {
+            return;
+        }
+
+        entity.LastRunAt = lastRunAtUtc;
+        entity.NextRunAt = nextRunAtUtc;
+        entity.UpdatedAt = DateTime.UtcNow;
+        await _db.SaveChangesAsync(cancellationToken);
+    }
+
+    public async Task AddScheduledMessageSendLogAsync(ScheduledMessageSendLog log, CancellationToken cancellationToken = default)
+    {
+        _db.ScheduledMessageSendLogs.Add(log);
+        await _db.SaveChangesAsync(cancellationToken);
     }
 }
