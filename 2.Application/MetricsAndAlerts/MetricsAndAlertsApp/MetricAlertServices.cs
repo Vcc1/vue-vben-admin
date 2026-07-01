@@ -866,6 +866,14 @@ public sealed class MetricAlertRuleService
             CurrentValue = preview.CurrentValues,
             ThresholdValue = request.Formula
         }, cancellationToken);
+        await AddTestNotifyLogAsync(
+            AlertType.MetricFormulaAlert,
+            request.TargetType,
+            targetKey,
+            title,
+            preview.MessageContent,
+            notifyResult,
+            cancellationToken);
 
         return new TestSendMessageDto
         {
@@ -874,6 +882,31 @@ public sealed class MetricAlertRuleService
             Title = title,
             Content = preview.MessageContent
         };
+    }
+
+    async Task AddTestNotifyLogAsync(
+        AlertType alertType,
+        MonitorTargetType targetType,
+        string targetKey,
+        string title,
+        string content,
+        NotifyResult notifyResult,
+        CancellationToken cancellationToken)
+    {
+        await _targetRepository.AddAlertNotifyLogAsync(new AlertNotifyLog
+        {
+            AlertStateId = 0,
+            AlertType = alertType,
+            NotifyType = NotifyType.Alert,
+            NotifyMinute = null,
+            TargetKey = targetKey,
+            TargetType = targetType,
+            Title = title,
+            Content = content,
+            IsSuccess = notifyResult.IsSuccess,
+            ErrorMessage = notifyResult.ErrorMessage,
+            CreatedAt = DateTime.UtcNow
+        }, cancellationToken);
     }
 
     async Task EnsureTargetExistsAsync(string targetKey, MonitorTargetType targetType, CancellationToken cancellationToken)
@@ -1048,6 +1081,19 @@ public sealed class ScheduledMetricMessageRuleService
             Title = title,
             Content = preview.MessageContent,
             CurrentValue = preview.CurrentValues
+        }, cancellationToken);
+        await _metricRepository.AddScheduledMessageSendLogAsync(new ScheduledMessageSendLog
+        {
+            RuleId = request.Id,
+            TargetKey = targetKey,
+            TargetType = request.TargetType,
+            Title = title,
+            Content = preview.MessageContent,
+            ScheduledAt = null,
+            NextRunAt = null,
+            IsSuccess = notifyResult.IsSuccess,
+            ErrorMessage = notifyResult.ErrorMessage,
+            CreatedAt = DateTime.UtcNow
         }, cancellationToken);
 
         return new TestSendMessageDto
@@ -1929,7 +1975,20 @@ public static class MetricRuleHelpers
             throw new ArgumentException("Cron is required.", nameof(cron));
         }
 
-        var expression = CronExpression.Parse(cron.Trim(), CronFormat.IncludeSeconds);
+        var normalizedCron = cron.Trim();
+        var partCount = normalizedCron
+            .Split([' ', '\t', '\r', '\n'], StringSplitOptions.RemoveEmptyEntries)
+            .Length;
+        var cronFormat = partCount switch
+        {
+            5 => CronFormat.Standard,
+            6 => CronFormat.IncludeSeconds,
+            _ => throw new ArgumentException(
+                "Cron format is invalid. Use 5 fields (minute hour day month day-of-week) or 6 fields with seconds.",
+                nameof(cron))
+        };
+
+        var expression = CronExpression.Parse(normalizedCron, cronFormat);
         var next = expression.GetNextOccurrence(DateTime.SpecifyKind(fromUtc, DateTimeKind.Utc), timeZone);
         return next.HasValue
             ? DateTime.SpecifyKind(next.Value, DateTimeKind.Utc)
