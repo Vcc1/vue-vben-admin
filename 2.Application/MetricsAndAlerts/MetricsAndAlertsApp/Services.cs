@@ -1,3 +1,4 @@
+using System.Diagnostics;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
@@ -844,6 +845,8 @@ public sealed class TargetAliveAlertWorker : BackgroundService
 
 public sealed class TargetUrlMonitorWorker : BackgroundService
 {
+    const string DebugUrlMonitorTargetKey = "__debug_https_certificate__";
+    const string DebugUrlMonitorUrl = "https://expired.badssl.com/";
     readonly IServiceScopeFactory _scopeFactory;
     readonly IOptionsMonitor<AlertOptions> _options;
     readonly ILogger<TargetUrlMonitorWorker> _logger;
@@ -889,31 +892,73 @@ public sealed class TargetUrlMonitorWorker : BackgroundService
         var alertState = scope.ServiceProvider.GetRequiredService<AlertStateService>();
         var now = DateTime.UtcNow;
         var rules = await repository.ListDueTargetUrlMonitorRulesAsync(now, cancellationToken);
+        //var executionRules = GetExecutionRules(rules);
 
         foreach (var rule in rules)
         {
             var check = await client.CheckAsync(rule, cancellationToken);
             var checkedAt = DateTime.UtcNow;
-            recorder.Record(rule, check, checkedAt);
-            await repository.UpdateTargetUrlMonitorLastCheckAsync(rule.Id, checkedAt, cancellationToken);
-
-            await alertState.HandleCheckResultAsync(new AlertCheckResult
+            if (rule.Id > 0)
             {
-                AlertType = AlertType.TargetUrlMonitorFailed,
-                RuleId = rule.Id,
-                TargetKey = rule.TargetKey,
-                TargetType = rule.TargetType,
-                IsNormal = check.IsSuccess,
-                DurationMinutes = rule.DurationMinutes,
-                NotifyMinuteQueue = MetricsAndAlertsUtilities.ParseNotifyMinuteQueue(rule.NotifyMinuteQueue),
-                CurrentValue = check.StatusCode?.ToString() ?? "request_error",
-                ThresholdValue = rule.ExpectedStatusCodes,
-                ErrorMessage = check.ErrorMessage,
-                RuleName = rule.RuleName,
-                UrlName = rule.UrlName,
-                Url = rule.Url,
-                NotifyUsers = MetricsAndAlertsUtilities.ParseNotifyUsers(rule.NotifyUsers)
-            }, cancellationToken);
+                recorder.Record(rule, check, checkedAt);
+                await repository.UpdateTargetUrlMonitorLastCheckAsync(rule.Id, checkedAt, cancellationToken);
+
+                await alertState.HandleCheckResultAsync(new AlertCheckResult
+                {
+                    AlertType = AlertType.TargetUrlMonitorFailed,
+                    RuleId = rule.Id,
+                    TargetKey = rule.TargetKey,
+                    TargetType = rule.TargetType,
+                    IsNormal = check.IsSuccess,
+                    DurationMinutes = rule.DurationMinutes,
+                    NotifyMinuteQueue = MetricsAndAlertsUtilities.ParseNotifyMinuteQueue(rule.NotifyMinuteQueue),
+                    CurrentValue = check.StatusCode?.ToString() ?? "request_error",
+                    ThresholdValue = rule.ExpectedStatusCodes,
+                    ErrorMessage = check.ErrorMessage,
+                    RuleName = rule.RuleName,
+                    UrlName = rule.UrlName,
+                    Url = rule.Url,
+                    NotifyUsers = MetricsAndAlertsUtilities.ParseNotifyUsers(rule.NotifyUsers)
+                }, cancellationToken);
+            }
+            else
+            {
+                _logger.LogInformation(
+                    "Debug URL monitor rule checked. Url={Url}, Success={IsSuccess}, StatusCode={StatusCode}, Error={ErrorMessage}",
+                    rule.Url,
+                    check.IsSuccess,
+                    check.StatusCode,
+                    check.ErrorMessage);
+            }
         }
+    }
+
+    static IReadOnlyList<TargetUrlMonitorRule> GetExecutionRules(IReadOnlyList<TargetUrlMonitorRule> repositoryRules)
+    {
+        if (!Debugger.IsAttached)
+        {
+            return repositoryRules;
+        }
+
+        var rules = new List<TargetUrlMonitorRule>(repositoryRules.Count + 1)
+        {
+            new()
+            {
+                Id = -1,
+                TargetKey = DebugUrlMonitorTargetKey,
+                TargetType = MonitorTargetType.Application,
+                RuleName = "Debug HTTPS Certificate Rule",
+                UrlName = "expired.badssl.com",
+                Url = DebugUrlMonitorUrl,
+                HttpMethod = "GET",
+                TimeoutSeconds = 10,
+                CheckIntervalSeconds = 1,
+                ExpectedStatusCodes = "200",
+                DurationMinutes = 0,
+                NotifyMinuteQueue = "0"
+            }
+        };
+        rules.AddRange(repositoryRules);
+        return rules;
     }
 }

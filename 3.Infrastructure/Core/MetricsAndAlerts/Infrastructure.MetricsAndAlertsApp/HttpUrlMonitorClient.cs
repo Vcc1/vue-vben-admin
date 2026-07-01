@@ -8,9 +8,13 @@ namespace Infrastructure.MetricsAndAlertsApp;
 public sealed class HttpUrlMonitorClient : IUrlMonitorClient
 {
     const string HttpClientName = nameof(HttpUrlMonitorClient);
-    static readonly TimeSpan CertificateExpiryAlertThreshold = TimeSpan.FromDays(7);
+    static readonly TimeSpan CertificateExpiryAlertThreshold ;
     readonly IHttpClientFactory _httpClientFactory;
+    static HttpUrlMonitorClient()
+    {
+        HttpUrlMonitorClient.CertificateExpiryAlertThreshold = TimeSpan.FromDays(7);
 
+    }
     public HttpUrlMonitorClient(IHttpClientFactory httpClientFactory)
     {
         _httpClientFactory = httpClientFactory;
