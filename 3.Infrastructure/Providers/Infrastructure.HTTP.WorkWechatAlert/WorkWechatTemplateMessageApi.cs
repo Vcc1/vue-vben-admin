@@ -63,6 +63,40 @@ public sealed class WorkWechatTemplateMessageApi : IWorkWechatTemplateMessageApi
         }
 
         response.EnsureSuccessStatusCode();
+        _logger.LogInformation(
+            "WorkWechat alert API accepted. RequestBody={RequestBody}, ResponseBody={ResponseBody}",
+            json,
+            responseBody);
+        EnsureBusinessSuccess(responseBody);
+    }
+
+    static void EnsureBusinessSuccess(string responseBody)
+    {
+        if (string.IsNullOrWhiteSpace(responseBody))
+        {
+            return;
+        }
+
+        WorkWechatTemplateMessageResponse? result;
+        try
+        {
+            result = JsonSerializer.Deserialize<WorkWechatTemplateMessageResponse>(responseBody, JsonOptions);
+        }
+        catch (JsonException ex)
+        {
+            throw new InvalidOperationException($"WorkWechat alert API returned invalid JSON. Body={responseBody}", ex);
+        }
+
+        if (result is null)
+        {
+            throw new InvalidOperationException($"WorkWechat alert API returned empty JSON. Body={responseBody}");
+        }
+
+        if (result.IsSuccess == false || result.Code <= 0)
+        {
+            throw new InvalidOperationException(
+                $"WorkWechat alert API business failed. Code={result.Code}, Msg={result.Msg}, Body={responseBody}");
+        }
     }
 
     static async Task<string> ReadResponseBodyAsync(HttpResponseMessage response, CancellationToken cancellationToken)
@@ -86,5 +120,13 @@ public sealed class WorkWechatTemplateMessageApi : IWorkWechatTemplateMessageApi
         }
 
         return Encoding.UTF8.GetString(bytes);
+    }
+
+    sealed class WorkWechatTemplateMessageResponse
+    {
+        public string? Data { get; set; }
+        public bool? IsSuccess { get; set; }
+        public string? Msg { get; set; }
+        public int? Code { get; set; }
     }
 }

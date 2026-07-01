@@ -162,6 +162,7 @@ public sealed class MetricAlertPreviewDto
 
 public sealed class MetricAlertRuleTestSendRequest
 {
+    public long Id { get; set; }
     public string TargetKey { get; set; } = "";
     public MonitorTargetType TargetType { get; set; }
     public string RuleName { get; set; } = "";
@@ -234,6 +235,7 @@ public sealed class ScheduledMetricMessagePreviewDto
 
 public sealed class ScheduledMetricMessageRuleTestSendRequest
 {
+    public long Id { get; set; }
     public string TargetKey { get; set; } = "";
     public MonitorTargetType TargetType { get; set; }
     public string RuleName { get; set; } = "";
