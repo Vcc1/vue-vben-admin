@@ -37,6 +37,8 @@ public sealed class TemplateRenderer : ITemplateRenderer
             {
                 globals[item.Key] = ToScriptValue(item.Value);
             }
+            globals.Import("duration_readable", new Func<object?, string?, string>(FormatDurationReadable));
+            globals.Import("duration_human", new Func<object?, string?, string>(FormatDurationReadable));
 
             var templateContext = new TemplateContext();
             templateContext.PushGlobal(globals);
@@ -52,6 +54,148 @@ public sealed class TemplateRenderer : ITemplateRenderer
         }
 
         return result;
+    }
+
+    static string FormatDurationReadable(object? value, string? unit = null)
+    {
+        if (!TryConvertToDouble(value, out var numericValue))
+        {
+            return string.Empty;
+        }
+
+        var seconds = ConvertToSeconds(numericValue, unit);
+        var isNegative = seconds < 0;
+        var totalSeconds = (long)Math.Floor(Math.Abs(seconds));
+        if (totalSeconds <= 0)
+        {
+            return "0秒";
+        }
+
+        const long secondsPerMinute = 60;
+        const long secondsPerHour = 60 * secondsPerMinute;
+        const long secondsPerDay = 24 * secondsPerHour;
+        const long secondsPerYear = 365 * secondsPerDay;
+
+        var years = totalSeconds / secondsPerYear;
+        totalSeconds %= secondsPerYear;
+
+        var days = totalSeconds / secondsPerDay;
+        totalSeconds %= secondsPerDay;
+
+        var hours = totalSeconds / secondsPerHour;
+        totalSeconds %= secondsPerHour;
+
+        var minutes = totalSeconds / secondsPerMinute;
+        totalSeconds %= secondsPerMinute;
+
+        var parts = new List<string>(5);
+        if (years > 0)
+        {
+            parts.Add($"{years}年");
+        }
+
+        if (days > 0)
+        {
+            parts.Add($"{days}天");
+        }
+
+        if (hours > 0)
+        {
+            parts.Add($"{hours}小时");
+        }
+
+        if (minutes > 0)
+        {
+            parts.Add($"{minutes}分钟");
+        }
+
+        if (totalSeconds > 0 || parts.Count == 0)
+        {
+            parts.Add($"{totalSeconds}秒");
+        }
+
+        return isNegative
+            ? "-" + string.Concat(parts)
+            : string.Concat(parts);
+    }
+
+    static bool TryConvertToDouble(object? value, out double result)
+    {
+        switch (value)
+        {
+            case null:
+                result = 0;
+                return false;
+            case double doubleValue:
+                result = doubleValue;
+                return true;
+            case float floatValue:
+                result = floatValue;
+                return true;
+            case decimal decimalValue:
+                result = (double)decimalValue;
+                return true;
+            case long longValue:
+                result = longValue;
+                return true;
+            case int intValue:
+                result = intValue;
+                return true;
+            case short shortValue:
+                result = shortValue;
+                return true;
+            case byte byteValue:
+                result = byteValue;
+                return true;
+            case ulong ulongValue:
+                result = ulongValue;
+                return true;
+            case uint uintValue:
+                result = uintValue;
+                return true;
+            case ushort ushortValue:
+                result = ushortValue;
+                return true;
+            case sbyte sbyteValue:
+                result = sbyteValue;
+                return true;
+            case string stringValue:
+                return double.TryParse(stringValue, NumberStyles.Float | NumberStyles.AllowThousands, CultureInfo.InvariantCulture, out result)
+                    || double.TryParse(stringValue, NumberStyles.Float | NumberStyles.AllowThousands, CultureInfo.CurrentCulture, out result);
+            default:
+                if (value is IConvertible convertible)
+                {
+                    try
+                    {
+                        result = convertible.ToDouble(CultureInfo.InvariantCulture);
+                        return true;
+                    }
+                    catch
+                    {
+                    }
+                }
+
+                result = 0;
+                return false;
+        }
+    }
+
+    static double ConvertToSeconds(double value, string? unit)
+    {
+        var normalizedUnit = string.IsNullOrWhiteSpace(unit)
+            ? "ms"
+            : unit.Trim().ToLowerInvariant();
+
+        return normalizedUnit switch
+        {
+            "ms" or "millisecond" or "milliseconds" => value / 1000d,
+            "s" or "sec" or "secs" or "second" or "seconds" => value,
+            "m" or "min" or "mins" or "minute" or "minutes" => value * 60d,
+            "h" or "hr" or "hrs" or "hour" or "hours" => value * 3600d,
+            "d" or "day" or "days" => value * 86400d,
+            "y" or "yr" or "yrs" or "year" or "years" => value * 31536000d,
+            _ => throw new InvalidOperationException($"Unsupported duration unit '{unit}'."),
+        };
     }
 
     static object? ToScriptValue(object? value)
