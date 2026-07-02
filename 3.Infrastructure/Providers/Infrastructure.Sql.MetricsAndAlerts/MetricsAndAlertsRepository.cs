@@ -147,32 +147,8 @@ public sealed class MetricsAndAlertsRepository : IMetricsAndAlertsRepository, IM
             .ThenBy(x => x.TargetKey)
             .ToArrayAsync(cancellationToken);
         var groups = await _db.MonitorTargetGroups.ToDictionaryAsync(x => x.Id, cancellationToken);
-        var aliveRules = await _db.TargetAliveAlertRules.ToArrayAsync(cancellationToken);
-        var states = await _db.AlertStates.Where(x => x.IsActive).ToArrayAsync(cancellationToken);
-        var urlRules = await _db.TargetUrlMonitorRules.Where(x => x.IsEnabled).ToArrayAsync(cancellationToken);
-
         return targets.Select(target =>
         {
-            var targetAliveRules = aliveRules
-                .Where(x => x.TargetKey == target.TargetKey && x.TargetType == target.TargetType)
-                .OrderBy(x => x.Id)
-                .ToArray();
-            var aliveRule = targetAliveRules.FirstOrDefault();
-            var aliveAlerting = targetAliveRules.Any(rule => states.Any(x =>
-                x.AlertType == AlertType.TargetAliveCountLow &&
-                x.RuleId == rule.Id &&
-                x.IsActive));
-
-            var targetUrlRules = urlRules
-                .Where(x => x.TargetKey == target.TargetKey && x.TargetType == target.TargetType)
-                .OrderBy(x => x.Id)
-                .ToArray();
-            var primaryUrlRule = targetUrlRules.FirstOrDefault();
-            var urlAlertingCount = targetUrlRules.Count(rule => states.Any(x =>
-                x.AlertType == AlertType.TargetUrlMonitorFailed &&
-                x.RuleId == rule.Id &&
-                x.IsActive));
-
             return new MonitorTargetListItemDto
             {
                 Id = target.Id,
@@ -183,28 +159,7 @@ public sealed class MetricsAndAlertsRepository : IMetricsAndAlertsRepository, IM
                 TargetType = target.TargetType,
                 SortOrder = target.SortOrder,
                 NotifyUsers = MetricsAndAlertsUtilities.ParseNotifyUsers(target.NotifyUsers),
-                IsEnabled = target.IsEnabled,
-                MinAliveCount = aliveRule?.MinAliveCount,
-                OfflineSeconds = aliveRule?.OfflineSeconds,
-                DurationMinutes = aliveRule?.DurationMinutes ?? primaryUrlRule?.DurationMinutes,
-                NotifyMinuteQueue = aliveRule is not null
-                    ? MetricsAndAlertsUtilities.ParseNotifyMinuteQueue(aliveRule.NotifyMinuteQueue)
-                    : primaryUrlRule is not null
-                        ? MetricsAndAlertsUtilities.ParseNotifyMinuteQueue(primaryUrlRule.NotifyMinuteQueue)
-                        : new List<int>(),
-                AliveAlertEnabled = targetAliveRules.Any(x => x.IsEnabled),
-                AliveAlerting = aliveAlerting,
-                CheckUrlRuleId = primaryUrlRule?.Id,
-                CheckUrlName = primaryUrlRule?.UrlName,
-                CheckUrl = primaryUrlRule?.Url,
-                HttpMethod = primaryUrlRule?.HttpMethod,
-                CheckTimeoutSeconds = primaryUrlRule?.TimeoutSeconds,
-                CheckIntervalSeconds = primaryUrlRule?.CheckIntervalSeconds,
-                ExpectedStatusCodes = primaryUrlRule is not null
-                    ? MetricsAndAlertsUtilities.ParseExpectedStatusCodes(primaryUrlRule.ExpectedStatusCodes).OrderBy(x => x).ToList()
-                    : new List<int>(),
-                UrlRuleCount = targetUrlRules.Length,
-                UrlAlertingCount = urlAlertingCount
+                IsEnabled = target.IsEnabled
             };
         }).ToArray();
     }
