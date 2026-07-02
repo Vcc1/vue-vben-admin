@@ -1,4 +1,5 @@
 using System.Diagnostics;
+using System.Globalization;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
@@ -710,7 +711,26 @@ public sealed class AlertStateService
             }
         }
 
+        if (!isRecover &&
+            result.AlertType == AlertType.TargetAliveCountLow &&
+            result.TargetType == MonitorTargetType.Application &&
+            result.RecentOfflineInstances.Count > 0)
+        {
+            lines.Add($"最近 24 小时退出实例：{FormatRecentOfflineInstances(result.RecentOfflineInstances)}");
+        }
+
         return string.Join(Environment.NewLine, lines);
+    }
+
+    static string FormatRecentOfflineInstances(IReadOnlyList<TargetInstanceDto> instances)
+    {
+        return string.Join("；", instances.Select(static instance =>
+        {
+            var heartbeatAt = DateTimeOffset.FromUnixTimeSeconds(Convert.ToInt64(Math.Floor(instance.LastHeartbeatTimestamp)));
+            return string.Create(
+                CultureInfo.InvariantCulture,
+                $"{instance.InstanceKey}（最近心跳 {heartbeatAt:yyyy-MM-dd HH:mm:ss} UTC，距今 {instance.HeartbeatAgeSeconds} 秒）");
+        }));
     }
 
     async Task AddNotifyLogAsync(
@@ -802,6 +822,13 @@ public sealed class TargetAliveAlertWorker : BackgroundService
             try
             {
                 var onlineCount = await prometheus.GetOnlineCountAsync(rule.TargetKey, rule.TargetType, rule.OfflineSeconds, cancellationToken);
+                var recentOfflineInstances = Array.Empty<TargetInstanceDto>();
+                if (rule.TargetType == MonitorTargetType.Application && onlineCount < rule.MinAliveCount)
+                {
+                    var instances = await prometheus.GetInstancesAsync(rule.TargetKey, rule.TargetType, cancellationToken);
+                    recentOfflineInstances = GetRecentOfflineInstances(instances, rule.OfflineSeconds, rule.MinAliveCount - onlineCount);
+                }
+
                 result = new AlertCheckResult
                 {
                     AlertType = AlertType.TargetAliveCountLow,
@@ -815,6 +842,7 @@ public sealed class TargetAliveAlertWorker : BackgroundService
                     ThresholdValue = rule.MinAliveCount.ToString(),
                     OfflineSeconds = rule.OfflineSeconds,
                     RuleName = rule.RuleName,
+                    RecentOfflineInstances = recentOfflineInstances.ToList(),
                     NotifyUsers = MetricsAndAlertsUtilities.ParseNotifyUsers(rule.NotifyUsers)
                 };
             }
@@ -840,6 +868,25 @@ public sealed class TargetAliveAlertWorker : BackgroundService
 
             await alertState.HandleCheckResultAsync(result, cancellationToken);
         }
+    }
+
+    static TargetInstanceDto[] GetRecentOfflineInstances(
+        IReadOnlyList<TargetInstanceDto> instances,
+        int offlineSeconds,
+        int missingCount)
+    {
+        if (missingCount <= 0 || instances.Count == 0)
+        {
+            return Array.Empty<TargetInstanceDto>();
+        }
+
+        var recentWindowSeconds = TimeSpan.FromHours(24).TotalSeconds;
+        return instances
+            .Where(x => x.HeartbeatAgeSeconds > offlineSeconds && x.HeartbeatAgeSeconds <= recentWindowSeconds)
+            .OrderBy(x => x.HeartbeatAgeSeconds)
+            .ThenBy(x => x.InstanceKey, StringComparer.OrdinalIgnoreCase)
+            .Take(missingCount)
+            .ToArray();
     }
 }
 

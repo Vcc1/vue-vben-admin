@@ -639,6 +639,7 @@ public sealed class AlertCheckResult
     public MetricInstanceQueryValues? MetricCurrentInstance { get; set; }
     public List<MetricInstanceQueryValues> MetricInstances { get; set; } = new();
     public List<MetricInstanceFormulaResult> MetricAbnormalInstances { get; set; } = new();
+    public List<TargetInstanceDto> RecentOfflineInstances { get; set; } = new();
     public List<string> NotifyUsers { get; set; } = new();
 }
 
