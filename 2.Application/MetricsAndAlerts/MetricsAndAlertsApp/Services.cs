@@ -360,7 +360,7 @@ public sealed class AlertQueryService
         return _repository.ListAlertStatesAsync(query, cancellationToken);
     }
 
-    public Task<IReadOnlyList<AlertNotifyLogDto>> ListAlertNotifyLogsAsync(AlertNotifyLogListQuery query, CancellationToken cancellationToken = default)
+    public Task<PagedResultDto<AlertNotifyLogDto>> ListAlertNotifyLogsAsync(AlertNotifyLogListQuery query, CancellationToken cancellationToken = default)
     {
         return _repository.ListAlertNotifyLogsAsync(query, cancellationToken);
     }

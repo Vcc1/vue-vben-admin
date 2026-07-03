@@ -15,12 +15,15 @@ public sealed class AlertNotifyLogController : ControllerBase
     }
 
     [HttpGet("list")]
-    public async Task<ActionResult<IReadOnlyList<AlertNotifyLogDto>>> List(
+    public async Task<ActionResult<PagedResultDto<AlertNotifyLogDto>>> List(
         [FromQuery] string? targetKey,
         [FromQuery] MonitorTargetType? targetType,
         [FromQuery] AlertType? alertType,
+        [FromQuery] long? ruleId,
         [FromQuery] DateTime? startTime,
         [FromQuery] DateTime? endTime,
+        [FromQuery] int? page,
+        [FromQuery] int? pageSize,
         CancellationToken cancellationToken)
     {
         return Ok(await _service.ListAlertNotifyLogsAsync(new AlertNotifyLogListQuery
@@ -28,8 +31,11 @@ public sealed class AlertNotifyLogController : ControllerBase
             TargetKey = targetKey,
             TargetType = targetType,
             AlertType = alertType,
+            RuleId = ruleId,
             StartTime = startTime,
-            EndTime = endTime
+            EndTime = endTime,
+            Page = page ?? 1,
+            PageSize = pageSize ?? 20
         }, cancellationToken));
     }
 }
