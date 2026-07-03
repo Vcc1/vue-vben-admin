@@ -1,4 +1,4 @@
-using Microsoft.Extensions.Logging;
+﻿using Microsoft.Extensions.Logging;
 
 namespace MetricsAndAlertsApp;
 
@@ -210,77 +210,14 @@ public sealed class MonitorTargetGroupDto
 /// </summary>
 public sealed class UpsertMonitorTargetRequest
 {
-    /// <summary>
-    /// 监控分组 Id。
-    /// </summary>
     public long? GroupId { get; set; }
-    /// <summary>
-    /// 目标唯一键，例如应用名或服务器标识。
-    /// </summary>
     public string TargetKey { get; set; } = "";
-    /// <summary>
-    /// 目标显示名称。
-    /// </summary>
     public string? TargetName { get; set; }
-    /// <summary>
-    /// 目标类型。
-    /// </summary>
     public MonitorTargetType TargetType { get; set; }
-    public string? RuleName { get; set; }
-    /// <summary>
-    /// 排序值，越小越靠前。
-    /// </summary>
     public int SortOrder { get; set; }
-    /// <summary>
-    /// 告警通知用户列表。
-    /// </summary>
     public List<string> NotifyUsers { get; set; } = new();
-    /// <summary>
-    /// 最小在线实例数阈值。
-    /// </summary>
-    public int? MinAliveCount { get; set; }
-    /// <summary>
-    /// 心跳离线阈值，单位秒。
-    /// </summary>
-    public int? OfflineSeconds { get; set; }
-    /// <summary>
-    /// 持续满足告警条件多久后触发，单位分钟。
-    /// </summary>
-    public int? DurationMinutes { get; set; }
-    /// <summary>
-    /// 告警通知分钟队列，例如 0,5,10,120。
-    /// </summary>
-    public List<int> NotifyMinuteQueue { get; set; } = new();
-    /// <summary>
-    /// 巡检 URL。
-    /// </summary>
-    public string? CheckUrl { get; set; }
-    /// <summary>
-    /// 巡检 URL 名称。
-    /// </summary>
-    public string? CheckUrlName { get; set; }
-    /// <summary>
-    /// 巡检 HTTP 方法。
-    /// </summary>
-    public string HttpMethod { get; set; } = "GET";
-    /// <summary>
-    /// URL 巡检超时时间，单位秒。
-    /// </summary>
-    public int? CheckTimeoutSeconds { get; set; }
-    /// <summary>
-    /// URL 巡检间隔，单位秒。
-    /// </summary>
-    public int? CheckIntervalSeconds { get; set; }
-    /// <summary>
-    /// 期望 HTTP 状态码列表。
-    /// </summary>
-    public List<int> ExpectedStatusCodes { get; set; } = new();
-    /// <summary>
-    /// 是否启用。
-    /// </summary>
     public bool IsEnabled { get; set; } = true;
 }
-
 public sealed class MonitorTargetListQuery
 {
     public MonitorTargetType? TargetType { get; set; }
@@ -294,119 +231,17 @@ public sealed class MonitorTargetListQuery
 /// </summary>
 public sealed class MonitorTargetListItemDto
 {
-    /// <summary>
-    /// 目标 Id。
-    /// </summary>
     public long Id { get; set; }
-    /// <summary>
-    /// 所属分组 Id。
-    /// </summary>
     public long? GroupId { get; set; }
-    /// <summary>
-    /// 所属分组名称。
-    /// </summary>
     public string? GroupName { get; set; }
-    /// <summary>
-    /// 目标唯一键。
-    /// </summary>
     public string TargetKey { get; set; } = "";
-    /// <summary>
-    /// 目标显示名称。
-    /// </summary>
     public string? TargetName { get; set; }
-    /// <summary>
-    /// 目标类型。
-    /// </summary>
     public MonitorTargetType TargetType { get; set; }
-    /// <summary>
-    /// 目标类型文本。
-    /// </summary>
     public string TargetTypeName { get; set; } = "";
-    /// <summary>
-    /// 排序值。
-    /// </summary>
     public int SortOrder { get; set; }
-    /// <summary>
-    /// 通知用户列表。
-    /// </summary>
     public List<string> NotifyUsers { get; set; } = new();
-    /// <summary>
-    /// 是否启用。
-    /// </summary>
     public bool IsEnabled { get; set; }
-    /// <summary>
-    /// 最小在线实例数阈值。
-    /// </summary>
-    public int? MinAliveCount { get; set; }
-    /// <summary>
-    /// 心跳离线阈值，单位秒。
-    /// </summary>
-    public int? OfflineSeconds { get; set; }
-    /// <summary>
-    /// 持续满足告警条件多久后触发，单位分钟。
-    /// </summary>
-    public int? DurationMinutes { get; set; }
-    /// <summary>
-    /// 告警通知分钟队列。
-    /// </summary>
-    public List<int> NotifyMinuteQueue { get; set; } = new();
-    /// <summary>
-    /// 当前在线实例数。
-    /// </summary>
-    public int? OnlineCount { get; set; }
-    /// <summary>
-    /// 查询在线实例失败时的错误信息。
-    /// </summary>
-    public string? QueryError { get; set; }
-    /// <summary>
-    /// 在线实例数告警规则是否启用。
-    /// </summary>
-    public bool AliveAlertEnabled { get; set; }
-    /// <summary>
-    /// 当前是否处于在线实例数告警中。
-    /// </summary>
-    public bool AliveAlerting { get; set; }
-    /// <summary>
-    /// URL 巡检规则 Id。
-    /// </summary>
-    public long? CheckUrlRuleId { get; set; }
-    /// <summary>
-    /// URL 巡检名称。
-    /// </summary>
-    public string? CheckUrlName { get; set; }
-    /// <summary>
-    /// URL 巡检地址。
-    /// </summary>
-    public string? CheckUrl { get; set; }
-    /// <summary>
-    /// URL 巡检 HTTP 方法。
-    /// </summary>
-    public string? HttpMethod { get; set; }
-    /// <summary>
-    /// URL 巡检超时时间，单位秒。
-    /// </summary>
-    public int? CheckTimeoutSeconds { get; set; }
-    /// <summary>
-    /// URL 巡检间隔，单位秒。
-    /// </summary>
-    public int? CheckIntervalSeconds { get; set; }
-    /// <summary>
-    /// 期望 HTTP 状态码列表。
-    /// </summary>
-    public List<int> ExpectedStatusCodes { get; set; } = new();
-    /// <summary>
-    /// URL 巡检规则数量。
-    /// </summary>
-    public int UrlRuleCount { get; set; }
-    /// <summary>
-    /// 当前处于告警中的 URL 巡检规则数量。
-    /// </summary>
-    public int UrlAlertingCount { get; set; }
 }
-
-/// <summary>
-/// 目标实例信息。
-/// </summary>
 public sealed class TargetInstanceDto
 {
     /// <summary>

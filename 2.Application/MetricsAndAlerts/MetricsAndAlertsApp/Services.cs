@@ -145,9 +145,6 @@ public sealed class MonitorTargetService
             UpdatedAt = now
         }, cancellationToken);
 
-        await UpsertOptionalAliveRuleAsync(request, now, cancellationToken);
-        await UpsertOptionalCheckUrlAsync(request, now, cancellationToken);
-
         var list = await ListAsync(new MonitorTargetListQuery
         {
             TargetKeyEquals = request.TargetKey.Trim(),
@@ -163,24 +160,6 @@ public sealed class MonitorTargetService
         foreach (var target in targets)
         {
             target.TargetTypeName = MetricsAndAlertsUtilities.GetTargetTypeName(target.TargetType);
-            if (!target.AliveAlertEnabled || target.MinAliveCount is null)
-            {
-                continue;
-            }
-
-            try
-            {
-                target.OnlineCount = await _prometheus.GetOnlineCountAsync(
-                    target.TargetKey,
-                    target.TargetType,
-                    offlineSeconds: target.OfflineSeconds ?? 60,
-                    cancellationToken);
-            }
-            catch (Exception ex)
-            {
-                target.OnlineCount = null;
-                target.QueryError = ex.Message;
-            }
         }
 
         return targets;
@@ -205,71 +184,6 @@ public sealed class MonitorTargetService
         }
 
         return _prometheus.GetInstancesAsync(targetKey.Trim(), targetType, cancellationToken);
-    }
-
-    async Task UpsertOptionalAliveRuleAsync(UpsertMonitorTargetRequest request, DateTime now, CancellationToken cancellationToken)
-    {
-        if (!request.MinAliveCount.HasValue)
-        {
-            return;
-        }
-
-        var existing = await _repository.GetTargetAliveAlertRuleAsync(request.TargetKey.Trim(), request.TargetType, cancellationToken);
-        await _repository.UpsertTargetAliveAlertRuleAsync(new TargetAliveAlertRule
-        {
-            Id = existing?.Id ?? 0,
-            TargetKey = request.TargetKey.Trim(),
-            TargetType = request.TargetType,
-            RuleName = existing?.RuleName ?? "在线实例数",
-            MinAliveCount = Math.Max(1, request.MinAliveCount.Value),
-            OfflineSeconds = Math.Max(1, request.OfflineSeconds ?? existing?.OfflineSeconds ?? 60),
-            DurationMinutes = Math.Max(0, request.DurationMinutes ?? existing?.DurationMinutes ?? 0),
-            NotifyMinuteQueue = request.NotifyMinuteQueue.Count > 0
-                ? MetricsAndAlertsUtilities.FormatNotifyMinuteQueue(request.NotifyMinuteQueue)
-                : existing?.NotifyMinuteQueue ?? "0,5,10,120",
-            NotifyUsers = existing?.NotifyUsers,
-            IsEnabled = request.IsEnabled,
-            CreatedAt = now,
-            UpdatedAt = now
-        }, cancellationToken);
-    }
-
-    async Task UpsertOptionalCheckUrlAsync(UpsertMonitorTargetRequest request, DateTime now, CancellationToken cancellationToken)
-    {
-        if (string.IsNullOrWhiteSpace(request.CheckUrl))
-        {
-            return;
-        }
-
-        if (!Uri.TryCreate(request.CheckUrl, UriKind.Absolute, out _))
-        {
-            throw new ArgumentException("CheckUrl must be an absolute URL.", nameof(request));
-        }
-
-        var existing = await _repository.GetFirstTargetUrlMonitorRuleAsync(request.TargetKey.Trim(), request.TargetType, cancellationToken);
-        await _repository.UpsertTargetUrlMonitorRuleAsync(new TargetUrlMonitorRule
-        {
-            Id = existing?.Id ?? 0,
-            TargetKey = request.TargetKey.Trim(),
-            TargetType = request.TargetType,
-            RuleName = existing?.RuleName,
-            UrlName = string.IsNullOrWhiteSpace(request.CheckUrlName) ? existing?.UrlName : request.CheckUrlName.Trim(),
-            Url = request.CheckUrl.Trim(),
-            HttpMethod = string.IsNullOrWhiteSpace(request.HttpMethod) ? existing?.HttpMethod ?? "GET" : request.HttpMethod.Trim().ToUpperInvariant(),
-            TimeoutSeconds = Math.Max(1, request.CheckTimeoutSeconds ?? existing?.TimeoutSeconds ?? 10),
-            CheckIntervalSeconds = Math.Max(1, request.CheckIntervalSeconds ?? existing?.CheckIntervalSeconds ?? 30),
-            ExpectedStatusCodes = request.ExpectedStatusCodes.Count > 0
-                ? MetricsAndAlertsUtilities.FormatExpectedStatusCodes(request.ExpectedStatusCodes)
-                : existing?.ExpectedStatusCodes ?? "200",
-            DurationMinutes = Math.Max(0, request.DurationMinutes ?? existing?.DurationMinutes ?? 0),
-            NotifyMinuteQueue = request.NotifyMinuteQueue.Count > 0
-                ? MetricsAndAlertsUtilities.FormatNotifyMinuteQueue(request.NotifyMinuteQueue)
-                : existing?.NotifyMinuteQueue ?? "0,5,10,120",
-            NotifyUsers = existing?.NotifyUsers,
-            IsEnabled = request.IsEnabled,
-            CreatedAt = now,
-            UpdatedAt = now
-        }, cancellationToken);
     }
 }
 
