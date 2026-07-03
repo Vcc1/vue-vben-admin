@@ -592,8 +592,11 @@ public sealed class AlertNotifyLogListQuery
     public string? TargetKey { get; set; }
     public MonitorTargetType? TargetType { get; set; }
     public AlertType? AlertType { get; set; }
+    public long? RuleId { get; set; }
     public DateTime? StartTime { get; set; }
     public DateTime? EndTime { get; set; }
+    public int Page { get; set; } = 1;
+    public int PageSize { get; set; } = 20;
 }
 
 public sealed class AlertNotifyLogDto
@@ -601,6 +604,8 @@ public sealed class AlertNotifyLogDto
     public long Id { get; set; }
     public long AlertStateId { get; set; }
     public AlertType AlertType { get; set; }
+    public long? RuleId { get; set; }
+    public string? RuleName { get; set; }
     public NotifyType NotifyType { get; set; }
     public int? NotifyMinute { get; set; }
     public string TargetKey { get; set; } = "";
@@ -610,6 +615,14 @@ public sealed class AlertNotifyLogDto
     public bool IsSuccess { get; set; }
     public string? ErrorMessage { get; set; }
     public DateTime CreatedAt { get; set; }
+}
+
+public sealed class PagedResultDto<T>
+{
+    public IReadOnlyList<T> Items { get; set; } = Array.Empty<T>();
+    public int Page { get; set; }
+    public int PageSize { get; set; }
+    public int TotalCount { get; set; }
 }
 
 public sealed class AlertCheckResult
@@ -716,7 +729,7 @@ public interface IMetricsAndAlertsRepository
     Task DeleteAlertStatesAsync(IReadOnlyCollection<long> stateIds, CancellationToken cancellationToken = default);
     Task AddAlertNotifyLogAsync(AlertNotifyLog log, CancellationToken cancellationToken = default);
     Task<IReadOnlyList<AlertStateDto>> ListAlertStatesAsync(AlertStateListQuery query, CancellationToken cancellationToken = default);
-    Task<IReadOnlyList<AlertNotifyLogDto>> ListAlertNotifyLogsAsync(AlertNotifyLogListQuery query, CancellationToken cancellationToken = default);
+    Task<PagedResultDto<AlertNotifyLogDto>> ListAlertNotifyLogsAsync(AlertNotifyLogListQuery query, CancellationToken cancellationToken = default);
 }
 
 public interface IPrometheusQueryClient

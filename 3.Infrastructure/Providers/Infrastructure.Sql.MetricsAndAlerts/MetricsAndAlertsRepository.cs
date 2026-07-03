@@ -500,52 +500,173 @@ public sealed class MetricsAndAlertsRepository : IMetricsAndAlertsRepository, IM
             .ToArrayAsync(cancellationToken);
     }
 
-    public async Task<IReadOnlyList<AlertNotifyLogDto>> ListAlertNotifyLogsAsync(AlertNotifyLogListQuery query, CancellationToken cancellationToken = default)
+    public async Task<PagedResultDto<AlertNotifyLogDto>> ListAlertNotifyLogsAsync(AlertNotifyLogListQuery query, CancellationToken cancellationToken = default)
     {
-        var dbQuery = _db.AlertNotifyLogs.AsQueryable();
+        var page = query.Page > 0 ? query.Page : 1;
+        var pageSize = query.PageSize > 0 ? query.PageSize : 20;
+
+        var dbQuery =
+            from log in _db.AlertNotifyLogs
+            join state in _db.AlertStates on log.AlertStateId equals state.Id into stateJoin
+            from state in stateJoin.DefaultIfEmpty()
+            select new
+            {
+                Log = log,
+                RuleId = state != null ? (long?)state.RuleId : null
+            };
+
         if (!string.IsNullOrWhiteSpace(query.TargetKey))
         {
-            dbQuery = dbQuery.Where(x => x.TargetKey == query.TargetKey);
+            dbQuery = dbQuery.Where(x => x.Log.TargetKey == query.TargetKey);
         }
 
         if (query.TargetType.HasValue)
         {
-            dbQuery = dbQuery.Where(x => x.TargetType == query.TargetType.Value);
+            dbQuery = dbQuery.Where(x => x.Log.TargetType == query.TargetType.Value);
         }
 
         if (query.AlertType.HasValue)
         {
-            dbQuery = dbQuery.Where(x => x.AlertType == query.AlertType.Value);
+            dbQuery = dbQuery.Where(x => x.Log.AlertType == query.AlertType.Value);
+        }
+
+        if (query.RuleId.HasValue)
+        {
+            dbQuery = dbQuery.Where(x => x.RuleId == query.RuleId.Value);
         }
 
         if (query.StartTime.HasValue)
         {
-            dbQuery = dbQuery.Where(x => x.CreatedAt >= query.StartTime.Value);
+            dbQuery = dbQuery.Where(x => x.Log.CreatedAt >= query.StartTime.Value);
         }
 
         if (query.EndTime.HasValue)
         {
-            dbQuery = dbQuery.Where(x => x.CreatedAt <= query.EndTime.Value);
+            dbQuery = dbQuery.Where(x => x.Log.CreatedAt <= query.EndTime.Value);
         }
 
-        return await dbQuery
-            .OrderByDescending(x => x.CreatedAt)
-            .Select(x => new AlertNotifyLogDto
+        var totalCount = await dbQuery.CountAsync(cancellationToken);
+
+        var rows = await dbQuery
+            .OrderByDescending(x => x.Log.CreatedAt)
+            .Skip((page - 1) * pageSize)
+            .Take(pageSize)
+            .Select(x => new
             {
-                Id = x.Id,
-                AlertStateId = x.AlertStateId,
-                AlertType = x.AlertType,
-                NotifyType = x.NotifyType,
-                NotifyMinute = x.NotifyMinute,
-                TargetKey = x.TargetKey,
-                TargetType = x.TargetType,
-                Title = x.Title,
-                Content = x.Content,
-                IsSuccess = x.IsSuccess,
-                ErrorMessage = x.ErrorMessage,
-                CreatedAt = x.CreatedAt
+                x.Log.Id,
+                x.Log.AlertStateId,
+                x.Log.AlertType,
+                x.Log.NotifyType,
+                x.Log.NotifyMinute,
+                x.Log.TargetKey,
+                x.Log.TargetType,
+                x.Log.Title,
+                x.Log.Content,
+                x.Log.IsSuccess,
+                x.Log.ErrorMessage,
+                x.Log.CreatedAt,
+                x.RuleId
             })
             .ToArrayAsync(cancellationToken);
+
+        var aliveRuleIds = rows
+            .Where(x => x.AlertType == AlertType.TargetAliveCountLow && x.RuleId.HasValue)
+            .Select(x => x.RuleId!.Value)
+            .Distinct()
+            .ToArray();
+        var urlRuleIds = rows
+            .Where(x => x.AlertType == AlertType.TargetUrlMonitorFailed && x.RuleId.HasValue)
+            .Select(x => x.RuleId!.Value)
+            .Distinct()
+            .ToArray();
+        var metricRuleIds = rows
+            .Where(x => x.AlertType == AlertType.MetricFormulaAlert && x.RuleId.HasValue)
+            .Select(x => x.RuleId!.Value)
+            .Distinct()
+            .ToArray();
+
+        IReadOnlyDictionary<long, string?> aliveRuleNames;
+        if (aliveRuleIds.Length == 0)
+        {
+            aliveRuleNames = new Dictionary<long, string?>();
+        }
+        else
+        {
+            aliveRuleNames = await _db.TargetAliveAlertRules
+                .Where(x => aliveRuleIds.Contains(x.Id))
+                .ToDictionaryAsync(x => x.Id, x => x.RuleName, cancellationToken);
+        }
+
+        IReadOnlyDictionary<long, string?> urlRuleNames;
+        if (urlRuleIds.Length == 0)
+        {
+            urlRuleNames = new Dictionary<long, string?>();
+        }
+        else
+        {
+            urlRuleNames = await _db.TargetUrlMonitorRules
+                .Where(x => urlRuleIds.Contains(x.Id))
+                .ToDictionaryAsync(x => x.Id, x => x.RuleName ?? x.UrlName ?? x.Url, cancellationToken);
+        }
+
+        IReadOnlyDictionary<long, string?> metricRuleNames;
+        if (metricRuleIds.Length == 0)
+        {
+            metricRuleNames = new Dictionary<long, string?>();
+        }
+        else
+        {
+            metricRuleNames = await _db.MetricAlertRules
+                .Where(x => metricRuleIds.Contains(x.Id))
+                .ToDictionaryAsync(x => x.Id, x => x.RuleName, cancellationToken);
+        }
+
+        var items = rows.Select(x => new AlertNotifyLogDto
+        {
+            Id = x.Id,
+            AlertStateId = x.AlertStateId,
+            AlertType = x.AlertType,
+            RuleId = x.RuleId,
+            RuleName = ResolveRuleName(x.AlertType, x.RuleId, aliveRuleNames, urlRuleNames, metricRuleNames),
+            NotifyType = x.NotifyType,
+            NotifyMinute = x.NotifyMinute,
+            TargetKey = x.TargetKey,
+            TargetType = x.TargetType,
+            Title = x.Title,
+            Content = x.Content,
+            IsSuccess = x.IsSuccess,
+            ErrorMessage = x.ErrorMessage,
+            CreatedAt = x.CreatedAt
+        }).ToArray();
+
+        return new PagedResultDto<AlertNotifyLogDto>
+        {
+            Items = items,
+            Page = page,
+            PageSize = pageSize,
+            TotalCount = totalCount
+        };
+    }
+
+    static string? ResolveRuleName(
+        AlertType alertType,
+        long? ruleId,
+        IReadOnlyDictionary<long, string?> aliveRuleNames,
+        IReadOnlyDictionary<long, string?> urlRuleNames,
+        IReadOnlyDictionary<long, string?> metricRuleNames)
+    {
+        if (!ruleId.HasValue)
+        {
+            return null;
+        }
+
+        return alertType switch
+        {
+            AlertType.TargetAliveCountLow => aliveRuleNames.GetValueOrDefault(ruleId.Value),
+            AlertType.TargetUrlMonitorFailed => urlRuleNames.GetValueOrDefault(ruleId.Value),
+            AlertType.MetricFormulaAlert => metricRuleNames.GetValueOrDefault(ruleId.Value),
+            _ => null
+        };
     }
 
     public async Task<MetricAlertRule> UpsertMetricAlertRuleAsync(MetricAlertRule rule, CancellationToken cancellationToken = default)
