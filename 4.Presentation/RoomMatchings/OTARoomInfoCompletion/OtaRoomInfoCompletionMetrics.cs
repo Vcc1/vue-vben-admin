@@ -1,6 +1,7 @@
 using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.Diagnostics.Metrics;
+using RoomMatch.Core.RoomAnalysis;
 using VBase.AppMetrics;
 
 public sealed class OtaRoomInfoCompletionMetrics
@@ -9,6 +10,7 @@ public sealed class OtaRoomInfoCompletionMetrics
     private const string ErrorMetricName = "pipeline_error_total";
 
     private readonly ConcurrentDictionary<string, long> _queueDepths = new(StringComparer.OrdinalIgnoreCase);
+    private readonly ConcurrentDictionary<string, Func<long>> _queueDepthProviders = new(StringComparer.OrdinalIgnoreCase);
     private readonly ConcurrentDictionary<string, long> _runningTaskCounts = new(StringComparer.OrdinalIgnoreCase);
     private readonly ConcurrentDictionary<string, long> _completedTaskCounts = new(StringComparer.OrdinalIgnoreCase);
     private readonly ConcurrentDictionary<string, long> _errorCounts = new(StringComparer.OrdinalIgnoreCase);
@@ -16,14 +18,20 @@ public sealed class OtaRoomInfoCompletionMetrics
     private readonly Counter<long> _errorCounter;
     private readonly ObservableGauge<long> _queueDepthGauge;
     private readonly ObservableGauge<long> _runningTaskGauge;
+    private readonly ObservableGauge<int> _unknownCharLocalSeenGauge;
+    private readonly ObservableGauge<int> _unknownCharDbCacheGauge;
+    private readonly IRoomUnknownCharRepository _roomUnknownCharRepository;
 
-    public OtaRoomInfoCompletionMetrics(DefaultMetrics metrics)
+    public OtaRoomInfoCompletionMetrics(DefaultMetrics metrics, IRoomUnknownCharRepository roomUnknownCharRepository)
     {
+        _roomUnknownCharRepository = roomUnknownCharRepository;
         var meter = metrics.Meter;
         _completedTaskCounter = meter.CreateCounter<long>(CompletedTaskMetricName, unit: "tasks");
         _errorCounter = meter.CreateCounter<long>(ErrorMetricName, unit: "errors");
         _queueDepthGauge = meter.CreateObservableGauge("ota_room_info_completion_queue_depth", ObserveQueueDepth, unit: "items");
         _runningTaskGauge = meter.CreateObservableGauge("ota_room_info_completion_running_task_count", ObserveRunningTasks, unit: "tasks");
+        _unknownCharLocalSeenGauge = meter.CreateObservableGauge("room_unknown_char_local_seen_count", ObserveUnknownCharLocalSeenCount, unit: "items");
+        _unknownCharDbCacheGauge = meter.CreateObservableGauge("room_unknown_char_db_cache_count", ObserveUnknownCharDbCacheCount, unit: "items");
     }
 
     public void IncreaseQueueDepth(string queueName, int delta = 1)
@@ -90,7 +98,24 @@ public sealed class OtaRoomInfoCompletionMetrics
 
     public IReadOnlyDictionary<string, long> GetQueueDepthSnapshot()
     {
-        return GetSnapshot(_queueDepths);
+        var snapshot = GetSnapshot(_queueDepths).ToDictionary(x => x.Key, x => x.Value, StringComparer.OrdinalIgnoreCase);
+
+        foreach (var provider in _queueDepthProviders)
+        {
+            snapshot[provider.Key] = SafeGetQueueDepth(provider.Key, provider.Value, snapshot.GetValueOrDefault(provider.Key));
+        }
+
+        return snapshot;
+    }
+
+    public void RegisterQueueDepthProvider(string queueName, Func<long> provider)
+    {
+        _queueDepthProviders[queueName] = provider;
+    }
+
+    public void ClearQueueDepthProviders()
+    {
+        _queueDepthProviders.Clear();
     }
 
     public IReadOnlyDictionary<string, long> GetRunningTaskSnapshot()
@@ -125,9 +150,22 @@ public sealed class OtaRoomInfoCompletionMetrics
 
     private IEnumerable<Measurement<long>> ObserveQueueDepth()
     {
-        foreach (var item in _queueDepths)
+        var snapshot = GetQueueDepthSnapshot();
+        foreach (var item in snapshot)
         {
             yield return new Measurement<long>(item.Value, new KeyValuePair<string, object?>("queue", item.Key));
+        }
+    }
+
+    private static long SafeGetQueueDepth(string queueName, Func<long> provider, long fallbackValue)
+    {
+        try
+        {
+            return Math.Max(0, provider());
+        }
+        catch
+        {
+            return Math.Max(0, fallbackValue);
         }
     }
 
@@ -137,5 +175,15 @@ public sealed class OtaRoomInfoCompletionMetrics
         {
             yield return new Measurement<long>(item.Value, new KeyValuePair<string, object?>("stage", item.Key));
         }
+    }
+
+    private IEnumerable<Measurement<int>> ObserveUnknownCharLocalSeenCount()
+    {
+        yield return new Measurement<int>(Math.Max(0, _roomUnknownCharRepository.GetLocalSeenCount()));
+    }
+
+    private IEnumerable<Measurement<int>> ObserveUnknownCharDbCacheCount()
+    {
+        yield return new Measurement<int>(Math.Max(0, _roomUnknownCharRepository.GetDbCacheCount()));
     }
 }

@@ -56,6 +56,16 @@ namespace Infrastructure.Sql.RoomMapping.Repositories
             }
         }
 
+        public int GetLocalSeenCount()
+        {
+            return _localSeen.Count;
+        }
+
+        public int GetDbCacheCount()
+        {
+            return _dbCache.Count;
+        }
+
         protected async Task ExecuteAsync()
         {
             await PreloadDbCacheAsync();

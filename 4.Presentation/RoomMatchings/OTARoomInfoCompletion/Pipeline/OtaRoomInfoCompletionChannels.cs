@@ -2,14 +2,20 @@ using System.Threading.Channels;
 
 public sealed class OtaRoomInfoCompletionChannels
 {
+    private const int MaxPipelineQueueCapacity = 50;
+
     public OtaRoomInfoCompletionChannels(OtaRoomInfoCompletionOptions options)
     {
-        HotelCodes = Channel.CreateBounded<string>(CreateOptions(options.HotelCodeQueueCapacity));
-        ResolvedSupHotels = Channel.CreateBounded<OtaRoomInfoCompletionWorkItem>(CreateOptions(options.EanHotelQueueCapacity));
-        EanHotels = Channel.CreateBounded<OtaRoomInfoCompletionWorkItem>(CreateOptions(options.EanHotelQueueCapacity));
-        MergedEanHotels = Channel.CreateBounded<OtaRoomInfoCompletionWorkItem>(CreateOptions(options.EanHotelQueueCapacity));
-        HotelRoomData = Channel.CreateBounded<OtaRoomInfoCompletionWorkItem>(CreateOptions(options.HotelRoomDataQueueCapacity));
-        ParsedHotels = Channel.CreateBounded<OtaRoomInfoCompletionWorkItem>(CreateOptions(options.ParsedHotelQueueCapacity));
+        HotelCodes = Channel.CreateUnbounded<string>(new UnboundedChannelOptions
+        {
+            SingleWriter = false,
+            SingleReader = false
+        });
+        ResolvedSupHotels = Channel.CreateBounded<OtaRoomInfoCompletionWorkItem>(CreateOptions(ClampPipelineQueueCapacity(options.EanHotelQueueCapacity)));
+        EanHotels = Channel.CreateBounded<OtaRoomInfoCompletionWorkItem>(CreateOptions(ClampPipelineQueueCapacity(options.EanHotelQueueCapacity)));
+        MergedEanHotels = Channel.CreateBounded<OtaRoomInfoCompletionWorkItem>(CreateOptions(ClampPipelineQueueCapacity(options.EanHotelQueueCapacity)));
+        HotelRoomData = Channel.CreateBounded<OtaRoomInfoCompletionWorkItem>(CreateOptions(ClampPipelineQueueCapacity(options.HotelRoomDataQueueCapacity)));
+        ParsedHotels = Channel.CreateBounded<OtaRoomInfoCompletionWorkItem>(CreateOptions(ClampPipelineQueueCapacity(options.ParsedHotelQueueCapacity)));
     }
 
     public Channel<string> HotelCodes { get; }
@@ -32,5 +38,10 @@ public sealed class OtaRoomInfoCompletionChannels
             SingleWriter = false,
             SingleReader = false
         };
+    }
+
+    private static int ClampPipelineQueueCapacity(int capacity)
+    {
+        return Math.Min(Math.Max(1, capacity), MaxPipelineQueueCapacity);
     }
 }

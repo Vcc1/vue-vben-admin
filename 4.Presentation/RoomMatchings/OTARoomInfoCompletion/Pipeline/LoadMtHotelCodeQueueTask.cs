@@ -32,10 +32,10 @@ public sealed class LoadMtHotelCodeQueueTask
                 .Where(x => !string.IsNullOrWhiteSpace(x.MTHotelCode))
                 .Select(x => x.MTHotelCode.Trim())
                 .Distinct()
-                //.Take(100) // 可以根据实际情况调整批量大小);
+                .OrderBy(x => x)
                 .ToListAsync(cancellationToken);
 
-            _logger.LogInformation("读取到待处理 MTHotelCode 数量: {Count}", hotelCodes.Count);
+            _logger.LogInformation("Loaded MTHotelCode count for processing: {Count}", hotelCodes.Count);
 
             foreach (var hotelCode in hotelCodes)
             {

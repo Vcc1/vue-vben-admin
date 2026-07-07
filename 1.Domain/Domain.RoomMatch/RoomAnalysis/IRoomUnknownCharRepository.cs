@@ -5,5 +5,9 @@ namespace RoomMatch.Core.RoomAnalysis
         void Report(System.Text.Rune rune);
 
         void Report(char ch);
+
+        int GetLocalSeenCount();
+
+        int GetDbCacheCount();
     }
 }

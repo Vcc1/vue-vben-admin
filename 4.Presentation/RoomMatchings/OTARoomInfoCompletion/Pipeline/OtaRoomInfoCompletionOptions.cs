@@ -7,14 +7,14 @@ public class OtaRoomInfoCompletionOptions
     [Range(1, 10000)]
     public int HotelCodeQueueCapacity { get; set; } = 10_000;
 
-    [Range(1, 10000)]
-    public int EanHotelQueueCapacity { get; set; } = 5_000;
+    [Range(1, 50)]
+    public int EanHotelQueueCapacity { get; set; } = 50;
 
-    [Range(1, 10000)]
-    public int HotelRoomDataQueueCapacity { get; set; } = 5_000;
+    [Range(1, 50)]
+    public int HotelRoomDataQueueCapacity { get; set; } = 50;
 
-    [Range(1, 10000)]
-    public int ParsedHotelQueueCapacity { get; set; } = 5_000;
+    [Range(1, 50)]
+    public int ParsedHotelQueueCapacity { get; set; } = 50;
 
     [Range(1, 100)]
     public int EanBatchSize { get; set; } = 100;

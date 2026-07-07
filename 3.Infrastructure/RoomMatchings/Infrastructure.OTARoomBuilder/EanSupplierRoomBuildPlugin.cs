@@ -74,6 +74,13 @@ public sealed class EanSupplierRoomBuildPlugin : BaseSupplierRoomBuildPlugin<Ful
         var maxAdt = room.MaxOccupancy ?? 0;
         if (maxAdt <= 0)
         {
+            _logger.LogWarning(
+                "Supplier static data max occupancy missing. SupId={SupId}, SupplierRoomId={SupplierRoomId}, MTHotelCode={MTHotelCode}, SHotelCode={SHotelCode}, SRoomCode={SRoomCode}",
+                SupId,
+                context.SupplierRoom.Id,
+                context.MTHotelCode,
+                context.SHotelCode,
+                context.SRoomCode);
             return SupplierRoomEnrichmentResult.NotSupported;
         }
 
