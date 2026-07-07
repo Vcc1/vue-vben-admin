@@ -57,7 +57,13 @@ public sealed partial class OTARoomBuilderWorker
                     lastDaysOffset,
                     currentOptions.OutputMode,
                     cancellationToken);
-                await _hotelBuildChannel.Writer.WriteAsync(HotelBuildQueueItem.ForBatch(batchContext), cancellationToken);
+
+                foreach (var hotel in batchContext.Hotels)
+                {
+                    await _hotelBuildChannel.Writer.WriteAsync(
+                        HotelBuildQueueItem.ForHotel(hotel, batchContext.OutputMode),
+                        cancellationToken);
+                }
             }
 
             var completion = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);

@@ -6,6 +6,12 @@ public sealed class OTARoomBuilderOptions
 {
     public int TaskChunkSize { get; set; } = 50;
 
+    [Range(1, 100)]
+    public int HotelBuildQueueCapacity { get; set; } = 100;
+
+    [Range(1, 100)]
+    public int RoomCreateQueueCapacity { get; set; } = 100;
+
     public int LastDaysOffset { get; set; } = -32;
 
     public string? FullSyncCron { get; set; }

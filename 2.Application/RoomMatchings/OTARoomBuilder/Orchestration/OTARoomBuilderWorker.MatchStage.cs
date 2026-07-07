@@ -20,7 +20,7 @@ public sealed partial class OTARoomBuilderWorker
     {
         try
         {
-            if (item.BatchContext is null)
+            if (item.Hotel is null)
             {
                 if (item.Completion is not null)
                 {
@@ -32,14 +32,11 @@ public sealed partial class OTARoomBuilderWorker
             using var scope = _scopeFactory.CreateScope();
             var processor = scope.ServiceProvider.GetRequiredService<OTARoomBuilderProcessor>();
 
-            foreach (var hotel in item.BatchContext.Hotels)
-            {
-                cancellationToken.ThrowIfCancellationRequested();
-                var createdRooms = await processor.BuildOtaRoomsForHotelAsync(hotel, cancellationToken);
-                await _roomCreateChannel.Writer.WriteAsync(
-                    RoomCreateQueueItem.ForBatch(createdRooms, item.BatchContext.OutputMode),
-                    cancellationToken);
-            }
+            cancellationToken.ThrowIfCancellationRequested();
+            var createdRooms = await processor.BuildOtaRoomsForHotelAsync(item.Hotel, cancellationToken);
+            await _roomCreateChannel.Writer.WriteAsync(
+                RoomCreateQueueItem.ForHotel(createdRooms, item.OutputMode ?? string.Empty),
+                cancellationToken);
         }
         catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
         {

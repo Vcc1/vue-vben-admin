@@ -13,21 +13,9 @@ public sealed partial class OTARoomBuilderWorker : BackgroundService
     readonly IOptionsMonitor<OTARoomBuilderOptions> _options;
     readonly OTARoomBuilderMetrics _metrics;
     readonly ILogger<OTARoomBuilderWorker> _logger;
-    readonly Channel<OTARoomBuildJob> _jobChannel = Channel.CreateUnbounded<OTARoomBuildJob>(new UnboundedChannelOptions
-    {
-        SingleReader = true,
-        SingleWriter = false
-    });
-    readonly Channel<HotelBuildQueueItem> _hotelBuildChannel = Channel.CreateUnbounded<HotelBuildQueueItem>(new UnboundedChannelOptions
-    {
-        SingleReader = true,
-        SingleWriter = false
-    });
-    readonly Channel<RoomCreateQueueItem> _roomCreateChannel = Channel.CreateUnbounded<RoomCreateQueueItem>(new UnboundedChannelOptions
-    {
-        SingleReader = true,
-        SingleWriter = false
-    });
+    readonly Channel<OTARoomBuildJob> _jobChannel;
+    readonly Channel<HotelBuildQueueItem> _hotelBuildChannel;
+    readonly Channel<RoomCreateQueueItem> _roomCreateChannel;
 
     public OTARoomBuilderWorker(
         IServiceScopeFactory scopeFactory,
@@ -39,6 +27,13 @@ public sealed partial class OTARoomBuilderWorker : BackgroundService
         _options = options;
         _metrics = metrics;
         _logger = logger;
+        _jobChannel = Channel.CreateUnbounded<OTARoomBuildJob>(new UnboundedChannelOptions
+        {
+            SingleReader = true,
+            SingleWriter = false
+        });
+        _hotelBuildChannel = Channel.CreateBounded<HotelBuildQueueItem>(CreateBoundedOptions(ClampQueueCapacity(options.CurrentValue.HotelBuildQueueCapacity)));
+        _roomCreateChannel = Channel.CreateBounded<RoomCreateQueueItem>(CreateBoundedOptions(ClampQueueCapacity(options.CurrentValue.RoomCreateQueueCapacity)));
     }
 
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
@@ -76,19 +71,34 @@ public sealed partial class OTARoomBuilderWorker : BackgroundService
         Incremental = 2
     }
 
-    sealed record HotelBuildQueueItem(HotelBuildBatchContext? BatchContext, TaskCompletionSource? Completion)
+    sealed record HotelBuildQueueItem(HotelRoomBuildContext? Hotel, string? OutputMode, TaskCompletionSource? Completion)
     {
-        public static HotelBuildQueueItem ForBatch(HotelBuildBatchContext batchContext) => new(batchContext, null);
+        public static HotelBuildQueueItem ForHotel(HotelRoomBuildContext hotel, string outputMode) => new(hotel, outputMode, null);
 
-        public static HotelBuildQueueItem ForCompletion(TaskCompletionSource completion) => new(null, completion);
+        public static HotelBuildQueueItem ForCompletion(TaskCompletionSource completion) => new(null, null, completion);
     }
 
     sealed record RoomCreateQueueItem(List<Infrastructure.Sql.RoomMapping.Entitys.OTARoomInfoPre>? Rooms, string? OutputMode, TaskCompletionSource? Completion)
     {
-        public static RoomCreateQueueItem ForBatch(List<Infrastructure.Sql.RoomMapping.Entitys.OTARoomInfoPre> rooms, string outputMode)
+        public static RoomCreateQueueItem ForHotel(List<Infrastructure.Sql.RoomMapping.Entitys.OTARoomInfoPre> rooms, string outputMode)
             => new(rooms, outputMode, null);
 
         public static RoomCreateQueueItem ForCompletion(TaskCompletionSource completion)
             => new(null, null, completion);
+    }
+
+    static BoundedChannelOptions CreateBoundedOptions(int capacity)
+    {
+        return new BoundedChannelOptions(capacity)
+        {
+            SingleReader = true,
+            SingleWriter = false,
+            FullMode = BoundedChannelFullMode.Wait
+        };
+    }
+
+    static int ClampQueueCapacity(int capacity)
+    {
+        return Math.Clamp(capacity, 1, 100);
     }
 }
