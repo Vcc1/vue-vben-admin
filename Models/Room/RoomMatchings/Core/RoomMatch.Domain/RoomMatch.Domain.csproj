@@ -1,0 +1,22 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    
+    
+    <RootNamespace>RoomMatch.Domain</RootNamespace><AssemblyName>RoomMatch.Domain</AssemblyName><TargetFramework>net10.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="NReco.Text.AhoCorasickDoubleArrayTrie" Version="1.1.1" />
+    <PackageReference Include="ToolGood.Words" Version="3.1.0.2" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\..\..\Base\Shared\OTA.Domain\OTA.Domain.csproj" />
+    <ProjectReference Include="..\..\..\..\..\BaseFrameworks\VBaseFramework.Core\VBaseFramework.Core.csproj" />
+  </ItemGroup>
+
+</Project>

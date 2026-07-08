@@ -12,7 +12,7 @@
   </ItemGroup>
 
   <ItemGroup>
-    <ProjectReference Include="..\..\Models\RoomMatchings\OTARoomBuilder\OTARoomBuilder.App\OTARoomBuilder.App.csproj" />
+    <ProjectReference Include="..\..\Models\Room\RoomMatchings\OTARoomBuilder\OTARoomBuilder.App\OTARoomBuilder.App.csproj" />
   </ItemGroup>
 
 </Project>

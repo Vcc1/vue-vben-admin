@@ -1,0 +1,55 @@
+<Project Sdk="Microsoft.NET.Sdk;Microsoft.NET.Sdk.Publish">
+
+  <PropertyGroup>
+    
+    
+    <RootNamespace>QueryPriceSupRoomBuilderToRedis.Cli</RootNamespace><AssemblyName>QueryPriceSupRoomBuilderToRedis.Cli</AssemblyName><OutputType>Exe</OutputType>
+    <TargetFramework>net10.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <DockerDefaultTargetOS>Linux</DockerDefaultTargetOS>
+    <DockerfileContext>..\..\..\..\..\MengtuV</DockerfileContext>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <Content Include="Configs\nlog.config">
+      <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+      <ExcludeFromSingleFile>true</ExcludeFromSingleFile>
+      <CopyToPublishDirectory>Always</CopyToPublishDirectory>
+    </Content>
+    <Content Include="wwwroot\**\*">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+      <ExcludeFromSingleFile>true</ExcludeFromSingleFile>
+      <CopyToPublishDirectory>PreserveNewest</CopyToPublishDirectory>
+    </Content>
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="VBase.AppMetrics" Version="1.0.8" />
+    <PackageReference Include="Microsoft.VisualStudio.Azure.Containers.Tools.Targets" Version="1.21.0" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\..\..\..\BaseFrameworks\VBaseFramework.Core\VBaseFramework.Core.csproj" />
+    <ProjectReference Include="..\..\..\..\..\BaseFrameworks\VBaseFramework.ServiceDefaults\VBaseFramework.ServiceDefaults.csproj" />
+    <ProjectReference Include="..\QueryPriceSupRoomBuilder.App\QueryPriceSupRoomBuilder.App.csproj" />
+    <ProjectReference Include="..\..\..\RoomMatchings\Core\RoomMatch.Core.App\RoomMatch.Core.App.csproj" />
+    <ProjectReference Include="..\QueryPriceSupRoomBuilder.Infra\QueryPriceSupRoomBuilder.Infra.csproj" />
+    <ProjectReference Include="..\..\..\..\..\Providers\Infrastructure.HTTP.QueryPrice\Infrastructure.HTTP.QueryPrice.csproj" />
+    <ProjectReference Include="..\..\..\..\..\Providers\Infrastructure.Redis.TriggerQueue\Infrastructure.Redis.TriggerQueue.csproj" />
+    <ProjectReference Include="..\..\..\..\..\Providers\Infrastructure.Redis.SupRoomInfo.DirectPriceDiscovery\Infrastructure.Redis.SupRoomInfo.DirectPriceDiscovery.csproj" />
+    <ProjectReference Include="..\..\..\..\..\Providers\Infrastructure.Sql.RoomMapping\Infrastructure.Sql.RoomMapping.csproj" />
+    <ProjectReference Include="..\..\..\RoomMatchings\Core\RoomMatch.Infra\RoomMatch.Infra.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Reference Include="MengTu.Connectmate.Client">
+      <HintPath>..\..\..\..\..\999.DLL\Connectmate\net10.0\MengTu.Connectmate.Client.dll</HintPath>
+    </Reference>
+    <Reference Include="VBaseFramework.ApiSecurity.ClientSdk">
+      <HintPath>..\..\..\..\..\999.DLL\Connectmate\net10.0\VBaseFramework.ApiSecurity.ClientSdk.dll</HintPath>
+      <Private>true</Private>
+    </Reference>
+  </ItemGroup>
+
+</Project>

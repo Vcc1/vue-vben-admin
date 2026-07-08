@@ -1,13 +1,13 @@
-# Çë²Î??https://aka.ms/customizecontainer ÒÔÁË½âÈçºÎ×Ô¶¨Òåµ÷ÊÔÈİÆ÷£¬ÒÔ??Visual Studio ÈçºÎÊ¹ÓÃ??Dockerfile Éú³ÉÓ³ÏñÒÔ¸ü¿ìµØ½øĞĞµ÷ÊÔ??
+# ï¿½ï¿½ï¿½??https://aka.ms/customizecontainer ï¿½ï¿½ï¿½Ë½ï¿½ï¿½ï¿½ï¿½ï¿½Ô¶ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½??Visual Studio ï¿½ï¿½ï¿½Ê¹ï¿½ï¿½??Dockerfile ï¿½ï¿½ï¿½ï¿½Ó³ï¿½ï¿½ï¿½Ô¸ï¿½ï¿½ï¿½Ø½ï¿½ï¿½Ğµï¿½ï¿½ï¿½??
 
-# ´Ë½×¶ÎÓÃÓÚÔÚ¿ìËÙÄ£??Ä¬ÈÏÎªµ÷ÊÔÅä??ÏÂ´Ó VS ÔËĞĞ??
+# ï¿½Ë½×¶ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Ú¿ï¿½ï¿½ï¿½Ä£??Ä¬ï¿½ï¿½Îªï¿½ï¿½ï¿½ï¿½ï¿½ï¿½??ï¿½Â´ï¿½ VS ï¿½ï¿½ï¿½ï¿½??
 FROM mcr.microsoft.com/dotnet/aspnet:10.0 AS base
 USER $APP_UID
 WORKDIR /app
 EXPOSE 5126
 
 
-# ´Ë½×¶ÎÓÃÓÚÉú³É·şÎñÏî??
+# ï¿½Ë½×¶ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½É·ï¿½ï¿½ï¿½ï¿½ï¿½??
 FROM mcr.microsoft.com/dotnet/sdk:10.0 AS build
 ARG BUILD_CONFIGURATION=Release
 WORKDIR /src
@@ -15,7 +15,7 @@ COPY ["Models/Hotel/SupplierStaticData/SupplierStaticDataAppTester.Web/SupplierS
 COPY ["BaseFrameworks/VBaseFramework.Core/VBaseFramework.Core.csproj", "BaseFrameworks/VBaseFramework.Core/"]
 COPY ["BaseFrameworks/VBaseFramework.ServiceDefaults/VBaseFramework.ServiceDefaults.csproj", "BaseFrameworks/VBaseFramework.ServiceDefaults/"]
 COPY ["Models/Hotel/SupplierStaticData/SupplierStaticData.App/SupplierStaticData.App.csproj", "Models/Hotel/SupplierStaticData/SupplierStaticData.App/"]
-COPY ["Models/RoomMatchings/Core/RoomMatch.Domain/RoomMatch.Domain.csproj", "Models/RoomMatchings/Core/RoomMatch.Domain/"]
+COPY ["Models/Room/RoomMatchings/Core/RoomMatch.Domain/RoomMatch.Domain.csproj", "Models/Room/RoomMatchings/Core/RoomMatch.Domain/"]
 COPY ["Models/Base/Shared/OTA.Domain/OTA.Domain.csproj", "Models/Base/Shared/OTA.Domain/"]
 COPY ["Providers/Infrastructure.SupplierStaticData/Infrastructure.SupplierStaticData.csproj", "Providers/Infrastructure.SupplierStaticData/"]
 COPY ["Providers/Infrastructure.Sql.RoomMapping/Infrastructure.Sql.RoomMapping.csproj", "Providers/Infrastructure.Sql.RoomMapping/"]
@@ -29,12 +29,12 @@ COPY . .
 WORKDIR "/src/Models/Hotel/SupplierStaticData/SupplierStaticDataAppTester.Web"
 RUN dotnet build "./SupplierStaticDataAppTester.Web.csproj" -c $BUILD_CONFIGURATION -o /app/build
 
-# ´Ë½×¶ÎÓÃÓÚ·¢²¼Òª¸´ÖÆµ½×îÖÕ½×¶ÎµÄ·şÎñÏîÄ¿
+# ï¿½Ë½×¶ï¿½ï¿½ï¿½ï¿½Ú·ï¿½ï¿½ï¿½Òªï¿½ï¿½ï¿½Æµï¿½ï¿½ï¿½ï¿½Õ½×¶ÎµÄ·ï¿½ï¿½ï¿½ï¿½ï¿½Ä¿
 FROM build AS publish
 ARG BUILD_CONFIGURATION=Release
 RUN dotnet publish "./SupplierStaticDataAppTester.Web.csproj" -c $BUILD_CONFIGURATION -o /app/publish /p:UseAppHost=false
 
-# ´Ë½×¶ÎÔÚÉú²úÖĞÊ¹ÓÃ£¬»òÔÚ³£¹æÄ£Ê½ÏÂ´Ó VS ÔËĞĞÊ±Ê¹??ÔÚ²»Ê¹ÓÃµ÷ÊÔÅäÖÃÊ±ÎªÄ¬ÈÏ??
+# ï¿½Ë½×¶ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Ê¹ï¿½Ã£ï¿½ï¿½ï¿½ï¿½Ú³ï¿½ï¿½ï¿½Ä£Ê½ï¿½Â´ï¿½ VS ï¿½ï¿½ï¿½ï¿½Ê±Ê¹??ï¿½Ú²ï¿½Ê¹ï¿½Ãµï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Ê±ÎªÄ¬ï¿½ï¿½??
 FROM base AS final
 WORKDIR /app
 COPY --from=publish /app/publish .

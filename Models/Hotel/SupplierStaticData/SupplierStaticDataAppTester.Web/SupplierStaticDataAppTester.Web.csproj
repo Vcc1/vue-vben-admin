@@ -25,11 +25,11 @@
   </ItemGroup>
 
   <ItemGroup>
-    <ProjectReference Include="..\..\..\RoomMatchings\Core\RoomMatch.Domain\RoomMatch.Domain.csproj" />
+    <ProjectReference Include="..\..\..\Room\RoomMatchings\Core\RoomMatch.Infra\RoomMatch.Infra.csproj" />
     <ProjectReference Include="..\..\..\..\BaseFrameworks\VBaseFramework.Core\VBaseFramework.Core.csproj" />
     <ProjectReference Include="..\..\..\..\BaseFrameworks\VBaseFramework.ServiceDefaults\VBaseFramework.ServiceDefaults.csproj" />
     <ProjectReference Include="..\SupplierStaticData.App\SupplierStaticData.App.csproj" />
-    <ProjectReference Include="..\..\..\RoomMatchings\Core\RoomMatch.Infra\RoomMatch.Infra.csproj" />
+    <ProjectReference Include="..\..\..\Base\Shared\OTA.Domain\OTA.Domain.csproj" />
     <ProjectReference Include="..\..\..\..\Providers\Infrastructure.SupplierStaticData\Infrastructure.SupplierStaticData.csproj" />
     <ProjectReference Include="..\..\..\..\Providers\Infrastructure.Sql.RoomMapping\Infrastructure.Sql.RoomMapping.csproj" />
   </ItemGroup>

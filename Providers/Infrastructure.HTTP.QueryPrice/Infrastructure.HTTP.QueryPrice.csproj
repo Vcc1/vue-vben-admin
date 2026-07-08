@@ -13,7 +13,7 @@
   </ItemGroup>
 
   <ItemGroup>
-    <ProjectReference Include="..\..\Models\RoomDataProcessings\QueryPriceSupRoomBuilder\QueryPriceSupRoomBuilder.App\QueryPriceSupRoomBuilder.App.csproj" />
+    <ProjectReference Include="..\..\Models\Room\RoomDataProcessings\QueryPriceSupRoomBuilder\QueryPriceSupRoomBuilder.App\QueryPriceSupRoomBuilder.App.csproj" />
   </ItemGroup>
 
 </Project>

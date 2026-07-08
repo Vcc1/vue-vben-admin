@@ -21,31 +21,31 @@
     <Project Path="Models/MetricsAndAlerts/MetricsAndAlerts/MetricsAndAlerts.Infra/MetricsAndAlerts.Infra.csproj" />
     <Project Path="Models/MetricsAndAlerts/MetricsAndAlerts/TestMetrics.Cli/TestMetrics.Cli.csproj" Id="7130c2f8-f08f-4511-acc4-4f779430add9" />
   </Folder>
-  <Folder Name="/Models/RoomDataProcessings/QueryPriceSupRoomBuilder/">
-    <Project Path="Models/RoomDataProcessings/QueryPriceSupRoomBuilder/QueryPriceSupRoomBuilder.App/QueryPriceSupRoomBuilder.App.csproj" />
-    <Project Path="Models/RoomDataProcessings/QueryPriceSupRoomBuilder/QueryPriceSupRoomBuilder.Infra/QueryPriceSupRoomBuilder.Infra.csproj" />
-    <Project Path="Models/RoomDataProcessings/QueryPriceSupRoomBuilder/QueryPriceSupRoomBuilderToRedis.Cli/QueryPriceSupRoomBuilderToRedis.Cli.csproj" />
+  <Folder Name="/Models/Room/RoomDataProcessings/QueryPriceSupRoomBuilder/">
+    <Project Path="Models/Room/RoomDataProcessings/QueryPriceSupRoomBuilder/QueryPriceSupRoomBuilder.App/QueryPriceSupRoomBuilder.App.csproj" />
+    <Project Path="Models/Room/RoomDataProcessings/QueryPriceSupRoomBuilder/QueryPriceSupRoomBuilder.Infra/QueryPriceSupRoomBuilder.Infra.csproj" />
+    <Project Path="Models/Room/RoomDataProcessings/QueryPriceSupRoomBuilder/QueryPriceSupRoomBuilderToRedis.Cli/QueryPriceSupRoomBuilderToRedis.Cli.csproj" />
   </Folder>
-  <Folder Name="/Models/RoomMatchings/Core/">
-    <Project Path="Models/RoomMatchings/Core/OTARoomInfoCompletion.Cli/OTARoomInfoCompletion.Cli.csproj" />
-    <Project Path="Models/RoomMatchings/Core/RoomMatch.Core.App/RoomMatch.Core.App.csproj" />
-    <Project Path="Models/RoomMatchings/Core/RoomMatch.Domain/RoomMatch.Domain.csproj" />
-    <Project Path="Models/RoomMatchings/Core/RoomMatch.Infra/RoomMatch.Infra.csproj" />
-    <Project Path="Models/RoomMatchings/Core/RoomMatching.Cli/RoomMatching.Cli.csproj" Id="ab3a3ec8-11a5-4429-a37f-bbc4d7bb04bc" />
+  <Folder Name="/Models/Room/RoomMatchings/Core/">
+    <Project Path="Models/Room/RoomMatchings/Core/OTARoomInfoCompletion.Cli/OTARoomInfoCompletion.Cli.csproj" />
+    <Project Path="Models/Room/RoomMatchings/Core/RoomMatch.Core.App/RoomMatch.Core.App.csproj" />
+    <Project Path="Models/Room/RoomMatchings/Core/RoomMatch.Domain/RoomMatch.Domain.csproj" />
+    <Project Path="Models/Room/RoomMatchings/Core/RoomMatch.Infra/RoomMatch.Infra.csproj" />
+    <Project Path="Models/Room/RoomMatchings/Core/RoomMatching.Cli/RoomMatching.Cli.csproj" Id="ab3a3ec8-11a5-4429-a37f-bbc4d7bb04bc" />
   </Folder>
-  <Folder Name="/Models/RoomMatchings/OTARoomBuilder/">
-    <Project Path="Models/RoomMatchings/OTARoomBuilder/OTARoomBuilder.App/OTARoomBuilder.App.csproj" />
-    <Project Path="Models/RoomMatchings/OTARoomBuilder/OTARoomBuilder.Cli/OTARoomBuilder.Cli.csproj" />
-    <Project Path="Models/RoomMatchings/OTARoomBuilder/OTARoomBuilder.Infra/OTARoomBuilder.Infra.csproj" />
+  <Folder Name="/Models/Room/RoomMatchings/OTARoomBuilder/">
+    <Project Path="Models/Room/RoomMatchings/OTARoomBuilder/OTARoomBuilder.App/OTARoomBuilder.App.csproj" />
+    <Project Path="Models/Room/RoomMatchings/OTARoomBuilder/OTARoomBuilder.Cli/OTARoomBuilder.Cli.csproj" />
+    <Project Path="Models/Room/RoomMatchings/OTARoomBuilder/OTARoomBuilder.Infra/OTARoomBuilder.Infra.csproj" />
   </Folder>
-  <Folder Name="/Models/RoomMatchings/Statistics/">
-    <Project Path="Models/RoomMatchings/Statistics/RoomMappingSupStaticRoomInfoStatistics.Cli/RoomMappingSupStaticRoomInfoStatistics.Cli.csproj" />
-    <Project Path="Models/RoomMatchings/Statistics/RoomMatchingStatistics.Cli/RoomMatchingStatistics.Cli.csproj" />
+  <Folder Name="/Models/Room/RoomMatchings/Statistics/">
+    <Project Path="Models/Room/RoomMatchings/Statistics/RoomMappingSupStaticRoomInfoStatistics.Cli/RoomMappingSupStaticRoomInfoStatistics.Cli.csproj" />
+    <Project Path="Models/Room/RoomMatchings/Statistics/RoomMatchingStatistics.Cli/RoomMatchingStatistics.Cli.csproj" />
   </Folder>
-  <Folder Name="/Models/SupRoomInfo/Ingestion/">
-    <Project Path="Models/SupRoomInfo/Ingestion/SupRoomInfoIngestion.App/SupRoomInfoIngestion.App.csproj" />
-    <Project Path="Models/SupRoomInfo/Ingestion/SupRoomInfoIngestion.Infra/SupRoomInfoIngestion.Infra.csproj" />
-    <Project Path="Models/SupRoomInfo/Ingestion/SupRoomInfoRedisToSql.Cli/SupRoomInfoRedisToSql.Cli.csproj" Id="0b2d0dc9-abae-4b83-8ee2-e96c3adca58c" />
+  <Folder Name="/Models/Room/SupRoomInfo/Ingestion/">
+    <Project Path="Models/Room/SupRoomInfo/Ingestion/SupRoomInfoIngestion.App/SupRoomInfoIngestion.App.csproj" />
+    <Project Path="Models/Room/SupRoomInfo/Ingestion/SupRoomInfoIngestion.Infra/SupRoomInfoIngestion.Infra.csproj" />
+    <Project Path="Models/Room/SupRoomInfo/Ingestion/SupRoomInfoRedisToSql.Cli/SupRoomInfoRedisToSql.Cli.csproj" Id="0b2d0dc9-abae-4b83-8ee2-e96c3adca58c" />
   </Folder>
   <Folder Name="/Models/Taap/ExpediaChaseRoom/">
     <Project Path="Models/Taap/ExpediaChaseRoom/ExpediaChaseRoom.App/ExpediaChaseRoom.App.csproj" Id="4a958dbd-d2de-4482-9149-782b9e7c2bb8" />

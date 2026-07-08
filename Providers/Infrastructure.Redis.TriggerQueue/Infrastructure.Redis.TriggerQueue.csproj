@@ -15,7 +15,7 @@
 
   <ItemGroup>
     <ProjectReference Include="..\..\BaseFrameworks\VBaseFramework.Core\VBaseFramework.Core.csproj" />
-    <ProjectReference Include="..\..\Models\RoomDataProcessings\QueryPriceSupRoomBuilder\QueryPriceSupRoomBuilder.App\QueryPriceSupRoomBuilder.App.csproj" />
+    <ProjectReference Include="..\..\Models\Room\RoomDataProcessings\QueryPriceSupRoomBuilder\QueryPriceSupRoomBuilder.App\QueryPriceSupRoomBuilder.App.csproj" />
   </ItemGroup>
 
 </Project>

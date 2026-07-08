@@ -18,20 +18,20 @@
 ## 2. Quick Navigation
 
 - Program entries: `Models/**/*.Cli/Program.cs`, `Models/**/*.Web/Program.cs`, `Models/**/*.Api/Program.cs`
-- Core room matching logic: `Models/RoomMatchings/Core/RoomMatch.Core.App` and `Models/RoomMatchings/Core/RoomMatch.Domain`
+- Core room matching logic: `Models/Room/RoomMatchings/Core/RoomMatch.Core.App` and `Models/Room/RoomMatchings/Core/RoomMatch.Domain`
 - Shared OTA domain: `Models/Base/Shared/OTA.Domain`
 - Provider implementations: `Providers/Infrastructure.*`
 - TAAP/Expedia chain: `Models/Taap/ExpediaChaseRoom/**` plus `Providers/Infrastructure.Web.Taap`
 
 ## 3. Executable Services
 
-- `Models/RoomMatchings/Core/RoomMatching.Cli`
+- `Models/Room/RoomMatchings/Core/RoomMatching.Cli`
   ServiceName: `MT-RoomMatching`
 
-- `Models/RoomMatchings/Core/OTARoomInfoCompletion.Cli`
+- `Models/Room/RoomMatchings/Core/OTARoomInfoCompletion.Cli`
   ServiceName: `MT-OTARoomInfoCompletion`
 
-- `Models/SupRoomInfo/Ingestion/SupRoomInfoRedisToSql.Cli`
+- `Models/Room/SupRoomInfo/Ingestion/SupRoomInfoRedisToSql.Cli`
   ServiceName: `MT-SupRoomInfoRedisToSql`
 
 - `Models/Taap/ExpediaChaseRoom/ExpediaChaseRooms.Cli`
@@ -52,13 +52,13 @@
   `Models/Base/Shared`
 
 - Room matching:
-  `Models/RoomMatchings/Core`, `Models/RoomMatchings/OTARoomBuilder`, `Models/RoomMatchings/Statistics`
+  `Models/Room/RoomMatchings/Core`, `Models/Room/RoomMatchings/OTARoomBuilder`, `Models/Room/RoomMatchings/Statistics`
 
 - Supplier room info:
-  `Models/SupRoomInfo/Ingestion`
+  `Models/Room/SupRoomInfo/Ingestion`
 
 - Room data processing:
-  `Models/RoomDataProcessings/QueryPriceSupRoomBuilder`
+  `Models/Room/RoomDataProcessings/QueryPriceSupRoomBuilder`
 
 - Metrics and alerts:
   `Models/MetricsAndAlerts/GrafanaAlert`, `Models/MetricsAndAlerts/MetricsAndAlerts`
@@ -69,10 +69,10 @@
 ## 5. Reading Order
 
 - Room matching issue:
-  `Models/RoomMatchings/Core/RoomMatching.Cli`, then `Models/RoomMatchings/Core/RoomMatch.Core.App`, then `Providers/Infrastructure.Sql.RoomMapping`.
+  `Models/Room/RoomMatchings/Core/RoomMatching.Cli`, then `Models/Room/RoomMatchings/Core/RoomMatch.Core.App`, then `Providers/Infrastructure.Sql.RoomMapping`.
 
 - OTA room completion issue:
-  `Models/RoomMatchings/Core/OTARoomInfoCompletion.Cli`, then `Models/RoomMatchings/Core/RoomMatch.Core.App`, then supplier/static-data providers.
+  `Models/Room/RoomMatchings/Core/OTARoomInfoCompletion.Cli`, then `Models/Room/RoomMatchings/Core/RoomMatch.Core.App`, then supplier/static-data providers.
 
 - Expedia chase-room issue:
   `Models/Taap/ExpediaChaseRoom/ExpediaChaseRooms.Cli`, then `Models/Taap/ExpediaChaseRoom/ExpediaChaseRoom.App`, then `Providers/Infrastructure.Web.Taap` and `Providers/Infrastructure.Sql.SupCacheDB`.
