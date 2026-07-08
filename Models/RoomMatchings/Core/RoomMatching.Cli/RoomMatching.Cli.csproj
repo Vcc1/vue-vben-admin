@@ -17,8 +17,8 @@
   </ItemGroup>
 
   <ItemGroup>
-    <ProjectReference Include="..\..\..\Base\Shared\VBaseFramework.Core.Infra\VBaseFramework.Core.Infra.csproj" />
-    <ProjectReference Include="..\..\..\Base\Shared\VBaseFramework.ServiceDefaults.Infra\VBaseFramework.ServiceDefaults.Infra.csproj" />
+    <ProjectReference Include="..\..\..\..\BaseFrameworks\VBaseFramework.Core\VBaseFramework.Core.csproj" />
+    <ProjectReference Include="..\..\..\..\BaseFrameworks\VBaseFramework.ServiceDefaults\VBaseFramework.ServiceDefaults.csproj" />
     <ProjectReference Include="..\RoomMatch.Core.App\RoomMatch.Core.App.csproj" />
     <ProjectReference Include="..\..\..\..\Providers\Infrastructure.Sql.MengTuAPI\Infrastructure.Sql.MengTuAPI.csproj" />
     <ProjectReference Include="..\RoomMatch.Infra\RoomMatch.Infra.csproj" />

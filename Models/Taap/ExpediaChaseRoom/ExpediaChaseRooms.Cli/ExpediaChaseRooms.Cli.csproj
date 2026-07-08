@@ -16,7 +16,7 @@
   </ItemGroup>
 
   <ItemGroup>
-    <ProjectReference Include="..\..\..\Base\Shared\VBaseFramework.ServiceDefaults.Infra\VBaseFramework.ServiceDefaults.Infra.csproj" />
+    <ProjectReference Include="..\..\..\..\BaseFrameworks\VBaseFramework.ServiceDefaults\VBaseFramework.ServiceDefaults.csproj" />
     <ProjectReference Include="..\ExpediaChaseRoom.App\ExpediaChaseRoom.App.csproj" />
     <ProjectReference Include="..\ExpediaChaseRoom.Infra\ExpediaChaseRoom.Infra.csproj" />
   </ItemGroup>

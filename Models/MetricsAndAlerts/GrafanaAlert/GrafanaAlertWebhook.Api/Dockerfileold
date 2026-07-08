@@ -1,19 +1,19 @@
-ï»¿# è¯·å‚ï¿½?https://aka.ms/customizecontainer ä»¥äº†è§£å¦‚ä½•è‡ªå®šä¹‰è°ƒè¯•å®¹å™¨ï¼Œä»¥ï¿½?Visual Studio å¦‚ä½•ä½¿ç”¨ï¿½?Dockerfile ç”Ÿæˆæ˜ åƒä»¥æ›´å¿«åœ°è¿›è¡Œè°ƒè¯•ï¿½?
+# Çë²Î??https://aka.ms/customizecontainer ÒÔÁË½âÈçºÎ×Ô¶¨Òåµ÷ÊÔÈİÆ÷£¬ÒÔ??Visual Studio ÈçºÎÊ¹ÓÃ??Dockerfile Éú³ÉÓ³ÏñÒÔ¸ü¿ìµØ½øĞĞµ÷ÊÔ??
 
-# æ­¤é˜¶æ®µç”¨äºåœ¨å¿«é€Ÿæ¨¡ï¿½?é»˜è®¤ä¸ºè°ƒè¯•é…ï¿½?ä¸‹ä» VS è¿è¡Œï¿½?
+# ´Ë½×¶ÎÓÃÓÚÔÚ¿ìËÙÄ£??Ä¬ÈÏÎªµ÷ÊÔÅä??ÏÂ´Ó VS ÔËĞĞ??
 FROM mcr.microsoft.com/dotnet/aspnet:10.0 AS base
 USER $APP_UID
 WORKDIR /app
 EXPOSE 5000
 
 
-# æ­¤é˜¶æ®µç”¨äºç”ŸæˆæœåŠ¡é¡¹ï¿½?
+# ´Ë½×¶ÎÓÃÓÚÉú³É·şÎñÏî??
 FROM mcr.microsoft.com/dotnet/sdk:10.0 AS build
 ARG BUILD_CONFIGURATION=Release
 WORKDIR /src
 COPY ["Models/MetricsAndAlerts/GrafanaAlert/GrafanaAlertWebhook.Api/GrafanaAlertWebhook.Api.csproj", "Models/MetricsAndAlerts/GrafanaAlert/GrafanaAlertWebhook.Api/"]
-COPY ["Models/Base/Shared/VBaseFramework.ServiceDefaults.Infra/VBaseFramework.ServiceDefaults.Infra.csproj", "Models/Base/Shared/VBaseFramework.ServiceDefaults.Infra/"]
-COPY ["Models/Base/Shared/VBaseFramework.Core.Infra/VBaseFramework.Core.Infra.csproj", "Models/Base/Shared/VBaseFramework.Core.Infra/"]
+COPY ["BaseFrameworks/VBaseFramework.ServiceDefaults/VBaseFramework.ServiceDefaults.csproj", "BaseFrameworks/VBaseFramework.ServiceDefaults/"]
+COPY ["BaseFrameworks/VBaseFramework.Core/VBaseFramework.Core.csproj", "BaseFrameworks/VBaseFramework.Core/"]
 COPY ["Models/MetricsAndAlerts/GrafanaAlert/GrafanaAlert.App/GrafanaAlert.App.csproj", "Models/MetricsAndAlerts/GrafanaAlert/GrafanaAlert.App/"]
 COPY ["Models/MetricsAndAlerts/GrafanaAlert/GrafanaAlert.Infra/Infrastructure.GrafanaAlert.App.csproj", "Models/MetricsAndAlerts/GrafanaAlert/GrafanaAlert.Infra/"]
 COPY ["Providers/Infrastructure.HTTP.WorkWechatAlert/Infrastructure.HTTP.WorkWechatAlert.csproj", "Providers/Infrastructure.HTTP.WorkWechatAlert/"]
@@ -22,16 +22,16 @@ COPY . .
 WORKDIR "/src/Models/MetricsAndAlerts/GrafanaAlert/GrafanaAlertWebhook.Api"
 RUN dotnet build "./GrafanaAlertWebhook.Api.csproj" -c $BUILD_CONFIGURATION -o /app/build
 
-# æ­¤é˜¶æ®µç”¨äºå‘å¸ƒè¦å¤åˆ¶åˆ°æœ€ç»ˆé˜¶æ®µçš„æœåŠ¡é¡¹ç›®
+# ´Ë½×¶ÎÓÃÓÚ·¢²¼Òª¸´ÖÆµ½×îÖÕ½×¶ÎµÄ·şÎñÏîÄ¿
 FROM build AS publish
 ARG BUILD_CONFIGURATION=Release
 RUN dotnet publish "./GrafanaAlertWebhook.Api.csproj" -c $BUILD_CONFIGURATION -o /app/publish /p:UseAppHost=false
 
-# æ­¤é˜¶æ®µåœ¨ç”Ÿäº§ä¸­ä½¿ç”¨ï¼Œæˆ–åœ¨å¸¸è§„æ¨¡å¼ä¸‹ä» VS è¿è¡Œæ—¶ä½¿ï¿½?åœ¨ä¸ä½¿ç”¨è°ƒè¯•é…ç½®æ—¶ä¸ºé»˜è®¤ï¿½?
+# ´Ë½×¶ÎÔÚÉú²úÖĞÊ¹ÓÃ£¬»òÔÚ³£¹æÄ£Ê½ÏÂ´Ó VS ÔËĞĞÊ±Ê¹??ÔÚ²»Ê¹ÓÃµ÷ÊÔÅäÖÃÊ±ÎªÄ¬ÈÏ??
 FROM base AS final
 WORKDIR /app
 USER root
-# è®¾ç½®æ—¶åŒºä¸ºä¸œå…«åŒºï¼ˆAsia/Shanghaiï¼‰ï¼Œå¹¶æ¸…ï¿½?apt ç¼“å­˜
+# ÉèÖÃÊ±ÇøÎª¶«°ËÇø£¨Asia/Shanghai£©£¬²¢Çå??apt »º´æ
 ENV TZ=Asia/Shanghai DEBIAN_FRONTEND=noninteractive
 ENV ASPNETCORE_URLS=http://0.0.0.0:5000
 RUN apt-get update \

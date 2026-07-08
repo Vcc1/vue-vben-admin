@@ -1,4 +1,4 @@
-﻿# See https://aka.ms/customizecontainer for Visual Studio container customization.
+# See https://aka.ms/customizecontainer for Visual Studio container customization.
 FROM mcr.microsoft.com/dotnet/aspnet:10.0 AS base
 USER $APP_UID
 WORKDIR /app
@@ -8,8 +8,8 @@ FROM mcr.microsoft.com/dotnet/sdk:10.0 AS build
 ARG BUILD_CONFIGURATION=Release
 WORKDIR /src
 COPY ["Models/MetricsAndAlerts/MetricsAndAlerts/MetricsAndAlerts.Api/MetricsAndAlerts.Api.csproj", "Models/MetricsAndAlerts/MetricsAndAlerts/MetricsAndAlerts.Api/"]
-COPY ["Models/Base/Shared/VBaseFramework.ServiceDefaults.Infra/VBaseFramework.ServiceDefaults.Infra.csproj", "Models/Base/Shared/VBaseFramework.ServiceDefaults.Infra/"]
-COPY ["Models/Base/Shared/VBaseFramework.Core.Infra/VBaseFramework.Core.Infra.csproj", "Models/Base/Shared/VBaseFramework.Core.Infra/"]
+COPY ["BaseFrameworks/VBaseFramework.ServiceDefaults/VBaseFramework.ServiceDefaults.csproj", "BaseFrameworks/VBaseFramework.ServiceDefaults/"]
+COPY ["BaseFrameworks/VBaseFramework.Core/VBaseFramework.Core.csproj", "BaseFrameworks/VBaseFramework.Core/"]
 COPY ["Models/MetricsAndAlerts/MetricsAndAlerts/MetricsAndAlerts.App/MetricsAndAlerts.App.csproj", "Models/MetricsAndAlerts/MetricsAndAlerts/MetricsAndAlerts.App/"]
 COPY ["Models/MetricsAndAlerts/MetricsAndAlerts/MetricsAndAlerts.Infra/Infrastructure.MetricsAndAlerts.App.csproj", "Models/MetricsAndAlerts/MetricsAndAlerts/MetricsAndAlerts.Infra/"]
 COPY ["Providers/Infrastructure.HTTP.Prometheus/Infrastructure.HTTP.Prometheus.csproj", "Providers/Infrastructure.HTTP.Prometheus/"]

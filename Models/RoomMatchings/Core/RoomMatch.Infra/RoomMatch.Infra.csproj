@@ -9,7 +9,7 @@
   </PropertyGroup>
 
   <ItemGroup>
-    <ProjectReference Include="..\..\..\Base\Shared\VBaseFramework.Core.Infra\VBaseFramework.Core.Infra.csproj" />
+    <ProjectReference Include="..\..\..\..\BaseFrameworks\VBaseFramework.Core\VBaseFramework.Core.csproj" />
     <ProjectReference Include="..\RoomMatch.Domain\RoomMatch.Domain.csproj" />
     <ProjectReference Include="..\..\..\Base\Shared\OTA.Domain\OTA.Domain.csproj" />
     <ProjectReference Include="..\RoomMatch.Core.App\RoomMatch.Core.App.csproj" />

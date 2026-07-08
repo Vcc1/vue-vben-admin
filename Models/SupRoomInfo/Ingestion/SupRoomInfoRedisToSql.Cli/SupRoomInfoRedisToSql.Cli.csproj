@@ -33,8 +33,8 @@
     </ItemGroup>
 
     <ItemGroup>
-        <ProjectReference Include="..\..\..\Base\Shared\VBaseFramework.Core.Infra\VBaseFramework.Core.Infra.csproj" />
-        <ProjectReference Include="..\..\..\Base\Shared\VBaseFramework.ServiceDefaults.Infra\VBaseFramework.ServiceDefaults.Infra.csproj" />
+        <ProjectReference Include="..\..\..\..\BaseFrameworks\VBaseFramework.Core\VBaseFramework.Core.csproj" />
+        <ProjectReference Include="..\..\..\..\BaseFrameworks\VBaseFramework.ServiceDefaults\VBaseFramework.ServiceDefaults.csproj" />
         <ProjectReference Include="..\SupRoomInfoIngestion.App\SupRoomInfoIngestion.App.csproj" />
         <ProjectReference Include="..\..\..\RoomMatchings\Core\RoomMatch.Core.App\RoomMatch.Core.App.csproj" />
         <ProjectReference Include="..\SupRoomInfoIngestion.Infra\SupRoomInfoIngestion.Infra.csproj" />

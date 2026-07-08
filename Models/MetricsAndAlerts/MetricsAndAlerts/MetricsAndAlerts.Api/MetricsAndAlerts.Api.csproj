@@ -36,8 +36,8 @@
   </ItemGroup>
 
   <ItemGroup>
-    <ProjectReference Include="..\..\..\Base\Shared\VBaseFramework.Core.Infra\VBaseFramework.Core.Infra.csproj" />
-    <ProjectReference Include="..\..\..\Base\Shared\VBaseFramework.ServiceDefaults.Infra\VBaseFramework.ServiceDefaults.Infra.csproj" />
+    <ProjectReference Include="..\..\..\..\BaseFrameworks\VBaseFramework.Core\VBaseFramework.Core.csproj" />
+    <ProjectReference Include="..\..\..\..\BaseFrameworks\VBaseFramework.ServiceDefaults\VBaseFramework.ServiceDefaults.csproj" />
     <ProjectReference Include="..\MetricsAndAlerts.App\MetricsAndAlerts.App.csproj" />
     <ProjectReference Include="..\MetricsAndAlerts.Infra\MetricsAndAlerts.Infra.csproj" />
     <ProjectReference Include="..\..\..\..\Providers\Infrastructure.Sql.MetricsAndAlerts\Infrastructure.Sql.MetricsAndAlerts.csproj" />

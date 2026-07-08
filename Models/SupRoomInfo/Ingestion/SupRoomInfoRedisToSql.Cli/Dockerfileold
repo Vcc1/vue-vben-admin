@@ -1,18 +1,18 @@
-ï»¿# è¯·å‚ï¿½?https://aka.ms/customizecontainer ä»¥äº†è§£å¦‚ä½•è‡ªå®šä¹‰è°ƒè¯•å®¹å™¨ï¼Œä»¥ï¿½?Visual Studio å¦‚ä½•ä½¿ç”¨ï¿½?Dockerfile ç”Ÿæˆæ˜ åƒä»¥æ›´å¿«åœ°è¿›è¡Œè°ƒè¯•ï¿½?
+# Çë²Î??https://aka.ms/customizecontainer ÒÔÁË½âÈçºÎ×Ô¶¨Òåµ÷ÊÔÈİÆ÷£¬ÒÔ??Visual Studio ÈçºÎÊ¹ÓÃ??Dockerfile Éú³ÉÓ³ÏñÒÔ¸ü¿ìµØ½øĞĞµ÷ÊÔ??
 
-# æ­¤é˜¶æ®µç”¨äºåœ¨å¿«é€Ÿæ¨¡ï¿½?é»˜è®¤ä¸ºè°ƒè¯•é…ï¿½?ä¸‹ä» VS è¿è¡Œï¿½?
+# ´Ë½×¶ÎÓÃÓÚÔÚ¿ìËÙÄ£??Ä¬ÈÏÎªµ÷ÊÔÅä??ÏÂ´Ó VS ÔËĞĞ??
 FROM mcr.microsoft.com/dotnet/aspnet:10.0 AS base
 USER $APP_UID
 WORKDIR /app
 
 
-# æ­¤é˜¶æ®µç”¨äºç”ŸæˆæœåŠ¡é¡¹ï¿½?
+# ´Ë½×¶ÎÓÃÓÚÉú³É·şÎñÏî??
 FROM mcr.microsoft.com/dotnet/sdk:10.0 AS build
 ARG BUILD_CONFIGURATION=Release
 WORKDIR /src
 COPY ["Models/SupRoomInfo/Ingestion/SupRoomInfoRedisToSql.Cli/SupRoomInfoRedisToSql.Cli.csproj", "Models/SupRoomInfo/Ingestion/SupRoomInfoRedisToSql.Cli/"]
-COPY ["Models/Base/Shared/VBaseFramework.Core.Infra/VBaseFramework.Core.Infra.csproj", "Models/Base/Shared/VBaseFramework.Core.Infra/"]
-COPY ["Models/Base/Shared/VBaseFramework.ServiceDefaults.Infra/VBaseFramework.ServiceDefaults.Infra.csproj", "Models/Base/Shared/VBaseFramework.ServiceDefaults.Infra/"]
+COPY ["BaseFrameworks/VBaseFramework.Core/VBaseFramework.Core.csproj", "BaseFrameworks/VBaseFramework.Core/"]
+COPY ["BaseFrameworks/VBaseFramework.ServiceDefaults/VBaseFramework.ServiceDefaults.csproj", "BaseFrameworks/VBaseFramework.ServiceDefaults/"]
 COPY ["Models/SupRoomInfo/Ingestion/SupRoomInfoIngestion.App/SupRoomInfoIngestion.App.csproj", "Models/SupRoomInfo/Ingestion/SupRoomInfoIngestion.App/"]
 COPY ["Providers/Infrastructure.Sql.RoomMapping/Infrastructure.Sql.RoomMapping.csproj", "Providers/Infrastructure.Sql.RoomMapping/"]
 COPY ["Models/RoomMatchings/Core/RoomMatch.Domain/RoomMatch.Domain.csproj", "Models/RoomMatchings/Core/RoomMatch.Domain/"]
@@ -32,12 +32,12 @@ COPY . .
 WORKDIR "/src/Models/SupRoomInfo/Ingestion/SupRoomInfoRedisToSql.Cli"
 RUN dotnet build "./SupRoomInfoRedisToSql.Cli.csproj" -c $BUILD_CONFIGURATION -o /app/build
 
-# æ­¤é˜¶æ®µç”¨äºå‘å¸ƒè¦å¤åˆ¶åˆ°æœ€ç»ˆé˜¶æ®µçš„æœåŠ¡é¡¹ç›®
+# ´Ë½×¶ÎÓÃÓÚ·¢²¼Òª¸´ÖÆµ½×îÖÕ½×¶ÎµÄ·şÎñÏîÄ¿
 FROM build AS publish
 ARG BUILD_CONFIGURATION=Release
 RUN dotnet publish "./SupRoomInfoRedisToSql.Cli.csproj" -c $BUILD_CONFIGURATION -o /app/publish /p:UseAppHost=false
 
-# æ­¤é˜¶æ®µåœ¨ç”Ÿäº§ä¸­ä½¿ç”¨ï¼Œæˆ–åœ¨å¸¸è§„æ¨¡å¼ä¸‹ä» VS è¿è¡Œæ—¶ä½¿ï¿½?åœ¨ä¸ä½¿ç”¨è°ƒè¯•é…ç½®æ—¶ä¸ºé»˜è®¤ï¿½?
+# ´Ë½×¶ÎÔÚÉú²úÖĞÊ¹ÓÃ£¬»òÔÚ³£¹æÄ£Ê½ÏÂ´Ó VS ÔËĞĞÊ±Ê¹??ÔÚ²»Ê¹ÓÃµ÷ÊÔÅäÖÃÊ±ÎªÄ¬ÈÏ??
 FROM base AS final
 WORKDIR /app
 COPY --from=publish /app/publish .

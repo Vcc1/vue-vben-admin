@@ -43,7 +43,7 @@
 - `Models/MetricsAndAlerts/MetricsAndAlerts/MetricsAndAlerts.Api`
   ServiceName: `MT-MetricsAndAlerts`
 
-- `Models/Base/Shared/SupplierStaticDataAppTester.Web`
+- `Models/Hotel/SupplierStaticData/SupplierStaticDataAppTester.Web`
   ServiceName: `MT-SupplierStaticDataAppTester`
 
 ## 4. Module Map

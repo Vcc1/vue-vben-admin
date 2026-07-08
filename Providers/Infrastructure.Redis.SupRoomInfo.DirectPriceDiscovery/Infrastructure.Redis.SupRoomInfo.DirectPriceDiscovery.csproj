@@ -10,7 +10,7 @@
   </ItemGroup>
 
   <ItemGroup>
-    <ProjectReference Include="..\..\Models\Base\Shared\VBaseFramework.Core.Infra\VBaseFramework.Core.Infra.csproj" />
+    <ProjectReference Include="..\..\BaseFrameworks\VBaseFramework.Core\VBaseFramework.Core.csproj" />
     <ProjectReference Include="..\Infrastructure.Sql.RoomMapping\Infrastructure.Sql.RoomMapping.csproj" />
   </ItemGroup>
 

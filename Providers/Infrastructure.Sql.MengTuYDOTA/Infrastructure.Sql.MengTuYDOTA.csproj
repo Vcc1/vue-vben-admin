@@ -7,7 +7,7 @@
   </PropertyGroup>
 
   <ItemGroup>
-    <ProjectReference Include="..\..\Models\Base\Shared\VBaseFramework.Core.Infra\VBaseFramework.Core.Infra.csproj" />
+    <ProjectReference Include="..\..\BaseFrameworks\VBaseFramework.Core\VBaseFramework.Core.csproj" />
     <ProjectReference Include="..\..\Models\Base\Shared\OTA.Domain\OTA.Domain.csproj" />
   </ItemGroup>
 

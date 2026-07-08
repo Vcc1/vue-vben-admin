@@ -26,8 +26,8 @@
 
   <ItemGroup>
     <ProjectReference Include="..\..\..\RoomMatchings\Core\RoomMatch.Domain\RoomMatch.Domain.csproj" />
-    <ProjectReference Include="..\VBaseFramework.Core.Infra\VBaseFramework.Core.Infra.csproj" />
-    <ProjectReference Include="..\VBaseFramework.ServiceDefaults.Infra\VBaseFramework.ServiceDefaults.Infra.csproj" />
+    <ProjectReference Include="..\..\..\..\BaseFrameworks\VBaseFramework.Core\VBaseFramework.Core.csproj" />
+    <ProjectReference Include="..\..\..\..\BaseFrameworks\VBaseFramework.ServiceDefaults\VBaseFramework.ServiceDefaults.csproj" />
     <ProjectReference Include="..\SupplierStaticData.App\SupplierStaticData.App.csproj" />
     <ProjectReference Include="..\..\..\RoomMatchings\Core\RoomMatch.Infra\RoomMatch.Infra.csproj" />
     <ProjectReference Include="..\..\..\..\Providers\Infrastructure.SupplierStaticData\Infrastructure.SupplierStaticData.csproj" />

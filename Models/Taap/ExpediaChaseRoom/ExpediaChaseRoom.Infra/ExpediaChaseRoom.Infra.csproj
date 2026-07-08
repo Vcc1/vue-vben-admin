@@ -9,7 +9,7 @@
   </PropertyGroup>
 
   <ItemGroup>
-    <ProjectReference Include="..\..\..\Base\Shared\VBaseFramework.Core.Infra\VBaseFramework.Core.Infra.csproj" />
+    <ProjectReference Include="..\..\..\..\BaseFrameworks\VBaseFramework.Core\VBaseFramework.Core.csproj" />
     <ProjectReference Include="..\ExpediaChaseRoom.App\ExpediaChaseRoom.App.csproj" />
     <ProjectReference Include="..\..\..\..\Providers\Infrastructure.Redis.SupPriceCahce\Infrastructure.Redis.SupPriceCahce.csproj" />
     <ProjectReference Include="..\..\..\..\Providers\Infrastructure.Sql.SupCacheDB\Infrastructure.Sql.SupCacheDB.csproj" />

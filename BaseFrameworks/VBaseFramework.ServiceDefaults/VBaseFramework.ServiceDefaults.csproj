@@ -3,7 +3,7 @@
     <PropertyGroup>
         
     
-    <RootNamespace>VBaseFramework.ServiceDefaults.Infra</RootNamespace><AssemblyName>VBaseFramework.ServiceDefaults.Infra</AssemblyName><TargetFramework>net10.0</TargetFramework>
+    <RootNamespace>VBaseFramework.ServiceDefaults</RootNamespace><AssemblyName>VBaseFramework.ServiceDefaults</AssemblyName><TargetFramework>net10.0</TargetFramework>
         <ImplicitUsings>enable</ImplicitUsings>
         <Nullable>enable</Nullable>
     </PropertyGroup>
@@ -20,7 +20,7 @@
     </ItemGroup>
 
     <ItemGroup>
-        <ProjectReference Include="..\VBaseFramework.Core.Infra\VBaseFramework.Core.Infra.csproj" />
+        <ProjectReference Include="..\VBaseFramework.Core\VBaseFramework.Core.csproj" />
     </ItemGroup>
 
 </Project>

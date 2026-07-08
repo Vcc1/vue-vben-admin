@@ -15,7 +15,7 @@
 
   <ItemGroup>
     <ProjectReference Include="..\OTARoomBuilder.App\OTARoomBuilder.App.csproj" />
-    <ProjectReference Include="..\..\..\Base\Shared\SupplierStaticData.App\SupplierStaticData.App.csproj" />
+    <ProjectReference Include="..\..\..\Hotel\SupplierStaticData\SupplierStaticData.App\SupplierStaticData.App.csproj" />
     <ProjectReference Include="..\..\..\..\Providers\Infrastructure.Sql.RoomMapping\Infrastructure.Sql.RoomMapping.csproj" />
   </ItemGroup>
 
