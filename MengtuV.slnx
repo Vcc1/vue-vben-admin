@@ -1,98 +1,108 @@
 <Solution>
-  <Folder Name="/0.0VBaseFrameworks/">
-    <Project Path="0.0VBaseFrameworks/VBaseFramework.Core/VBaseFramework.Core.csproj" />
-    <Project Path="0.0VBaseFrameworks/VBaseFramework.ServiceDefaults/VBaseFramework.ServiceDefaults.csproj" Id="4535a6ed-2396-4699-a879-75bad01832ea" />
+  <Folder Name="/Models/Base/Shared/Application/">
+    <Project Path="Models/Base/Shared/Application/SupplierStaticDataApp/SupplierStaticDataApp.csproj" />
   </Folder>
-  <Folder Name="/1.Domain/">
-    <Project Path="1.Domain/Domain.RoomMatch/Domain.RoomMatch.csproj" />
-    <Project Path="1.Domain/OTADomain/OTADomain.csproj" Id="6fee78ca-3838-4c9d-b2c0-e154a16ae5e5" />
+  <Folder Name="/Models/Base/Shared/Domain/">
+    <Project Path="Models/Base/Shared/Domain/OTADomain/OTADomain.csproj" Id="6fee78ca-3838-4c9d-b2c0-e154a16ae5e5" />
   </Folder>
-  <Folder Name="/2.Application/" />
-  <Folder Name="/2.Application/Shared/">
-    <Project Path="2.Application/Shared/SupplierStaticDataApp/SupplierStaticDataApp.csproj" />
+  <Folder Name="/Models/Base/Shared/Infrastructure/">
+    <Project Path="Models/Base/Shared/Infrastructure/VBaseFramework.Core/VBaseFramework.Core.csproj" />
+    <Project Path="Models/Base/Shared/Infrastructure/VBaseFramework.ServiceDefaults/VBaseFramework.ServiceDefaults.csproj" Id="4535a6ed-2396-4699-a879-75bad01832ea" />
   </Folder>
-  <Folder Name="/2.Application/MetricsAndAlerts/">
-    <Project Path="2.Application/MetricsAndAlerts/GrafanaAlertApp/GrafanaAlertApp.csproj" />
-    <Project Path="2.Application/MetricsAndAlerts/MetricsAndAlertsApp/MetricsAndAlertsApp.csproj" />
+  <Folder Name="/Models/Base/Shared/Presentation/">
+    <Project Path="Models/Base/Shared/Presentation/SupplierStaticDataAppTester/SupplierStaticDataAppTester.csproj" />
   </Folder>
-  <Folder Name="/2.Application/HotelInfo/" />
-  <Folder Name="/2.Application/RoomMatchings/">
-    <Project Path="2.Application/RoomMatchings/OTARoomBuilder/OTARoomBuilder.App.csproj" />
-    <Project Path="2.Application/RoomMatchings/RoomMatch.Core/RoomMatch.Core.csproj" />
+  <Folder Name="/Models/MetricsAndAlerts/GrafanaAlert/Application/">
+    <Project Path="Models/MetricsAndAlerts/GrafanaAlert/Application/GrafanaAlertApp/GrafanaAlertApp.csproj" />
   </Folder>
-  <Folder Name="/2.Application/RoomDataProcessings/">
-    <Project Path="2.Application/RoomDataProcessings/QueryPriceSupRoomBuilder/QueryPriceSupRoomBuilder.csproj" />
+  <Folder Name="/Models/MetricsAndAlerts/GrafanaAlert/Infrastructure/">
+    <Project Path="Models/MetricsAndAlerts/GrafanaAlert/Infrastructure/Infrastructure.GrafanaAlertApp/Infrastructure.GrafanaAlertApp.csproj" />
   </Folder>
-  <Folder Name="/2.Application/SupRoomInfo/">
-    <Project Path="2.Application/SupRoomInfo/SupRoomInfoIngestion/SupRoomInfoIngestion.csproj" />
+  <Folder Name="/Models/MetricsAndAlerts/GrafanaAlert/Presentation/">
+    <Project Path="Models/MetricsAndAlerts/GrafanaAlert/Presentation/GrafanaAlertWebhook/GrafanaAlertWebhook.csproj" />
   </Folder>
-  <Folder Name="/2.Application/Taap/">
-    <Project Path="2.Application/Taap/ExpediaChaseRoomApp/ExpediaChaseRoomApp.csproj" Id="4a958dbd-d2de-4482-9149-782b9e7c2bb8" />
+  <Folder Name="/Models/MetricsAndAlerts/MetricsAndAlerts/Application/">
+    <Project Path="Models/MetricsAndAlerts/MetricsAndAlerts/Application/MetricsAndAlertsApp/MetricsAndAlertsApp.csproj" />
   </Folder>
-  <Folder Name="/3.Infrastructure/" />
-  <Folder Name="/3.Infrastructure/Core/" />
-  <Folder Name="/3.Infrastructure/Core/MetricsAndAlerts/">
-    <Project Path="3.Infrastructure/Core/MetricsAndAlerts/Infrastructure.GrafanaAlertApp/Infrastructure.GrafanaAlertApp.csproj" />
-    <Project Path="3.Infrastructure/Core/MetricsAndAlerts/Infrastructure.MetricsAndAlertsApp/Infrastructure.MetricsAndAlertsApp.csproj" />
+  <Folder Name="/Models/MetricsAndAlerts/MetricsAndAlerts/Infrastructure/">
+    <Project Path="Models/MetricsAndAlerts/MetricsAndAlerts/Infrastructure/Infrastructure.MetricsAndAlertsApp/Infrastructure.MetricsAndAlertsApp.csproj" />
   </Folder>
-  <Folder Name="/3.Infrastructure/Core/HotelInfo/" />
-  <Folder Name="/3.Infrastructure/Core/RoomMatchings/">
-    <Project Path="3.Infrastructure/RoomMatchings/Infrastructure.OTARoomBuilder/Infrastructure.OTARoomBuilder.csproj" />
-    <Project Path="3.Infrastructure/RoomMatchings/Infrastructure.RoomMatchApp/Infrastructure.RoomMatchApp.csproj" />
+  <Folder Name="/Models/MetricsAndAlerts/MetricsAndAlerts/Presentation/">
+    <Project Path="Models/MetricsAndAlerts/MetricsAndAlerts/Presentation/MetricsAndAlerts/MetricsAndAlerts.csproj" />
+    <Project Path="Models/MetricsAndAlerts/MetricsAndAlerts/Presentation/TestMetrics/TestMetrics.csproj" Id="7130c2f8-f08f-4511-acc4-4f779430add9" />
   </Folder>
-  <Folder Name="/3.Infrastructure/Core/RoomDataProcessings/">
-    <Project Path="3.Infrastructure/RoomDataProcessings/Infrastructure.QueryPriceSupRoomBuilder/Infrastructure.QueryPriceSupRoomBuilder.csproj" />
+  <Folder Name="/Models/RoomDataProcessings/QueryPriceSupRoomBuilder/Application/">
+    <Project Path="Models/RoomDataProcessings/QueryPriceSupRoomBuilder/Application/QueryPriceSupRoomBuilder/QueryPriceSupRoomBuilder.csproj" />
   </Folder>
-  <Folder Name="/3.Infrastructure/Core/SupRoomInfo/">
-    <Project Path="3.Infrastructure/SupRoomInfo/Infrastructure.SupRoomInfoIngestion/Infrastructure.SupRoomInfoIngestion.csproj" />
+  <Folder Name="/Models/RoomDataProcessings/QueryPriceSupRoomBuilder/Infrastructure/">
+    <Project Path="Models/RoomDataProcessings/QueryPriceSupRoomBuilder/Infrastructure/Infrastructure.QueryPriceSupRoomBuilder/Infrastructure.QueryPriceSupRoomBuilder.csproj" />
   </Folder>
-  <Folder Name="/3.Infrastructure/Core/Taap/">
-    <Project Path="3.Infrastructure/Taap/Infrastructure.ExpediaChaseRoomApp/Infrastructure.ExpediaChaseRoomApp.csproj" />
+  <Folder Name="/Models/RoomDataProcessings/QueryPriceSupRoomBuilder/Presentation/">
+    <Project Path="Models/RoomDataProcessings/QueryPriceSupRoomBuilder/Presentation/QueryPriceSupRoomBuilderToRedis/QueryPriceSupRoomBuilderToRedis.csproj" />
   </Folder>
-  <Folder Name="/3.Infrastructure/Providers/">
-    <Project Path="3.Infrastructure/Providers/Infrastructure.HTTP.Prometheus/Infrastructure.HTTP.Prometheus.csproj" />
-    <Project Path="3.Infrastructure/Providers/Infrastructure.HTTP.OTARoomCreate/Infrastructure.HTTP.OTARoomCreate.csproj" />
-    <Project Path="3.Infrastructure/Providers/Infrastructure.HTTP.QueryPrice/Infrastructure.HTTP.QueryPrice.csproj" />
-    <Project Path="3.Infrastructure/Providers/Infrastructure.HTTP.SupStaticData/Infrastructure.HTTP.SupStaticData.csproj" Id="f8ad0402-711b-42ab-9c53-7b979733f0f2" />
-    <Project Path="3.Infrastructure/Providers/Infrastructure.SupplierStaticData/Infrastructure.SupplierStaticData.csproj" />
-    <Project Path="3.Infrastructure/Providers/Infrastructure.HTTP.WorkWechatAlert/Infrastructure.HTTP.WorkWechatAlert.csproj" />
-    <Project Path="3.Infrastructure/Providers/Infrastructure.Redis.RoomMatchingRedis/Infrastructure.Redis.RoomMatchingRedis.csproj" Id="c5478d2c-1836-4673-9d51-30de376f8c62" />
-    <Project Path="3.Infrastructure/Providers/Infrastructure.Redis.SupPriceCahce/Infrastructure.Redis.SupPriceCahce.csproj" />
-    <Project Path="3.Infrastructure/Providers/Infrastructure.Redis.SupRoomInfo.CachePriceDiscovery/Infrastructure.Redis.SupRoomInfo.CachePriceDiscovery.csproj" />
-    <Project Path="3.Infrastructure/Providers/Infrastructure.Redis.SupRoomInfo.DirectPriceDiscovery/Infrastructure.Redis.SupRoomInfo.DirectPriceDiscovery.csproj" />
-    <Project Path="3.Infrastructure/Providers/Infrastructure.Redis.TriggerQueue/Infrastructure.Redis.TriggerQueue.csproj" />
-    <Project Path="3.Infrastructure/Providers/Infrastructure.Sql.MengTuAPI/Infrastructure.Sql.MengTuAPI.csproj" Id="531bea02-a581-4c76-8a52-b2982c322da4" />
-    <Project Path="3.Infrastructure/Providers/Infrastructure.Sql.MengTuSup/Infrastructure.Sql.MengTuSup.csproj" />
-    <Project Path="3.Infrastructure/Providers/Infrastructure.Sql.MengTuYDOTA/Infrastructure.Sql.MengTuYDOTA.csproj" Id="f9a7706a-ccdd-4b71-8080-debf08e4b8b3" />
-    <Project Path="3.Infrastructure/Providers/Infrastructure.Sql.MetricsAndAlerts/Infrastructure.Sql.MetricsAndAlerts.csproj" />
-    <Project Path="3.Infrastructure/Providers/Infrastructure.Sql.MixedData/Infrastructure.Sql.MixedData.csproj" Id="220d98af-cc48-4711-863e-83f1330452a9" />
-    <Project Path="3.Infrastructure/Providers/Infrastructure.Sql.RoomMapping/Infrastructure.Sql.RoomMapping.csproj" Id="071b4704-9365-406a-9128-0eff436be5f5" />
-    <Project Path="3.Infrastructure/Providers/Infrastructure.Sql.SupCacheDB/Infrastructure.Sql.SupCacheDB.csproj" />
-    <Project Path="3.Infrastructure/Providers/Infrastructure.Web.Taap/Infrastructure.Web.Taap.csproj" Id="29b92600-4701-4d7c-9245-40e841b2dde9" />
+  <Folder Name="/Models/RoomMatchings/Core/Application/">
+    <Project Path="Models/RoomMatchings/Core/Application/RoomMatch.Core/RoomMatch.Core.csproj" />
   </Folder>
-  <Folder Name="/4.Presentation/" />
-  <Folder Name="/4.Presentation/Test/">
-    <Project Path="4.Presentation/Test/SupplierStaticDataAppTester/SupplierStaticDataAppTester.csproj" />
+  <Folder Name="/Models/RoomMatchings/Core/Domain/">
+    <Project Path="Models/RoomMatchings/Core/Domain/Domain.RoomMatch/Domain.RoomMatch.csproj" />
   </Folder>
-  <Folder Name="/4.Presentation/MetricsAndAlerts/">
-    <Project Path="4.Presentation/MetricsAndAlerts/GrafanaAlertWebhook/GrafanaAlertWebhook.csproj" />
-    <Project Path="4.Presentation/MetricsAndAlerts/MetricsAndAlerts/MetricsAndAlerts.csproj" />
-    <Project Path="4.Presentation/MetricsAndAlerts/TestMetrics/TestMetrics.csproj" Id="7130c2f8-f08f-4511-acc4-4f779430add9" />
+  <Folder Name="/Models/RoomMatchings/Core/Infrastructure/">
+    <Project Path="Models/RoomMatchings/Core/Infrastructure/Infrastructure.RoomMatchApp/Infrastructure.RoomMatchApp.csproj" />
   </Folder>
-  <Folder Name="/4.Presentation/DataStatistics/">
-    <Project Path="4.Presentation/DataStatistics/RoomMappingSupStaticRoomInfoStatistics/RoomMappingSupStaticRoomInfoStatistics.csproj" />
+  <Folder Name="/Models/RoomMatchings/Core/Presentation/">
+    <Project Path="Models/RoomMatchings/Core/Presentation/OTARoomInfoCompletion/OTARoomInfoCompletion.csproj" />
+    <Project Path="Models/RoomMatchings/Core/Presentation/RoomMatching/RoomMatching.csproj" Id="ab3a3ec8-11a5-4429-a37f-bbc4d7bb04bc" />
   </Folder>
-  <Folder Name="/4.Presentation/RoomDataProcessings/">
-    <Project Path="4.Presentation/RoomDataProcessings/QueryPriceSupRoomBuilderToRedis/QueryPriceSupRoomBuilderToRedis.csproj" />
-    <Project Path="4.Presentation/RoomDataProcessings/SupRoomInfoRedisToSql/SupRoomInfoRedisToSql.csproj" Id="0b2d0dc9-abae-4b83-8ee2-e96c3adca58c" />
+  <Folder Name="/Models/RoomMatchings/OTARoomBuilder/Application/">
+    <Project Path="Models/RoomMatchings/OTARoomBuilder/Application/OTARoomBuilder/OTARoomBuilder.App.csproj" />
   </Folder>
-  <Folder Name="/4.Presentation/RoomMatchings/">
-    <Project Path="4.Presentation/RoomMatchings/OTARoomBuilder/OTARoomBuilder.csproj" />
-    <Project Path="4.Presentation/RoomMatchings/OTARoomInfoCompletion/OTARoomInfoCompletion.csproj" />
-    <Project Path="4.Presentation/RoomMatchings/RoomMatching/RoomMatching.csproj" Id="ab3a3ec8-11a5-4429-a37f-bbc4d7bb04bc" />
-    <Project Path="4.Presentation/RoomMatchings/RoomMatchingStatistics/RoomMatchingStatistics.csproj" />
+  <Folder Name="/Models/RoomMatchings/OTARoomBuilder/Infrastructure/">
+    <Project Path="Models/RoomMatchings/OTARoomBuilder/Infrastructure/Infrastructure.OTARoomBuilder/Infrastructure.OTARoomBuilder.csproj" />
   </Folder>
-  <Folder Name="/4.Presentation/Taap/">
-    <Project Path="4.Presentation/Taap/ExpediaChaseRooms/ExpediaChaseRooms.csproj" />
+  <Folder Name="/Models/RoomMatchings/OTARoomBuilder/Presentation/">
+    <Project Path="Models/RoomMatchings/OTARoomBuilder/Presentation/OTARoomBuilder/OTARoomBuilder.csproj" />
+  </Folder>
+  <Folder Name="/Models/RoomMatchings/Statistics/Presentation/">
+    <Project Path="Models/RoomMatchings/Statistics/Presentation/RoomMappingSupStaticRoomInfoStatistics/RoomMappingSupStaticRoomInfoStatistics.csproj" />
+    <Project Path="Models/RoomMatchings/Statistics/Presentation/RoomMatchingStatistics/RoomMatchingStatistics.csproj" />
+  </Folder>
+  <Folder Name="/Models/SupRoomInfo/Ingestion/Application/">
+    <Project Path="Models/SupRoomInfo/Ingestion/Application/SupRoomInfoIngestion/SupRoomInfoIngestion.csproj" />
+  </Folder>
+  <Folder Name="/Models/SupRoomInfo/Ingestion/Infrastructure/">
+    <Project Path="Models/SupRoomInfo/Ingestion/Infrastructure/Infrastructure.SupRoomInfoIngestion/Infrastructure.SupRoomInfoIngestion.csproj" />
+  </Folder>
+  <Folder Name="/Models/SupRoomInfo/Ingestion/Presentation/">
+    <Project Path="Models/SupRoomInfo/Ingestion/Presentation/SupRoomInfoRedisToSql/SupRoomInfoRedisToSql.csproj" Id="0b2d0dc9-abae-4b83-8ee2-e96c3adca58c" />
+  </Folder>
+  <Folder Name="/Models/Taap/ExpediaChaseRoom/Application/">
+    <Project Path="Models/Taap/ExpediaChaseRoom/Application/ExpediaChaseRoomApp/ExpediaChaseRoomApp.csproj" Id="4a958dbd-d2de-4482-9149-782b9e7c2bb8" />
+  </Folder>
+  <Folder Name="/Models/Taap/ExpediaChaseRoom/Infrastructure/">
+    <Project Path="Models/Taap/ExpediaChaseRoom/Infrastructure/Infrastructure.ExpediaChaseRoomApp/Infrastructure.ExpediaChaseRoomApp.csproj" />
+  </Folder>
+  <Folder Name="/Models/Taap/ExpediaChaseRoom/Presentation/">
+    <Project Path="Models/Taap/ExpediaChaseRoom/Presentation/ExpediaChaseRooms/ExpediaChaseRooms.csproj" />
+  </Folder>
+  <Folder Name="/Providers/">
+    <Project Path="Providers/Infrastructure.HTTP.OTARoomCreate/Infrastructure.HTTP.OTARoomCreate.csproj" />
+    <Project Path="Providers/Infrastructure.HTTP.Prometheus/Infrastructure.HTTP.Prometheus.csproj" />
+    <Project Path="Providers/Infrastructure.HTTP.QueryPrice/Infrastructure.HTTP.QueryPrice.csproj" />
+    <Project Path="Providers/Infrastructure.HTTP.SupStaticData/Infrastructure.HTTP.SupStaticData.csproj" Id="f8ad0402-711b-42ab-9c53-7b979733f0f2" />
+    <Project Path="Providers/Infrastructure.HTTP.WorkWechatAlert/Infrastructure.HTTP.WorkWechatAlert.csproj" />
+    <Project Path="Providers/Infrastructure.Redis.RoomMatchingRedis/Infrastructure.Redis.RoomMatchingRedis.csproj" Id="c5478d2c-1836-4673-9d51-30de376f8c62" />
+    <Project Path="Providers/Infrastructure.Redis.SupPriceCahce/Infrastructure.Redis.SupPriceCahce.csproj" />
+    <Project Path="Providers/Infrastructure.Redis.SupRoomInfo.CachePriceDiscovery/Infrastructure.Redis.SupRoomInfo.CachePriceDiscovery.csproj" />
+    <Project Path="Providers/Infrastructure.Redis.SupRoomInfo.DirectPriceDiscovery/Infrastructure.Redis.SupRoomInfo.DirectPriceDiscovery.csproj" />
+    <Project Path="Providers/Infrastructure.Redis.TriggerQueue/Infrastructure.Redis.TriggerQueue.csproj" />
+    <Project Path="Providers/Infrastructure.Sql.MengTuAPI/Infrastructure.Sql.MengTuAPI.csproj" Id="531bea02-a581-4c76-8a52-b2982c322da4" />
+    <Project Path="Providers/Infrastructure.Sql.MengTuSup/Infrastructure.Sql.MengTuSup.csproj" />
+    <Project Path="Providers/Infrastructure.Sql.MengTuYDOTA/Infrastructure.Sql.MengTuYDOTA.csproj" Id="f9a7706a-ccdd-4b71-8080-debf08e4b8b3" />
+    <Project Path="Providers/Infrastructure.Sql.MetricsAndAlerts/Infrastructure.Sql.MetricsAndAlerts.csproj" />
+    <Project Path="Providers/Infrastructure.Sql.MixedData/Infrastructure.Sql.MixedData.csproj" Id="220d98af-cc48-4711-863e-83f1330452a9" />
+    <Project Path="Providers/Infrastructure.Sql.RoomMapping/Infrastructure.Sql.RoomMapping.csproj" Id="071b4704-9365-406a-9128-0eff436be5f5" />
+    <Project Path="Providers/Infrastructure.Sql.SupCacheDB/Infrastructure.Sql.SupCacheDB.csproj" />
+    <Project Path="Providers/Infrastructure.SupplierStaticData/Infrastructure.SupplierStaticData.csproj" />
+    <Project Path="Providers/Infrastructure.Web.Taap/Infrastructure.Web.Taap.csproj" Id="29b92600-4701-4d7c-9245-40e841b2dde9" />
   </Folder>
 </Solution>
