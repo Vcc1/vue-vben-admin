@@ -13,7 +13,7 @@
   </ItemGroup>
 
   <ItemGroup>
-    <ProjectReference Include="..\..\Models\MetricsAndAlerts\MetricsAndAlerts\Application\MetricsAndAlertsApp\MetricsAndAlertsApp.csproj" />
+    <ProjectReference Include="..\..\Models\MetricsAndAlerts\MetricsAndAlerts\MetricsAndAlerts.App\MetricsAndAlerts.App.csproj" />
   </ItemGroup>
 
 </Project>

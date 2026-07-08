@@ -13,7 +13,7 @@
   </ItemGroup>
 
   <ItemGroup>
-    <ProjectReference Include="..\..\Models\Base\Shared\Application\SupplierStaticDataApp\SupplierStaticDataApp.csproj" />
+    <ProjectReference Include="..\..\Models\Base\Shared\SupplierStaticData.App\SupplierStaticData.App.csproj" />
     <ProjectReference Include="..\Infrastructure.Sql.RoomMapping\Infrastructure.Sql.RoomMapping.csproj" />
   </ItemGroup>
 

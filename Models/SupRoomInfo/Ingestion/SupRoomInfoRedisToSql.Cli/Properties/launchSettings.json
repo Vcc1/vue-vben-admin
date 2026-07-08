@@ -1,0 +1,10 @@
+﻿{
+  "profiles": {
+    "SupRoomInfoRedisToSql": {
+      "commandName": "Project"
+    },
+    "Container (Dockerfile)": {
+      "commandName": "Docker"
+    }
+  }
+}

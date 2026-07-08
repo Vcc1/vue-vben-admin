@@ -1,48 +1,55 @@
 # MengtuV AI Index
 
-> 给 AI/开发者一个“先看哪里”的入口，减少每次全仓库扫描。
+> Quick map for humans and agents: where to look first without scanning the whole repo.
 
 ## 1. Repository Overview
 
 - Solution: `MengtuV.slnx`
 - Main layout:
-  - `Models/<大业务分组>/<具体业务>/<Domain|Application|Infrastructure|Presentation>`: business modules grouped by capability.
-  - `Models/Base/Shared`: shared domain/application/infrastructure/presentation utilities.
-  - `Providers`: external provider implementations for SQL, Redis, HTTP, Web, and supplier integrations.
+  - `Models/<business-group>/<business>/<project>`: business modules grouped by capability.
+  - Project suffixes:
+    - `.Domain`: domain projects.
+    - `.App`: application projects.
+    - `.Infra`: infrastructure projects.
+    - `.Cli`, `.Web`, `.Api`: presentation projects by host type.
+  - `Providers`: shared provider projects. Provider project names are intentionally unchanged.
   - `999.DLL`: local binary dependencies.
 
 ## 2. Quick Navigation
 
-- Program entries: `Models/**/Presentation/**/Program.cs`
-- Core room matching logic: `Models/RoomMatchings/Core/Application/RoomMatch.Core` and `Models/RoomMatchings/Core/Domain/Domain.RoomMatch`
-- Shared OTA domain: `Models/Base/Shared/Domain/OTADomain`
+- Program entries: `Models/**/*.Cli/Program.cs`, `Models/**/*.Web/Program.cs`, `Models/**/*.Api/Program.cs`
+- Core room matching logic: `Models/RoomMatchings/Core/RoomMatch.Core.App` and `Models/RoomMatchings/Core/RoomMatch.Domain`
+- Shared OTA domain: `Models/Base/Shared/OTA.Domain`
 - Provider implementations: `Providers/Infrastructure.*`
 - TAAP/Expedia chain: `Models/Taap/ExpediaChaseRoom/**` plus `Providers/Infrastructure.Web.Taap`
 
 ## 3. Executable Services
 
-- `Models/RoomMatchings/Core/Presentation/RoomMatching`
-  ServiceName: `MT-RoomTypeMatchingTest`
+- `Models/RoomMatchings/Core/RoomMatching.Cli`
+  ServiceName: `MT-RoomMatching`
 
-- `Models/RoomMatchings/Core/Presentation/OTARoomInfoCompletion`
+- `Models/RoomMatchings/Core/OTARoomInfoCompletion.Cli`
   ServiceName: `MT-OTARoomInfoCompletion`
 
-- `Models/SupRoomInfo/Ingestion/Presentation/SupRoomInfoRedisToSql`
+- `Models/SupRoomInfo/Ingestion/SupRoomInfoRedisToSql.Cli`
   ServiceName: `MT-SupRoomInfoRedisToSql`
 
-- `Models/Taap/ExpediaChaseRoom/Presentation/ExpediaChaseRooms`
+- `Models/Taap/ExpediaChaseRoom/ExpediaChaseRooms.Cli`
   ServiceName: `MT-ExpediaChaseRooms`
 
-- `Models/RoomMatchings/Statistics/Presentation/RoomMappingSupStaticRoomInfoStatistics`
-  RoomMapping static room-info statistics worker.
+- `Models/MetricsAndAlerts/GrafanaAlert/GrafanaAlertWebhook.Api`
+  ServiceName: `MT-GrafanaAlertWebhook`
 
-- `Models/RoomDataProcessings/QueryPriceSupRoomBuilder/Presentation/QueryPriceSupRoomBuilderToRedis`
-  Query-price supplier room builder entry.
+- `Models/MetricsAndAlerts/MetricsAndAlerts/MetricsAndAlerts.Api`
+  ServiceName: `MT-MetricsAndAlerts`
+
+- `Models/Base/Shared/SupplierStaticDataAppTester.Web`
+  ServiceName: `MT-SupplierStaticDataAppTester`
 
 ## 4. Module Map
 
 - Base shared:
-  `Models/Base/Shared/Domain`, `Models/Base/Shared/Application`, `Models/Base/Shared/Infrastructure`, `Models/Base/Shared/Presentation`
+  `Models/Base/Shared`
 
 - Room matching:
   `Models/RoomMatchings/Core`, `Models/RoomMatchings/OTARoomBuilder`, `Models/RoomMatchings/Statistics`
@@ -62,16 +69,17 @@
 ## 5. Reading Order
 
 - Room matching issue:
-  `Models/RoomMatchings/Core/Presentation/RoomMatching`, then `Models/RoomMatchings/Core/Application/RoomMatch.Core`, then `Providers/Infrastructure.Sql.RoomMapping`.
+  `Models/RoomMatchings/Core/RoomMatching.Cli`, then `Models/RoomMatchings/Core/RoomMatch.Core.App`, then `Providers/Infrastructure.Sql.RoomMapping`.
 
 - OTA room completion issue:
-  `Models/RoomMatchings/Core/Presentation/OTARoomInfoCompletion`, then `Models/RoomMatchings/Core/Application/RoomMatch.Core`, then supplier/static-data providers.
+  `Models/RoomMatchings/Core/OTARoomInfoCompletion.Cli`, then `Models/RoomMatchings/Core/RoomMatch.Core.App`, then supplier/static-data providers.
 
 - Expedia chase-room issue:
-  `Models/Taap/ExpediaChaseRoom/Presentation/ExpediaChaseRooms`, then `Models/Taap/ExpediaChaseRoom/Application/ExpediaChaseRoomApp`, then `Providers/Infrastructure.Web.Taap` and `Providers/Infrastructure.Sql.SupCacheDB`.
+  `Models/Taap/ExpediaChaseRoom/ExpediaChaseRooms.Cli`, then `Models/Taap/ExpediaChaseRoom/ExpediaChaseRoom.App`, then `Providers/Infrastructure.Web.Taap` and `Providers/Infrastructure.Sql.SupCacheDB`.
 
 ## 6. Maintenance Notes
 
-- Add new business code under `Models/<大业务分组>/<具体业务>/<layer>`.
-- Add reusable provider integrations under `Providers`.
-- Keep project names and namespaces stable unless doing a dedicated naming cleanup.
+- Add new business code directly under `Models/<business-group>/<business>/<ProjectName.Suffix>`.
+- Do not recreate layer folders such as `Application`, `Infrastructure`, `Domain`, or `Presentation`.
+- Keep provider project names under `Providers` unchanged unless doing a dedicated provider cleanup.
+- Internal C# namespaces are intentionally not aligned with project names yet.

@@ -1,0 +1,47 @@
+<Project Sdk="Microsoft.NET.Sdk;Microsoft.NET.Sdk.Publish">
+
+  <PropertyGroup>
+    
+    
+    <RootNamespace>SupplierStaticDataAppTester.Web</RootNamespace><AssemblyName>SupplierStaticDataAppTester.Web</AssemblyName><OutputType>Exe</OutputType>
+    <TargetFramework>net10.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <DockerDefaultTargetOS>Linux</DockerDefaultTargetOS>
+    <DockerfileContext>..\..\..\..\..\MengtuV</DockerfileContext>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <Content Include="appsettings.json">
+      <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+      <ExcludeFromSingleFile>true</ExcludeFromSingleFile>
+      <CopyToPublishDirectory>PreserveNewest</CopyToPublishDirectory>
+    </Content>
+    <Content Include="Configs\nlog.config">
+      <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+      <ExcludeFromSingleFile>true</ExcludeFromSingleFile>
+      <CopyToPublishDirectory>Always</CopyToPublishDirectory>
+    </Content>
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\..\RoomMatchings\Core\RoomMatch.Domain\RoomMatch.Domain.csproj" />
+    <ProjectReference Include="..\VBaseFramework.Core.Infra\VBaseFramework.Core.Infra.csproj" />
+    <ProjectReference Include="..\VBaseFramework.ServiceDefaults.Infra\VBaseFramework.ServiceDefaults.Infra.csproj" />
+    <ProjectReference Include="..\SupplierStaticData.App\SupplierStaticData.App.csproj" />
+    <ProjectReference Include="..\..\..\RoomMatchings\Core\RoomMatch.Infra\RoomMatch.Infra.csproj" />
+    <ProjectReference Include="..\..\..\..\Providers\Infrastructure.SupplierStaticData\Infrastructure.SupplierStaticData.csproj" />
+    <ProjectReference Include="..\..\..\..\Providers\Infrastructure.Sql.RoomMapping\Infrastructure.Sql.RoomMapping.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.VisualStudio.Azure.Containers.Tools.Targets" Version="1.23.0" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Reference Include="MengTu.Connectmate.Client">
+      <HintPath>..\..\..\..\999.DLL\Connectmate\net10.0\MengTu.Connectmate.Client.dll</HintPath>
+    </Reference>
+  </ItemGroup>
+
+</Project>

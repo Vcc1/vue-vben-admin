@@ -1,0 +1,44 @@
+﻿# 请参�?https://aka.ms/customizecontainer 以了解如何自定义调试容器，以�?Visual Studio 如何使用�?Dockerfile 生成映像以更快地进行调试�?
+
+# 此阶段用于在快速模�?默认为调试配�?下从 VS 运行�?
+FROM mcr.microsoft.com/dotnet/aspnet:10.0 AS base
+USER $APP_UID
+WORKDIR /app
+
+
+# 此阶段用于生成服务项�?
+FROM mcr.microsoft.com/dotnet/sdk:10.0 AS build
+ARG BUILD_CONFIGURATION=Release
+WORKDIR /src
+COPY ["Models/SupRoomInfo/Ingestion/SupRoomInfoRedisToSql.Cli/SupRoomInfoRedisToSql.Cli.csproj", "Models/SupRoomInfo/Ingestion/SupRoomInfoRedisToSql.Cli/"]
+COPY ["Models/Base/Shared/VBaseFramework.Core.Infra/VBaseFramework.Core.Infra.csproj", "Models/Base/Shared/VBaseFramework.Core.Infra/"]
+COPY ["Models/Base/Shared/VBaseFramework.ServiceDefaults.Infra/VBaseFramework.ServiceDefaults.Infra.csproj", "Models/Base/Shared/VBaseFramework.ServiceDefaults.Infra/"]
+COPY ["Models/SupRoomInfo/Ingestion/SupRoomInfoIngestion.App/SupRoomInfoIngestion.App.csproj", "Models/SupRoomInfo/Ingestion/SupRoomInfoIngestion.App/"]
+COPY ["Providers/Infrastructure.Sql.RoomMapping/Infrastructure.Sql.RoomMapping.csproj", "Providers/Infrastructure.Sql.RoomMapping/"]
+COPY ["Models/RoomMatchings/Core/RoomMatch.Domain/RoomMatch.Domain.csproj", "Models/RoomMatchings/Core/RoomMatch.Domain/"]
+COPY ["Models/Base/Shared/OTA.Domain/OTA.Domain.csproj", "Models/Base/Shared/OTA.Domain/"]
+COPY ["Models/RoomMatchings/Core/RoomMatch.Core.App/RoomMatch.Core.App.csproj", "Models/RoomMatchings/Core/RoomMatch.Core.App/"]
+COPY ["Models/SupRoomInfo/Ingestion/SupRoomInfoIngestion.Infra/Infrastructure.SupRoomInfoIngestion.App.csproj", "Models/SupRoomInfo/Ingestion/SupRoomInfoIngestion.Infra/"]
+COPY ["Providers/Infrastructure.Redis.SupRoomInfo.CachePriceDiscovery/Infrastructure.Redis.SupRoomInfo.CachePriceDiscovery.csproj", "Providers/Infrastructure.Redis.SupRoomInfo.CachePriceDiscovery/"]
+COPY ["Providers/Infrastructure.Redis.SupRoomInfo.DirectPriceDiscovery/Infrastructure.Redis.SupRoomInfo.DirectPriceDiscovery.csproj", "Providers/Infrastructure.Redis.SupRoomInfo.DirectPriceDiscovery/"]
+COPY ["Models/RoomMatchings/Core/RoomMatch.Infra/RoomMatch.Infra.csproj", "Models/RoomMatchings/Core/RoomMatch.Infra/"]
+COPY ["Providers/Infrastructure.HTTP.SupStaticData/Infrastructure.HTTP.SupStaticData.csproj", "Providers/Infrastructure.HTTP.SupStaticData/"]
+COPY ["Providers/Infrastructure.Redis.RoomMatchingRedis/Infrastructure.Redis.RoomMatchingRedis.csproj", "Providers/Infrastructure.Redis.RoomMatchingRedis/"]
+COPY ["Providers/Infrastructure.Sql.MengTuAPI/Infrastructure.Sql.MengTuAPI.csproj", "Providers/Infrastructure.Sql.MengTuAPI/"]
+COPY ["Providers/Infrastructure.Sql.MengTuSup/Infrastructure.Sql.MengTuSup.csproj", "Providers/Infrastructure.Sql.MengTuSup/"]
+COPY ["Providers/Infrastructure.Sql.MixedData/Infrastructure.Sql.MixedData.csproj", "Providers/Infrastructure.Sql.MixedData/"]
+RUN dotnet restore "./Models/SupRoomInfo/Ingestion/SupRoomInfoRedisToSql.Cli/SupRoomInfoRedisToSql.Cli.csproj"
+COPY . .
+WORKDIR "/src/Models/SupRoomInfo/Ingestion/SupRoomInfoRedisToSql.Cli"
+RUN dotnet build "./SupRoomInfoRedisToSql.Cli.csproj" -c $BUILD_CONFIGURATION -o /app/build
+
+# 此阶段用于发布要复制到最终阶段的服务项目
+FROM build AS publish
+ARG BUILD_CONFIGURATION=Release
+RUN dotnet publish "./SupRoomInfoRedisToSql.Cli.csproj" -c $BUILD_CONFIGURATION -o /app/publish /p:UseAppHost=false
+
+# 此阶段在生产中使用，或在常规模式下从 VS 运行时使�?在不使用调试配置时为默认�?
+FROM base AS final
+WORKDIR /app
+COPY --from=publish /app/publish .
+ENTRYPOINT ["dotnet", "SupRoomInfoRedisToSql.Cli.dll"]

@@ -1,0 +1,55 @@
+﻿# 请参�?https://aka.ms/customizecontainer 以了解如何自定义调试容器，以�?Visual Studio 如何使用�?Dockerfile 生成映像以更快地进行调试�?
+
+# 此阶段用于在快速模�?默认为调试配�?下从 VS 运行�?
+FROM mcr.microsoft.com/dotnet/aspnet:10.0 AS base
+USER $APP_UID
+WORKDIR /app
+
+
+# 此阶段用于生成服务项�?
+FROM mcr.microsoft.com/dotnet/sdk:10.0 AS build
+ARG BUILD_CONFIGURATION=Release
+WORKDIR /src
+COPY ["Models/RoomMatchings/OTARoomBuilder/OTARoomBuilder.Cli/OTARoomBuilder.Cli.csproj", "Models/RoomMatchings/OTARoomBuilder/OTARoomBuilder.Cli/"]
+COPY ["Models/Base/Shared/VBaseFramework.Core.Infra/VBaseFramework.Core.Infra.csproj", "Models/Base/Shared/VBaseFramework.Core.Infra/"]
+COPY ["Models/Base/Shared/VBaseFramework.ServiceDefaults.Infra/VBaseFramework.ServiceDefaults.Infra.csproj", "Models/Base/Shared/VBaseFramework.ServiceDefaults.Infra/"]
+COPY ["Models/RoomMatchings/OTARoomBuilder/OTARoomBuilder.App/OTARoomBuilder.App.csproj", "Models/RoomMatchings/OTARoomBuilder/OTARoomBuilder.App/"]
+COPY ["Models/RoomMatchings/Core/RoomMatch.Domain/RoomMatch.Domain.csproj", "Models/RoomMatchings/Core/RoomMatch.Domain/"]
+COPY ["Models/Base/Shared/OTA.Domain/OTA.Domain.csproj", "Models/Base/Shared/OTA.Domain/"]
+COPY ["Models/RoomMatchings/Core/RoomMatch.Core.App/RoomMatch.Core.App.csproj", "Models/RoomMatchings/Core/RoomMatch.Core.App/"]
+COPY ["Providers/Infrastructure.Sql.RoomMapping/Infrastructure.Sql.RoomMapping.csproj", "Providers/Infrastructure.Sql.RoomMapping/"]
+COPY ["Models/RoomMatchings/OTARoomBuilder/OTARoomBuilder.Infra/OTARoomBuilder.Infra.csproj", "Models/RoomMatchings/OTARoomBuilder/OTARoomBuilder.Infra/"]
+COPY ["Models/Base/Shared/SupplierStaticData.App/SupplierStaticData.App.csproj", "Models/Base/Shared/SupplierStaticData.App/"]
+COPY ["Providers/Infrastructure.HTTP.OTARoomCreate/Infrastructure.HTTP.OTARoomCreate.csproj", "Providers/Infrastructure.HTTP.OTARoomCreate/"]
+COPY ["Providers/Infrastructure.SupplierStaticData/Infrastructure.SupplierStaticData.csproj", "Providers/Infrastructure.SupplierStaticData/"]
+COPY ["Models/RoomMatchings/Core/RoomMatch.Infra/RoomMatch.Infra.csproj", "Models/RoomMatchings/Core/RoomMatch.Infra/"]
+COPY ["Providers/Infrastructure.HTTP.SupStaticData/Infrastructure.HTTP.SupStaticData.csproj", "Providers/Infrastructure.HTTP.SupStaticData/"]
+COPY ["Providers/Infrastructure.Redis.RoomMatchingRedis/Infrastructure.Redis.RoomMatchingRedis.csproj", "Providers/Infrastructure.Redis.RoomMatchingRedis/"]
+COPY ["Providers/Infrastructure.Redis.SupRoomInfo.DirectPriceDiscovery/Infrastructure.Redis.SupRoomInfo.DirectPriceDiscovery.csproj", "Providers/Infrastructure.Redis.SupRoomInfo.DirectPriceDiscovery/"]
+COPY ["Providers/Infrastructure.Sql.MengTuAPI/Infrastructure.Sql.MengTuAPI.csproj", "Providers/Infrastructure.Sql.MengTuAPI/"]
+COPY ["Providers/Infrastructure.Sql.MengTuSup/Infrastructure.Sql.MengTuSup.csproj", "Providers/Infrastructure.Sql.MengTuSup/"]
+COPY ["Providers/Infrastructure.Sql.MixedData/Infrastructure.Sql.MixedData.csproj", "Providers/Infrastructure.Sql.MixedData/"]
+RUN dotnet restore "./Models/RoomMatchings/OTARoomBuilder/OTARoomBuilder.Cli/OTARoomBuilder.Cli.csproj"
+COPY . .
+WORKDIR "/src/Models/RoomMatchings/OTARoomBuilder/OTARoomBuilder.Cli"
+RUN dotnet build "./OTARoomBuilder.Cli.csproj" -c $BUILD_CONFIGURATION -o /app/build
+
+# 此阶段用于发布要复制到最终阶段的服务项目
+FROM build AS publish
+ARG BUILD_CONFIGURATION=Release
+RUN dotnet publish "./OTARoomBuilder.Cli.csproj" -c $BUILD_CONFIGURATION -o /app/publish /p:UseAppHost=false
+
+# 此阶段在生产中使用，或在常规模式下从 VS 运行时使�?在不使用调试配置时为默认�?
+FROM base AS final
+WORKDIR /app
+USER root
+ENV TZ=Asia/Shanghai DEBIAN_FRONTEND=noninteractive
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends tzdata \
+    && ln -sf /usr/share/zoneinfo/Asia/Shanghai /etc/localtime \
+    && echo "Asia/Shanghai" > /etc/timezone \
+    && apt-get clean \
+    && rm -rf /var/lib/apt/lists/*
+COPY --from=publish /app/publish .
+USER $APP_UID
+ENTRYPOINT ["dotnet", "OTARoomBuilder.Cli.dll"]

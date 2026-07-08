@@ -13,8 +13,8 @@
   </ItemGroup>
 
   <ItemGroup>
-    <ProjectReference Include="..\..\Models\Base\Shared\Infrastructure\VBaseFramework.Core\VBaseFramework.Core.csproj" />
-    <ProjectReference Include="..\..\Models\MetricsAndAlerts\MetricsAndAlerts\Application\MetricsAndAlertsApp\MetricsAndAlertsApp.csproj" />
+    <ProjectReference Include="..\..\Models\Base\Shared\VBaseFramework.Core.Infra\VBaseFramework.Core.Infra.csproj" />
+    <ProjectReference Include="..\..\Models\MetricsAndAlerts\MetricsAndAlerts\MetricsAndAlerts.App\MetricsAndAlerts.App.csproj" />
   </ItemGroup>
 
   <ItemGroup>

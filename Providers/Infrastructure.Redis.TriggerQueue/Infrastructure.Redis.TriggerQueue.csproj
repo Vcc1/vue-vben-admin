@@ -14,8 +14,8 @@
   </ItemGroup>
 
   <ItemGroup>
-    <ProjectReference Include="..\..\Models\Base\Shared\Infrastructure\VBaseFramework.Core\VBaseFramework.Core.csproj" />
-    <ProjectReference Include="..\..\Models\RoomDataProcessings\QueryPriceSupRoomBuilder\Application\QueryPriceSupRoomBuilder\QueryPriceSupRoomBuilder.csproj" />
+    <ProjectReference Include="..\..\Models\Base\Shared\VBaseFramework.Core.Infra\VBaseFramework.Core.Infra.csproj" />
+    <ProjectReference Include="..\..\Models\RoomDataProcessings\QueryPriceSupRoomBuilder\QueryPriceSupRoomBuilder.App\QueryPriceSupRoomBuilder.App.csproj" />
   </ItemGroup>
 
 </Project>
