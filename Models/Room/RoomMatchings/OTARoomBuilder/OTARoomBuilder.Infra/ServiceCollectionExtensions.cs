@@ -1,4 +1,5 @@
 using Microsoft.Extensions.DependencyInjection;
+using OTARoomBuilder;
 using OTARoomBuilder.Contracts;
 using SupplierStaticDataApp.Contracts;
 
@@ -17,11 +18,13 @@ public static class ServiceCollectionExtensions
             32,
             2,
             services.GetRequiredService<ISupplierStaticDataService>(),
+            services.GetRequiredService<OTARoomBuilderMetrics>(),
             services.GetRequiredService<Microsoft.Extensions.Logging.ILogger<StaticDataSupplierRoomBuildPlugin>>()));
         services.AddScoped<ISupplierRoomBuildPlugin>(services => new StaticDataSupplierRoomBuildPlugin(
             1,
             3,
             services.GetRequiredService<ISupplierStaticDataService>(),
+            services.GetRequiredService<OTARoomBuilderMetrics>(),
             services.GetRequiredService<Microsoft.Extensions.Logging.ILogger<StaticDataSupplierRoomBuildPlugin>>()));
         return services;
     }

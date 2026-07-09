@@ -12,17 +12,20 @@ public sealed class StaticDataSupplierRoomBuildPlugin : BaseSupplierRoomBuildPlu
     readonly int _supId;
     readonly int _priority;
     readonly ISupplierStaticDataService _supplierStaticDataService;
+    readonly OTARoomBuilderMetrics _metrics;
     readonly ILogger<StaticDataSupplierRoomBuildPlugin> _logger;
 
     public StaticDataSupplierRoomBuildPlugin(
         int supId,
         int priority,
         ISupplierStaticDataService supplierStaticDataService,
+        OTARoomBuilderMetrics metrics,
         ILogger<StaticDataSupplierRoomBuildPlugin> logger)
     {
         _supId = supId;
         _priority = priority;
         _supplierStaticDataService = supplierStaticDataService;
+        _metrics = metrics;
         _logger = logger;
     }
 
@@ -49,7 +52,8 @@ public sealed class StaticDataSupplierRoomBuildPlugin : BaseSupplierRoomBuildPlu
             context.SHotelCode!,
             new SupplierStaticDataRequestOptions
             {
-                ForceRefresh = false
+                ForceRefresh = false,
+                MTHotelCode = context.MTHotelCode
             },
             cancellationToken);
 
@@ -69,6 +73,11 @@ public sealed class StaticDataSupplierRoomBuildPlugin : BaseSupplierRoomBuildPlu
             string.Equals(item.RoomCode, context.SRoomCode, StringComparison.OrdinalIgnoreCase));
         if (room is null)
         {
+            if (result.Data.Rooms.Count > 0)
+            {
+                _metrics.RecordStaticDataRoomMatch(SupId, "room_code_not_found");
+            }
+
             _logger.LogWarning(
                 "Supplier static room not found for MaxAdt enrichment. SupId={SupId}, MTHotelCode={MTHotelCode}, SHotelCode={SHotelCode}, SRoomCode={SRoomCode}",
                 SupId,
@@ -81,6 +90,7 @@ public sealed class StaticDataSupplierRoomBuildPlugin : BaseSupplierRoomBuildPlu
         var maxAdt = room.MaxOccupancy ?? 0;
         if (maxAdt <= 0)
         {
+            _metrics.RecordStaticDataRoomMatch(SupId, "max_occupancy_missing");
             _logger.LogWarning(
                 "Supplier static room max occupancy missing for MaxAdt enrichment. SupId={SupId}, SupplierRoomId={SupplierRoomId}, MTHotelCode={MTHotelCode}, SHotelCode={SHotelCode}, SRoomCode={SRoomCode}",
                 SupId,
@@ -90,6 +100,8 @@ public sealed class StaticDataSupplierRoomBuildPlugin : BaseSupplierRoomBuildPlu
                 context.SRoomCode);
             return SupplierRoomEnrichmentResult.NotSupported;
         }
+
+        _metrics.RecordStaticDataRoomMatch(SupId, "matched");
 
         return new SupplierRoomEnrichmentResult
         {

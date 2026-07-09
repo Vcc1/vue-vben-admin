@@ -1,6 +1,7 @@
 using Infrastructure.SupplierStaticData.Configuration;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
+using SupplierStaticDataApp;
 using SupplierStaticDataApp.Contracts;
 
 namespace Infrastructure.SupplierStaticData;
@@ -53,6 +54,7 @@ public static class ServiceCollectionExtensions
                     | System.Net.DecompressionMethods.Brotli
             });
         services.AddScoped<ISupplierStaticDataService, SupplierStaticDataService>();
+        services.AddSingleton<SupplierStaticDataMetrics>();
         services.AddScoped<ISupplierStaticDataCacheRepository, SupplierStaticDataCacheRepository>();
         services.AddScoped<ISupplierStaticDataProvider, EanSupplierStaticDataProvider>();
         services.AddScoped<ISupplierStaticDataProvider, AgodaSupplierStaticDataProvider>();

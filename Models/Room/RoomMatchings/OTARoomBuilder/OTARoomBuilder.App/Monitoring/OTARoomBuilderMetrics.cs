@@ -13,6 +13,7 @@ public sealed class OTARoomBuilderMetrics
     readonly Counter<long> _createdCounter;
     readonly Counter<long> _skippedCounter;
     readonly Counter<long> _errorCounter;
+    readonly Counter<long> _staticDataRoomMatchCounter;
     readonly Histogram<double> _durationMs;
     readonly ObservableGauge<long> _pendingHotelsGauge;
     readonly ObservableGauge<long> _createdHotelsGauge;
@@ -30,6 +31,7 @@ public sealed class OTARoomBuilderMetrics
         _createdCounter = meter.CreateCounter<long>("ota_room_builder_created_total", unit: "rooms");
         _skippedCounter = meter.CreateCounter<long>("ota_room_builder_skipped_total", unit: "rooms");
         _errorCounter = meter.CreateCounter<long>("ota_room_builder_error_total", unit: "errors");
+        _staticDataRoomMatchCounter = meter.CreateCounter<long>("ota_room_builder_static_data_room_match_total", unit: "rooms");
         _durationMs = meter.CreateHistogram<double>("ota_room_builder_duration_ms", unit: "ms");
         _pendingHotelsGauge = meter.CreateObservableGauge("ota_room_builder_pending_hotels", () => Interlocked.Read(ref _pendingHotels), unit: "hotels");
         _createdHotelsGauge = meter.CreateObservableGauge("ota_room_builder_created_hotels", () => Interlocked.Read(ref _createdHotels), unit: "rooms");
@@ -92,6 +94,14 @@ public sealed class OTARoomBuilderMetrics
     {
         _errorCounter.Add(1, new KeyValuePair<string, object?>("stage", stage));
         Telemetry.Errors.Add(1, new KeyValuePair<string, object?>("stage", stage));
+    }
+
+    public void RecordStaticDataRoomMatch(int supId, string outcome)
+    {
+        _staticDataRoomMatchCounter.Add(
+            1,
+            new KeyValuePair<string, object?>("sup_id", supId.ToString()),
+            new KeyValuePair<string, object?>("outcome", string.IsNullOrWhiteSpace(outcome) ? "unknown" : outcome));
     }
 
     public void ResetRun()

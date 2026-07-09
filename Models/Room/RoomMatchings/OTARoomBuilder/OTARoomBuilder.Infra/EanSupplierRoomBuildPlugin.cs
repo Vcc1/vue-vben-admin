@@ -11,13 +11,16 @@ namespace Infrastructure.OTARoomBuilder;
 public sealed class EanSupplierRoomBuildPlugin : BaseSupplierRoomBuildPlugin<FullSequenceMatcher>
 {
     readonly ISupplierStaticDataService _supplierStaticDataService;
+    readonly OTARoomBuilderMetrics _metrics;
     readonly ILogger<EanSupplierRoomBuildPlugin> _logger;
 
     public EanSupplierRoomBuildPlugin(
         ISupplierStaticDataService supplierStaticDataService,
+        OTARoomBuilderMetrics metrics,
         ILogger<EanSupplierRoomBuildPlugin> logger)
     {
         _supplierStaticDataService = supplierStaticDataService;
+        _metrics = metrics;
         _logger = logger;
     }
 
@@ -44,7 +47,8 @@ public sealed class EanSupplierRoomBuildPlugin : BaseSupplierRoomBuildPlugin<Ful
             context.SHotelCode!,
             new SupplierStaticDataRequestOptions
             {
-                ForceRefresh = false
+                ForceRefresh = false,
+                MTHotelCode = context.MTHotelCode
             },
             cancellationToken);
 
@@ -63,6 +67,11 @@ public sealed class EanSupplierRoomBuildPlugin : BaseSupplierRoomBuildPlugin<Ful
             string.Equals(item.RoomCode, context.SRoomCode, StringComparison.OrdinalIgnoreCase));
         if (room is null)
         {
+            if (result.Data.Rooms.Count > 0)
+            {
+                _metrics.RecordStaticDataRoomMatch(SupId, "room_code_not_found");
+            }
+
             _logger.LogWarning(
                 "Supplier static data room not found. MTHotelCode={MTHotelCode}, SHotelCode={SHotelCode}, SRoomCode={SRoomCode}",
                 context.MTHotelCode,
@@ -74,6 +83,7 @@ public sealed class EanSupplierRoomBuildPlugin : BaseSupplierRoomBuildPlugin<Ful
         var maxAdt = room.MaxOccupancy ?? 0;
         if (maxAdt <= 0)
         {
+            _metrics.RecordStaticDataRoomMatch(SupId, "max_occupancy_missing");
             _logger.LogWarning(
                 "Supplier static data max occupancy missing. SupId={SupId}, SupplierRoomId={SupplierRoomId}, MTHotelCode={MTHotelCode}, SHotelCode={SHotelCode}, SRoomCode={SRoomCode}",
                 SupId,
@@ -83,6 +93,8 @@ public sealed class EanSupplierRoomBuildPlugin : BaseSupplierRoomBuildPlugin<Ful
                 context.SRoomCode);
             return SupplierRoomEnrichmentResult.NotSupported;
         }
+
+        _metrics.RecordStaticDataRoomMatch(SupId, "matched");
 
         return new SupplierRoomEnrichmentResult
         {

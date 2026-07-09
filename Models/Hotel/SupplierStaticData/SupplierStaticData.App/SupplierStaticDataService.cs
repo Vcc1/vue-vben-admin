@@ -1,12 +1,12 @@
 using Microsoft.Extensions.Logging;
-using SupplierStaticDataApp;
 using SupplierStaticDataApp.Contracts;
+using System.Diagnostics;
 using System.Text.Encodings.Web;
 using System.Text.Json;
 using System.Text.Json.Nodes;
 using System.Text.Json.Serialization;
 
-namespace Infrastructure.SupplierStaticData;
+namespace SupplierStaticDataApp;
 
 public sealed class SupplierStaticDataService : ISupplierStaticDataService
 {
@@ -21,15 +21,18 @@ public sealed class SupplierStaticDataService : ISupplierStaticDataService
     readonly IReadOnlyDictionary<int, ISupplierStaticDataProvider> _providers;
     readonly ISupplierStaticDataCacheRepository _cacheRepository;
     readonly ILogger<SupplierStaticDataService> _logger;
+    readonly SupplierStaticDataMetrics _metrics;
 
     public SupplierStaticDataService(
         IEnumerable<ISupplierStaticDataProvider> providers,
         ISupplierStaticDataCacheRepository cacheRepository,
-        ILogger<SupplierStaticDataService> logger)
+        ILogger<SupplierStaticDataService> logger,
+        SupplierStaticDataMetrics metrics)
     {
         _providers = providers.ToDictionary(provider => provider.SupId);
         _cacheRepository = cacheRepository;
         _logger = logger;
+        _metrics = metrics;
     }
 
     static SupplierStaticDataService()
@@ -138,6 +141,33 @@ public sealed class SupplierStaticDataService : ISupplierStaticDataService
         SupplierStaticDataKind requestedKind)
     {
         var normalizedCodes = NormalizeCodes(supplierHotelCodes);
+        var startedAt = Stopwatch.GetTimestamp();
+        try
+        {
+            var results = await GetHotelAndRoomsBySupplierHotelCodesCoreAsync(
+                supId,
+                normalizedCodes,
+                options,
+                cancellationToken,
+                requestedKind);
+
+            RecordResults(supId, normalizedCodes, options, requestedKind, results, Stopwatch.GetElapsedTime(startedAt));
+            return results;
+        }
+        catch (Exception ex)
+        {
+            RecordException(supId, normalizedCodes, options, requestedKind, Stopwatch.GetElapsedTime(startedAt), ex);
+            throw;
+        }
+    }
+
+    async Task<IReadOnlyDictionary<string, SupplierStaticDataResult<SupplierStaticHotelWithRoomsDto>>> GetHotelAndRoomsBySupplierHotelCodesCoreAsync(
+        int supId,
+        IReadOnlyCollection<string> normalizedCodes,
+        SupplierStaticDataRequestOptions options,
+        CancellationToken cancellationToken,
+        SupplierStaticDataKind requestedKind)
+    {
         var provider = GetProvider(supId);
         if (provider is null)
         {
@@ -316,6 +346,86 @@ public sealed class SupplierStaticDataService : ISupplierStaticDataService
         }
 
         return results;
+    }
+
+    void RecordResults(
+        int supId,
+        IReadOnlyCollection<string> normalizedCodes,
+        SupplierStaticDataRequestOptions options,
+        SupplierStaticDataKind requestedKind,
+        IReadOnlyDictionary<string, SupplierStaticDataResult<SupplierStaticHotelWithRoomsDto>> results,
+        TimeSpan elapsed)
+    {
+        foreach (var code in normalizedCodes)
+        {
+            var result = results.TryGetValue(code, out var item)
+                ? item
+                : SupplierStaticDataResult<SupplierStaticHotelWithRoomsDto>.Failure(
+                    code,
+                    "request_invalid",
+                    "Supplier hotel code is invalid.");
+
+            var roomCount = SupplierStaticDataMetrics.GetRoomCount(result);
+            var source = SupplierStaticDataMetrics.NormalizeSource(result.Source);
+            var errorCode = SupplierStaticDataMetrics.NormalizeErrorCode(result.ErrorCode);
+            var mtHotelCode = options.GetMTHotelCode(code);
+
+            if (result.Success)
+            {
+                _logger.LogInformation(
+                    "Supplier static data request completed. SupId={SupId}, SHotelCode={SHotelCode}, MTHotelCode={MTHotelCode}, Success={Success}, ElapsedMilliseconds={ElapsedMilliseconds}, RoomCount={RoomCount}, Source={Source}, ErrorCode={ErrorCode}",
+                    supId,
+                    code,
+                    mtHotelCode,
+                    true,
+                    Math.Max(0, elapsed.TotalMilliseconds),
+                    roomCount,
+                    source,
+                    errorCode);
+            }
+            else
+            {
+                _logger.LogWarning(
+                    "Supplier static data request completed. SupId={SupId}, SHotelCode={SHotelCode}, MTHotelCode={MTHotelCode}, Success={Success}, ElapsedMilliseconds={ElapsedMilliseconds}, RoomCount={RoomCount}, Source={Source}, ErrorCode={ErrorCode}",
+                    supId,
+                    code,
+                    mtHotelCode,
+                    false,
+                    Math.Max(0, elapsed.TotalMilliseconds),
+                    roomCount,
+                    source,
+                    errorCode);
+            }
+
+            _metrics.RecordLookup(supId, requestedKind, result, elapsed);
+        }
+    }
+
+    void RecordException(
+        int supId,
+        IReadOnlyCollection<string> normalizedCodes,
+        SupplierStaticDataRequestOptions options,
+        SupplierStaticDataKind requestedKind,
+        TimeSpan elapsed,
+        Exception exception)
+    {
+        foreach (var code in normalizedCodes.DefaultIfEmpty(string.Empty))
+        {
+            var mtHotelCode = string.IsNullOrWhiteSpace(code) ? options.MTHotelCode : options.GetMTHotelCode(code);
+            _logger.LogWarning(
+                exception,
+                "Supplier static data request completed. SupId={SupId}, SHotelCode={SHotelCode}, MTHotelCode={MTHotelCode}, Success={Success}, ElapsedMilliseconds={ElapsedMilliseconds}, RoomCount={RoomCount}, Source={Source}, ErrorCode={ErrorCode}",
+                supId,
+                code,
+                mtHotelCode,
+                false,
+                Math.Max(0, elapsed.TotalMilliseconds),
+                0,
+                "unknown",
+                "exception");
+
+            _metrics.RecordException(supId, requestedKind, elapsed);
+        }
     }
 
     public async Task<SupplierStaticDataResult<SupplierStaticHotelDto>> GetHotelByMTHotelCodeAsync(

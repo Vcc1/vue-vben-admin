@@ -8,6 +8,7 @@ using Microsoft.Extensions.Hosting;
 using OTARoomBuilder;
 using RoomMatch.Core;
 using RoomMatch.Core.RoomDictionary;
+using SupplierStaticDataApp;
 using System.Diagnostics;
 using System.Reflection;
 using VBase.AppMetrics;
@@ -34,7 +35,7 @@ var host = Serve.Run(new RunOptions
         options.ServiceName = "OTARoomBuilder";
         options.MeterName = "AppMetrics";
         options.AdditionalMeterNames = options.AdditionalMeterNames
-            .Concat([OTARoomBuilderMetrics.ScopeName])
+            .Concat([OTARoomBuilderMetrics.ScopeName, SupplierStaticDataMetrics.ScopeName])
             .Distinct()
             .ToArray();
     });
