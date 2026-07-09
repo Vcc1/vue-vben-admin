@@ -3,51 +3,61 @@
     <Project Path="BaseFrameworks/VBaseFramework.Core/VBaseFramework.Core.csproj" />
     <Project Path="BaseFrameworks/VBaseFramework.ServiceDefaults/VBaseFramework.ServiceDefaults.csproj" Id="4535a6ed-2396-4699-a879-75bad01832ea" />
   </Folder>
-  <Folder Name="/Models/Base/Shared/">
+  <Folder Name="/Hosts/" />
+  <Folder Name="/Models/" />
+  <Folder Name="/Models/0.Base/" />
+  <Folder Name="/Models/0.Base/Shared/">
     <Project Path="Models/Base/Shared/OTA.Domain/OTA.Domain.csproj" Id="6fee78ca-3838-4c9d-b2c0-e154a16ae5e5" />
   </Folder>
-  <Folder Name="/Models/Hotel/SupplierStaticData/">
+  <Folder Name="/Models/1.Hotel/" />
+  <Folder Name="/Models/1.Hotel/SupplierStaticData/">
     <Project Path="Models/Hotel/SupplierStaticData/SupplierStaticData.App/SupplierStaticData.App.csproj" />
     <Project Path="Models/Hotel/SupplierStaticData/SupplierStaticDataAppTester.Web/SupplierStaticDataAppTester.Web.csproj" />
   </Folder>
-  <Folder Name="/Models/MetricsAndAlerts/GrafanaAlert/">
-    <Project Path="Models/MetricsAndAlerts/GrafanaAlert/GrafanaAlert.App/GrafanaAlert.App.csproj" />
-    <Project Path="Models/MetricsAndAlerts/GrafanaAlert/GrafanaAlert.Infra/GrafanaAlert.Infra.csproj" />
-    <Project Path="Models/MetricsAndAlerts/GrafanaAlert/GrafanaAlertWebhook.Api/GrafanaAlertWebhook.Api.csproj" />
-  </Folder>
-  <Folder Name="/Models/MetricsAndAlerts/MetricsAndAlerts/">
-    <Project Path="Models/MetricsAndAlerts/MetricsAndAlerts/MetricsAndAlerts.Api/MetricsAndAlerts.Api.csproj" />
-    <Project Path="Models/MetricsAndAlerts/MetricsAndAlerts/MetricsAndAlerts.App/MetricsAndAlerts.App.csproj" />
-    <Project Path="Models/MetricsAndAlerts/MetricsAndAlerts/MetricsAndAlerts.Infra/MetricsAndAlerts.Infra.csproj" />
-    <Project Path="Models/MetricsAndAlerts/MetricsAndAlerts/TestMetrics.Cli/TestMetrics.Cli.csproj" Id="7130c2f8-f08f-4511-acc4-4f779430add9" />
-  </Folder>
-  <Folder Name="/Models/Room/RoomDataProcessings/QueryPriceSupRoomBuilder/">
+  <Folder Name="/Models/2.Room/" />
+  <Folder Name="/Models/2.Room/RoomDataProcessings/" />
+  <Folder Name="/Models/2.Room/RoomDataProcessings/QueryPriceSupRoomBuilder/">
     <Project Path="Models/Room/RoomDataProcessings/QueryPriceSupRoomBuilder/QueryPriceSupRoomBuilder.App/QueryPriceSupRoomBuilder.App.csproj" />
     <Project Path="Models/Room/RoomDataProcessings/QueryPriceSupRoomBuilder/QueryPriceSupRoomBuilder.Infra/QueryPriceSupRoomBuilder.Infra.csproj" />
     <Project Path="Models/Room/RoomDataProcessings/QueryPriceSupRoomBuilder/QueryPriceSupRoomBuilderToRedis.Cli/QueryPriceSupRoomBuilderToRedis.Cli.csproj" />
   </Folder>
-  <Folder Name="/Models/Room/RoomMatchings/Core/">
+  <Folder Name="/Models/2.Room/RoomMatchings/" />
+  <Folder Name="/Models/2.Room/RoomMatchings/Core/">
     <Project Path="Models/Room/RoomMatchings/Core/OTARoomInfoCompletion.Cli/OTARoomInfoCompletion.Cli.csproj" />
     <Project Path="Models/Room/RoomMatchings/Core/RoomMatch.Core.App/RoomMatch.Core.App.csproj" />
     <Project Path="Models/Room/RoomMatchings/Core/RoomMatch.Domain/RoomMatch.Domain.csproj" />
     <Project Path="Models/Room/RoomMatchings/Core/RoomMatch.Infra/RoomMatch.Infra.csproj" />
     <Project Path="Models/Room/RoomMatchings/Core/RoomMatching.Cli/RoomMatching.Cli.csproj" Id="ab3a3ec8-11a5-4429-a37f-bbc4d7bb04bc" />
   </Folder>
-  <Folder Name="/Models/Room/RoomMatchings/OTARoomBuilder/">
+  <Folder Name="/Models/2.Room/RoomMatchings/OTARoomBuilder/">
     <Project Path="Models/Room/RoomMatchings/OTARoomBuilder/OTARoomBuilder.App/OTARoomBuilder.App.csproj" />
     <Project Path="Models/Room/RoomMatchings/OTARoomBuilder/OTARoomBuilder.Cli/OTARoomBuilder.Cli.csproj" />
     <Project Path="Models/Room/RoomMatchings/OTARoomBuilder/OTARoomBuilder.Infra/OTARoomBuilder.Infra.csproj" />
   </Folder>
-  <Folder Name="/Models/Room/RoomMatchings/Statistics/">
+  <Folder Name="/Models/2.Room/RoomMatchings/Statistics/">
     <Project Path="Models/Room/RoomMatchings/Statistics/RoomMappingSupStaticRoomInfoStatistics.Cli/RoomMappingSupStaticRoomInfoStatistics.Cli.csproj" />
     <Project Path="Models/Room/RoomMatchings/Statistics/RoomMatchingStatistics.Cli/RoomMatchingStatistics.Cli.csproj" />
   </Folder>
-  <Folder Name="/Models/Room/SupRoomInfo/Ingestion/">
+  <Folder Name="/Models/2.Room/SupRoomInfo/" />
+  <Folder Name="/Models/2.Room/SupRoomInfo/Ingestion/">
     <Project Path="Models/Room/SupRoomInfo/Ingestion/SupRoomInfoIngestion.App/SupRoomInfoIngestion.App.csproj" />
     <Project Path="Models/Room/SupRoomInfo/Ingestion/SupRoomInfoIngestion.Infra/SupRoomInfoIngestion.Infra.csproj" />
     <Project Path="Models/Room/SupRoomInfo/Ingestion/SupRoomInfoRedisToSql.Cli/SupRoomInfoRedisToSql.Cli.csproj" Id="0b2d0dc9-abae-4b83-8ee2-e96c3adca58c" />
   </Folder>
-  <Folder Name="/Models/Taap/ExpediaChaseRoom/">
+  <Folder Name="/Models/3.MetricsAndAlerts/" />
+  <Folder Name="/Models/3.MetricsAndAlerts/GrafanaAlert/">
+    <Project Path="Models/MetricsAndAlerts/GrafanaAlert/GrafanaAlert.App/GrafanaAlert.App.csproj" />
+    <Project Path="Models/MetricsAndAlerts/GrafanaAlert/GrafanaAlert.Infra/GrafanaAlert.Infra.csproj" />
+    <Project Path="Models/MetricsAndAlerts/GrafanaAlert/GrafanaAlertWebhook.Api/GrafanaAlertWebhook.Api.csproj" />
+  </Folder>
+  <Folder Name="/Models/3.MetricsAndAlerts/MetricsAndAlerts/">
+    <Project Path="Models/MetricsAndAlerts/MetricsAndAlerts/MetricsAndAlerts.Api/MetricsAndAlerts.Api.csproj" />
+    <Project Path="Models/MetricsAndAlerts/MetricsAndAlerts/MetricsAndAlerts.App/MetricsAndAlerts.App.csproj" />
+    <Project Path="Models/MetricsAndAlerts/MetricsAndAlerts/MetricsAndAlerts.Infra/MetricsAndAlerts.Infra.csproj" />
+    <Project Path="Models/MetricsAndAlerts/MetricsAndAlerts/TestMetrics.Cli/TestMetrics.Cli.csproj" Id="7130c2f8-f08f-4511-acc4-4f779430add9" />
+  </Folder>
+  <Folder Name="/Models/4.Taap/" />
+  <Folder Name="/Models/4.Taap/ExpediaChaseRoom/">
     <Project Path="Models/Taap/ExpediaChaseRoom/ExpediaChaseRoom.App/ExpediaChaseRoom.App.csproj" Id="4a958dbd-d2de-4482-9149-782b9e7c2bb8" />
     <Project Path="Models/Taap/ExpediaChaseRoom/ExpediaChaseRoom.Infra/ExpediaChaseRoom.Infra.csproj" />
     <Project Path="Models/Taap/ExpediaChaseRoom/ExpediaChaseRooms.Cli/ExpediaChaseRooms.Cli.csproj" />
