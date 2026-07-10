@@ -4,6 +4,8 @@ namespace OTARoomBuilder;
 
 public sealed class OTARoomBuilderOptions
 {
+    static readonly int[] DefaultEnabledSupIds = [51, 32];
+
     public int TaskChunkSize { get; set; } = 50;
 
     [Range(1, 100)]
@@ -13,6 +15,10 @@ public sealed class OTARoomBuilderOptions
     public int RoomCreateQueueCapacity { get; set; } = 100;
 
     public int LastDaysOffset { get; set; } = -32;
+
+    public string? FullSyncHotelCodes { get; set; }
+
+    public string? EnabledSupIds { get; set; } = "51,32";
 
     public string? FullSyncCron { get; set; }
 
@@ -42,6 +48,37 @@ public sealed class OTARoomBuilderOptions
     public string GetFullSyncCron()
     {
         return string.IsNullOrWhiteSpace(FullSyncCron) ? DailyCron : FullSyncCron;
+    }
+
+    public IReadOnlyList<string> GetFullSyncHotelCodeOverrides()
+    {
+        if (string.IsNullOrWhiteSpace(FullSyncHotelCodes))
+        {
+            return [];
+        }
+
+        return FullSyncHotelCodes
+            .Split([',', ';'], StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+            .Where(static code => !string.IsNullOrWhiteSpace(code))
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToArray();
+    }
+
+    public IReadOnlyList<int> GetEnabledSupIds()
+    {
+        if (string.IsNullOrWhiteSpace(EnabledSupIds))
+        {
+            return DefaultEnabledSupIds;
+        }
+
+        var supIds = EnabledSupIds
+            .Split([',', ';'], StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+            .Select(static value => int.TryParse(value, out var supId) ? supId : 0)
+            .Where(static supId => supId > 0)
+            .Distinct()
+            .ToArray();
+
+        return supIds.Length == 0 ? DefaultEnabledSupIds : supIds;
     }
 }
 

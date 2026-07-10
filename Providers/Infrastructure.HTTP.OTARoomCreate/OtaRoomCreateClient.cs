@@ -3,11 +3,20 @@ using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using OTARoomBuilder;
 using OTARoomBuilder.Contracts;
+using System.Text.Encodings.Web;
+using System.Text.Json;
 
 namespace Infrastructure.HTTP.OTARoomCreate;
 
 public sealed class OtaRoomCreateClient : IOtaRoomCreateClient
 {
+    static readonly JsonSerializerOptions JsonOptions = new(JsonSerializerDefaults.Web)
+    {
+        DictionaryKeyPolicy = JsonNamingPolicy.CamelCase,
+        Encoder = JavaScriptEncoder.UnsafeRelaxedJsonEscaping,
+        WriteIndented = true
+    };
+
     readonly HttpClient _httpClient;
     readonly IOptionsMonitor<RoomCreateOptions> _options;
     readonly OTARoomBuilderMetrics _metrics;
@@ -45,7 +54,7 @@ public sealed class OtaRoomCreateClient : IOtaRoomCreateClient
             };
 
             using var content = new StringContent(
-                System.Text.Json.JsonSerializer.Serialize(payload),
+                JsonSerializer.Serialize(payload, JsonOptions),
                 System.Text.Encoding.UTF8,
                 "application/json");
             content.Headers.Add("ApiToken", roomCreateOptions.ApiToken);

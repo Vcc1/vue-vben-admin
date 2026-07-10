@@ -11,17 +11,16 @@ public sealed class SupplierStaticDataMetrics
     readonly Histogram<double>? _lookupDurationMs;
     readonly Histogram<long>? _roomCount;
 
-    public SupplierStaticDataMetrics(IMetricsFactory? metricsFactory = null)
+    public SupplierStaticDataMetrics()
     {
-        if (metricsFactory is null)
-        {
-            return;
-        }
+    }
 
+    public SupplierStaticDataMetrics(IMetricsFactory metricsFactory)
+    {
         var meter = metricsFactory.Create(ScopeName).Meter;
-        _lookupCounter = meter.CreateCounter<long>("supplier_static_data_lookup_total", unit: "requests");
-        _lookupDurationMs = meter.CreateHistogram<double>("supplier_static_data_lookup_duration_ms", unit: "ms");
-        _roomCount = meter.CreateHistogram<long>("supplier_static_data_room_count", unit: "rooms");
+        _lookupCounter = meter.CreateCounter<long>("supplier_static_data_lookup_total");
+        _lookupDurationMs = meter.CreateHistogram<double>("supplier_static_data_lookup_duration_ms");
+        _roomCount = meter.CreateHistogram<long>("supplier_static_data_room_count");
     }
 
     public void RecordLookup(
@@ -133,4 +132,5 @@ public sealed class SupplierStaticDataMetrics
     {
         return new KeyValuePair<string, object?>(key, value);
     }
+
 }

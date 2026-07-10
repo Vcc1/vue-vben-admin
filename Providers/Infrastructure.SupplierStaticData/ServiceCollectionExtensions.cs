@@ -1,6 +1,7 @@
 using Infrastructure.SupplierStaticData.Configuration;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Http.Resilience;
 using SupplierStaticDataApp;
 using SupplierStaticDataApp.Contracts;
 
@@ -21,38 +22,10 @@ public static class ServiceCollectionExtensions
             .ValidateDataAnnotations()
             .ValidateOnStart();
 
-        services
-            .AddHttpClient<EanHotelStaticDataClient>()
-            .ConfigurePrimaryHttpMessageHandler(static () => new SocketsHttpHandler
-            {
-                AutomaticDecompression = System.Net.DecompressionMethods.GZip
-                    | System.Net.DecompressionMethods.Deflate
-                    | System.Net.DecompressionMethods.Brotli
-            });
-        services
-            .AddHttpClient<AgodaHotelStaticDataClient>()
-            .ConfigurePrimaryHttpMessageHandler(static () => new SocketsHttpHandler
-            {
-                AutomaticDecompression = System.Net.DecompressionMethods.GZip
-                    | System.Net.DecompressionMethods.Deflate
-                    | System.Net.DecompressionMethods.Brotli
-            });
-        services
-            .AddHttpClient<AgodaRoomStaticDataClient>()
-            .ConfigurePrimaryHttpMessageHandler(static () => new SocketsHttpHandler
-            {
-                AutomaticDecompression = System.Net.DecompressionMethods.GZip
-                    | System.Net.DecompressionMethods.Deflate
-                    | System.Net.DecompressionMethods.Brotli
-            });
-        services
-            .AddHttpClient<HbStaticDataClient>()
-            .ConfigurePrimaryHttpMessageHandler(static () => new SocketsHttpHandler
-            {
-                AutomaticDecompression = System.Net.DecompressionMethods.GZip
-                    | System.Net.DecompressionMethods.Deflate
-                    | System.Net.DecompressionMethods.Brotli
-            });
+        ConfigureStaticDataHttpClient(services.AddHttpClient<EanHotelStaticDataClient>());
+        ConfigureStaticDataHttpClient(services.AddHttpClient<AgodaHotelStaticDataClient>());
+        ConfigureStaticDataHttpClient(services.AddHttpClient<AgodaRoomStaticDataClient>());
+        ConfigureStaticDataHttpClient(services.AddHttpClient<HbStaticDataClient>());
         services.AddScoped<ISupplierStaticDataService, SupplierStaticDataService>();
         services.AddSingleton<SupplierStaticDataMetrics>();
         services.AddScoped<ISupplierStaticDataCacheRepository, SupplierStaticDataCacheRepository>();
@@ -60,5 +33,30 @@ public static class ServiceCollectionExtensions
         services.AddScoped<ISupplierStaticDataProvider, AgodaSupplierStaticDataProvider>();
         services.AddScoped<ISupplierStaticDataProvider, HbSupplierStaticDataProvider>();
         return services;
+    }
+
+    static void ConfigureStaticDataHttpClient(IHttpClientBuilder builder)
+    {
+        var timeout = TimeSpan.FromMinutes(5);
+
+        builder.ConfigureHttpClient(client => client.Timeout = timeout);
+
+#pragma warning disable EXTEXP0001
+        builder.RemoveAllResilienceHandlers();
+#pragma warning restore EXTEXP0001
+
+        builder.AddStandardResilienceHandler(options =>
+        {
+            options.TotalRequestTimeout.Timeout = timeout;
+            options.AttemptTimeout.Timeout = timeout;
+            options.CircuitBreaker.SamplingDuration = timeout * 2;
+        });
+
+        builder.ConfigurePrimaryHttpMessageHandler(static () => new SocketsHttpHandler
+        {
+            AutomaticDecompression = System.Net.DecompressionMethods.GZip
+                | System.Net.DecompressionMethods.Deflate
+                | System.Net.DecompressionMethods.Brotli
+        });
     }
 }

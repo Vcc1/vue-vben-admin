@@ -45,7 +45,11 @@ public sealed partial class OTARoomBuilderWorker
             {
                 using var scope = _scopeFactory.CreateScope();
                 var repository = scope.ServiceProvider.GetRequiredService<IOtaRoomBuilderRepository>();
-                var batch = await repository.LoadIncrementalMtHotelCodesAsync(cursor, options.IncrementalBatchSize, cancellationToken);
+                var batch = await repository.LoadIncrementalMtHotelCodesAsync(
+                    cursor,
+                    options.IncrementalBatchSize,
+                    options.GetEnabledSupIds(),
+                    cancellationToken);
                 cursor = batch.NextCursor ?? cursor;
                 var distinctHotelCodes = batch.HotelCodes
                     .Where(static code => !string.IsNullOrWhiteSpace(code))

@@ -21,6 +21,7 @@ public sealed class OtaRoomBuilderRepository : IOtaRoomBuilderRepository
     public async Task<OtaRoomBuilderIncrementalBatch> LoadIncrementalMtHotelCodesAsync(
         OtaRoomBuilderIncrementalCursor? cursor,
         int batchSize,
+        IReadOnlyCollection<int> enabledSupIds,
         CancellationToken cancellationToken)
     {
         _dbContext.Database.SetCommandTimeout(TimeSpan.FromMinutes(3));
@@ -28,13 +29,14 @@ public sealed class OtaRoomBuilderRepository : IOtaRoomBuilderRepository
         var cursorId = cursor?.LastId ?? 0;
         var uniqueHotelTarget = Math.Max(1, batchSize);
         var take = Math.Max(uniqueHotelTarget, uniqueHotelTarget * 5);
+        var supIdFilter = BuildSupIdFilter(enabledSupIds);
         var sql = """
     SELECT TOP (@Take)
         a.MTHotelCode,
         a.LastUpdate_Date AS LastUpdateDate,
         a.Id
     FROM dbo.SupRoomInfo a
-    WHERE a.SupId IN (51, 32, 1, 75)
+    WHERE a.SupId IN ({0})
       AND a.MTHotelCode IS NOT NULL
       AND LTRIM(RTRIM(a.MTHotelCode)) <> ''
       AND
@@ -48,6 +50,7 @@ public sealed class OtaRoomBuilderRepository : IOtaRoomBuilderRepository
       )
     ORDER BY a.LastUpdate_Date ASC, a.Id ASC;
     """;
+        sql = string.Format(sql, supIdFilter);
 
         var parameters = new[]
         {   new SqlParameter("@Take", SqlDbType.Int){Value = take},
@@ -78,13 +81,15 @@ public sealed class OtaRoomBuilderRepository : IOtaRoomBuilderRepository
 
     public async Task<IReadOnlyList<string>> LoadMtHotelCodesAsync(
         int lastDaysOffset,
+        IReadOnlyCollection<int> enabledSupIds,
         CancellationToken cancellationToken)
     {
         _dbContext.Database.SetCommandTimeout(TimeSpan.FromMinutes(3));
+        var supIdFilter = BuildSupIdFilter(enabledSupIds);
         var sql = $"""
             SELECT DISTINCT a.MTHotelCode
             FROM SupRoomInfo a
-            WHERE a.SupId IN (51,32,1,75)
+            WHERE a.SupId IN ({supIdFilter})
               AND a.LastUpdate_Date >= DATEADD(DAY, {lastDaysOffset}, GETDATE())
               AND a.MTHotelCode IS NOT NULL
               AND LTRIM(RTRIM(a.MTHotelCode)) <> ''
@@ -98,11 +103,13 @@ public sealed class OtaRoomBuilderRepository : IOtaRoomBuilderRepository
 
     public async Task<IReadOnlyList<SupRoomInfo>> LoadPreferredSupplierRoomsAsync(
         IReadOnlyCollection<string> hotelCodes,
+        IReadOnlyCollection<int> enabledSupIds,
         int? lastDaysOffset,
         CancellationToken cancellationToken)
     {
         _dbContext.Database.SetCommandTimeout(TimeSpan.FromMinutes(3));
         var hotelCodeList = string.Join(",", hotelCodes.Select(static code => $"'{code.Replace("'", "''")}'"));
+        var supIdFilter = BuildSupIdFilter(enabledSupIds);
         var lastDaysFilter = lastDaysOffset.HasValue
             ? $" AND a.LastUpdate_Date >= DATEADD(DAY, {lastDaysOffset.Value}, GETDATE())"
             : string.Empty;
@@ -110,7 +117,7 @@ public sealed class OtaRoomBuilderRepository : IOtaRoomBuilderRepository
             SELECT a.*
             FROM SupRoomInfo a
             WHERE a.MTHotelCode IN ({hotelCodeList})
-              AND a.SupId IN (51,32,1,75)
+              AND a.SupId IN ({supIdFilter})
               {lastDaysFilter};
             """;
 
@@ -140,6 +147,16 @@ public sealed class OtaRoomBuilderRepository : IOtaRoomBuilderRepository
         CancellationToken cancellationToken)
     {
         return _dbContext.BulkInsertAsync(rooms.ToList(), cancellationToken: cancellationToken);
+    }
+
+    static string BuildSupIdFilter(IReadOnlyCollection<int> enabledSupIds)
+    {
+        var supIds = enabledSupIds
+            .Where(static supId => supId > 0)
+            .Distinct()
+            .ToArray();
+
+        return string.Join(",", supIds.Length == 0 ? [51, 32] : supIds);
     }
 
     sealed class IncrementalHotelRow

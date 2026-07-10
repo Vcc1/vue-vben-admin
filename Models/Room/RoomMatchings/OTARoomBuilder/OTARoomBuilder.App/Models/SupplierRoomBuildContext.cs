@@ -9,6 +9,8 @@ public sealed class SupplierRoomBuildContext
 
     public RoomContext? RoomContext { get; init; }
 
+    public IDictionary<string, object?>? Items { get; init; }
+
     public string? MTHotelCode => SupplierRoom.MTHotelCode;
 
     public string? SHotelCode => SupplierRoom.SHotelCode;

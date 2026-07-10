@@ -8,14 +8,17 @@ public interface IOtaRoomBuilderRepository
     Task<OtaRoomBuilderIncrementalBatch> LoadIncrementalMtHotelCodesAsync(
         OtaRoomBuilderIncrementalCursor? cursor,
         int batchSize,
+        IReadOnlyCollection<int> enabledSupIds,
         CancellationToken cancellationToken);
 
     Task<IReadOnlyList<string>> LoadMtHotelCodesAsync(
         int lastDaysOffset,
+        IReadOnlyCollection<int> enabledSupIds,
         CancellationToken cancellationToken);
 
     Task<IReadOnlyList<SupRoomInfo>> LoadPreferredSupplierRoomsAsync(
         IReadOnlyCollection<string> hotelCodes,
+        IReadOnlyCollection<int> enabledSupIds,
         int? lastDaysOffset,
         CancellationToken cancellationToken);
 

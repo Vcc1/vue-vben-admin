@@ -42,15 +42,7 @@ public sealed class EanSupplierRoomBuildPlugin : BaseSupplierRoomBuildPlugin<Ful
             return SupplierRoomEnrichmentResult.NotSupported;
         }
 
-        var result = await _supplierStaticDataService.GetHotelAndRoomsBySupplierHotelCodeAsync(
-            SupId,
-            context.SHotelCode!,
-            new SupplierStaticDataRequestOptions
-            {
-                ForceRefresh = false,
-                MTHotelCode = context.MTHotelCode
-            },
-            cancellationToken);
+        var result = await LoadHotelAndRoomsAsync(context, cancellationToken);
 
         if (!result.Success || result.Data is null)
         {
@@ -105,5 +97,41 @@ public sealed class EanSupplierRoomBuildPlugin : BaseSupplierRoomBuildPlugin<Ful
             CacheRoomCode = context.SRoomCode,
             PayloadFormat = "json"
         };
+    }
+
+    async Task<SupplierStaticDataResult<SupplierStaticHotelWithRoomsDto>> LoadHotelAndRoomsAsync(
+        SupplierRoomBuildContext context,
+        CancellationToken cancellationToken)
+    {
+        var cacheKey = BuildStaticDataCacheKey(context);
+        if (context.Items is not null
+            && context.Items.TryGetValue(cacheKey, out var cached)
+            && cached is SupplierStaticDataResult<SupplierStaticHotelWithRoomsDto> cachedResult)
+        {
+            return cachedResult;
+        }
+
+        var result = await _supplierStaticDataService.GetHotelAndRoomsBySupplierHotelCodeAsync(
+            SupId,
+            context.SHotelCode!,
+            new SupplierStaticDataRequestOptions
+            {
+                ForceRefresh = false,
+                MTHotelCode = context.MTHotelCode
+            },
+            cancellationToken);
+
+        context.Items?.TryAdd(cacheKey, result);
+        return result;
+    }
+
+    static string BuildStaticDataCacheKey(SupplierRoomBuildContext context)
+    {
+        return string.Join(
+            '|',
+            "supplier-static-data",
+            context.SupplierRoom.SupId,
+            context.SHotelCode?.Trim() ?? string.Empty,
+            context.MTHotelCode?.Trim() ?? string.Empty);
     }
 }

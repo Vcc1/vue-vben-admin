@@ -1,5 +1,6 @@
 using System.Diagnostics;
 using System.Diagnostics.Metrics;
+using Microsoft.Extensions.Options;
 using VBase.AppMetrics;
 
 namespace OTARoomBuilder;
@@ -7,6 +8,32 @@ namespace OTARoomBuilder;
 public sealed class OTARoomBuilderMetrics
 {
     public const string ScopeName = "OTARoomBuilder";
+
+    static readonly string[] OutputModes = ["create", "post", "bulk", "database"];
+    static readonly string[] SkipReasons =
+    [
+        "already_matched",
+        "max_adt_missing",
+        "no_new_rooms",
+        "plugin_missing",
+        "supplier_rooms_empty"
+    ];
+    static readonly string[] ErrorStages =
+    [
+        "FullSync",
+        "Incremental",
+        "create_stage",
+        "incremental_scan",
+        "match_stage",
+        "post_room"
+    ];
+    static readonly string[] StaticDataRoomMatchOutcomes =
+    [
+        "matched",
+        "max_occupancy_missing",
+        "room_code_not_found",
+        "unknown"
+    ];
 
     readonly Counter<long> _runCounter;
     readonly Counter<long> _hotelCounter;
@@ -23,7 +50,9 @@ public sealed class OTARoomBuilderMetrics
     long _createdHotels;
     long _lastRunCreated;
 
-    public OTARoomBuilderMetrics(IMetricsFactory metricsFactory)
+    public OTARoomBuilderMetrics(
+        IMetricsFactory metricsFactory,
+        IOptions<OTARoomBuilderOptions> options)
     {
         var meter = metricsFactory.Create(ScopeName).Meter;
         _runCounter = meter.CreateCounter<long>("ota_room_builder_run_total", unit: "runs");
@@ -36,6 +65,8 @@ public sealed class OTARoomBuilderMetrics
         _pendingHotelsGauge = meter.CreateObservableGauge("ota_room_builder_pending_hotels", () => Interlocked.Read(ref _pendingHotels), unit: "hotels");
         _createdHotelsGauge = meter.CreateObservableGauge("ota_room_builder_created_hotels", () => Interlocked.Read(ref _createdHotels), unit: "rooms");
         _lastRunCreatedGauge = meter.CreateObservableGauge("ota_room_builder_last_run_created", () => Interlocked.Read(ref _lastRunCreated), unit: "rooms");
+
+        InitializeDefaults(options.Value.GetEnabledSupIds());
     }
 
     public IDisposable TrackRun()
@@ -109,6 +140,46 @@ public sealed class OTARoomBuilderMetrics
         Interlocked.Exchange(ref _pendingHotels, 0);
         Interlocked.Exchange(ref _createdHotels, 0);
         Interlocked.Exchange(ref _lastRunCreated, 0);
+    }
+
+    void InitializeDefaults(IReadOnlyList<int> enabledSupIds)
+    {
+        _runCounter.Add(0);
+        _hotelCounter.Add(0);
+        _durationMs.Record(0);
+
+        foreach (var outputMode in OutputModes)
+        {
+            _createdCounter.Add(0, Tag("output_mode", outputMode));
+        }
+
+        foreach (var reason in SkipReasons)
+        {
+            _skippedCounter.Add(0, Tag("reason", reason));
+        }
+
+        foreach (var stage in ErrorStages)
+        {
+            var stageTag = Tag("stage", stage);
+            _errorCounter.Add(0, stageTag);
+            Telemetry.Errors.Add(0, stageTag);
+        }
+
+        foreach (var supId in enabledSupIds)
+        {
+            foreach (var outcome in StaticDataRoomMatchOutcomes)
+            {
+                _staticDataRoomMatchCounter.Add(
+                    0,
+                    Tag("sup_id", supId.ToString()),
+                    Tag("outcome", outcome));
+            }
+        }
+    }
+
+    static KeyValuePair<string, object?> Tag(string key, string value)
+    {
+        return new KeyValuePair<string, object?>(key, value);
     }
 
     private sealed class DelegatingDisposable(Action dispose) : IDisposable
