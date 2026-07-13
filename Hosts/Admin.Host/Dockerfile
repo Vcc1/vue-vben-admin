@@ -12,10 +12,10 @@ EXPOSE 8081
 FROM mcr.microsoft.com/dotnet/sdk:10.0 AS build
 ARG BUILD_CONFIGURATION=Release
 WORKDIR /src
-COPY ["Admin.Host/Admin.Host.csproj", "Admin.Host/"]
-RUN dotnet restore "./Admin.Host/Admin.Host.csproj"
+COPY ["Hosts/Admin.Host/Admin.Host.csproj", "Hosts/Admin.Host/"]
+RUN dotnet restore "./Hosts/Admin.Host/Admin.Host.csproj"
 COPY . .
-WORKDIR "/src/Admin.Host"
+WORKDIR "/src/Hosts/Admin.Host"
 RUN dotnet build "./Admin.Host.csproj" -c $BUILD_CONFIGURATION -o /app/build
 
 # 此阶段用于发布要复制到最终阶段的服务项目

@@ -4,7 +4,7 @@
     <Project Path="BaseFrameworks/VBaseFramework.ServiceDefaults/VBaseFramework.ServiceDefaults.csproj" Id="4535a6ed-2396-4699-a879-75bad01832ea" />
   </Folder>
   <Folder Name="/Hosts/">
-    <Project Path="Admin.Host/Admin.Host.csproj" Id="efe4532a-26b4-4b1b-af05-b51a0b1f4759" />
+    <Project Path="Hosts/Admin.Host/Admin.Host.csproj" Id="efe4532a-26b4-4b1b-af05-b51a0b1f4759" />
     <Project Path="Hosts/Tests.Host/Tests.Host.csproj" Id="2d9a328f-7b22-4c7e-809d-be634a966a19" />
   </Folder>
   <Folder Name="/Models/" />
