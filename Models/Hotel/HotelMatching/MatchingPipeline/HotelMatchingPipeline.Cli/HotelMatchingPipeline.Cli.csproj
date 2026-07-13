@@ -1,0 +1,26 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <RootNamespace>HotelMatchingPipeline.Cli</RootNamespace>
+    <AssemblyName>HotelMatchingPipeline.Cli</AssemblyName>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net10.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <DockerDefaultTargetOS>Linux</DockerDefaultTargetOS>
+    <DockerfileContext>..\..\..\..\..\..\MengtuV</DockerfileContext>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.VisualStudio.Azure.Containers.Tools.Targets" Version="1.23.0" />
+    <PackageReference Include="VBase.AppMetrics" Version="1.0.8" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\..\..\..\BaseFrameworks\VBaseFramework.Core\VBaseFramework.Core.csproj" />
+    <ProjectReference Include="..\..\..\..\..\BaseFrameworks\VBaseFramework.ServiceDefaults\VBaseFramework.ServiceDefaults.csproj" />
+    <ProjectReference Include="..\HotelMatchingPipeline.App\HotelMatchingPipeline.App.csproj" />
+    <ProjectReference Include="..\HotelMatchingPipeline.Infra\HotelMatchingPipeline.Infra.csproj" />
+  </ItemGroup>
+
+</Project>

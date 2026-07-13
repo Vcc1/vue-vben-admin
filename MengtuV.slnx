@@ -3,16 +3,27 @@
     <Project Path="BaseFrameworks/VBaseFramework.Core/VBaseFramework.Core.csproj" />
     <Project Path="BaseFrameworks/VBaseFramework.ServiceDefaults/VBaseFramework.ServiceDefaults.csproj" Id="4535a6ed-2396-4699-a879-75bad01832ea" />
   </Folder>
-  <Folder Name="/Hosts/" />
+  <Folder Name="/Hosts/">
+    <Project Path="Admin.Host/Admin.Host.csproj" Id="efe4532a-26b4-4b1b-af05-b51a0b1f4759" />
+    <Project Path="Hosts/Tests.Host/Tests.Host.csproj" Id="2d9a328f-7b22-4c7e-809d-be634a966a19" />
+  </Folder>
   <Folder Name="/Models/" />
   <Folder Name="/Models/0.Base/" />
   <Folder Name="/Models/0.Base/Shared/">
     <Project Path="Models/Base/Shared/OTA.Domain/OTA.Domain.csproj" Id="6fee78ca-3838-4c9d-b2c0-e154a16ae5e5" />
   </Folder>
   <Folder Name="/Models/1.Hotel/" />
+  <Folder Name="/Models/1.Hotel/HotelMatching/" />
+  <Folder Name="/Models/1.Hotel/HotelMatching/MatchingPipeline/">
+    <Project Path="Models/Hotel/HotelMatching/MatchingPipeline/HotelMatchingPipeline.Api/HotelMatchingPipeline.Api.csproj" />
+    <Project Path="Models/Hotel/HotelMatching/MatchingPipeline/HotelMatchingPipeline.App/HotelMatchingPipeline.App.csproj" />
+    <Project Path="Models/Hotel/HotelMatching/MatchingPipeline/HotelMatchingPipeline.Cli/HotelMatchingPipeline.Cli.csproj" />
+    <Project Path="Models/Hotel/HotelMatching/MatchingPipeline/HotelMatchingPipeline.Domain/HotelMatchingPipeline.Domain.csproj" />
+    <Project Path="Models/Hotel/HotelMatching/MatchingPipeline/HotelMatchingPipeline.Domain/Tests/HotelMatchingPipeline.Domain.Tests.csproj" />
+    <Project Path="Models/Hotel/HotelMatching/MatchingPipeline/HotelMatchingPipeline.Infra/HotelMatchingPipeline.Infra.csproj" />
+  </Folder>
   <Folder Name="/Models/1.Hotel/SupplierStaticData/">
     <Project Path="Models/Hotel/SupplierStaticData/SupplierStaticData.App/SupplierStaticData.App.csproj" />
-    <Project Path="Models/Hotel/SupplierStaticData/SupplierStaticDataAppTester.Web/SupplierStaticDataAppTester.Web.csproj" />
   </Folder>
   <Folder Name="/Models/2.Room/" />
   <Folder Name="/Models/2.Room/RoomDataProcessings/" />

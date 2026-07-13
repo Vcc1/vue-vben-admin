@@ -2,7 +2,7 @@ using RoomMatch.Core.RoomAnalysis;
 using RoomMatch.Core.RoomDictionary;
 using OTADomain.Matchings;
 
-namespace SupplierStaticDataApp.Contracts;
+namespace Tests.Host.DebugTools.Contracts;
 
 internal sealed class RoomMatchEvaluateRequest
 {

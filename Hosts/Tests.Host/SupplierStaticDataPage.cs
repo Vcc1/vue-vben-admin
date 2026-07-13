@@ -1,4 +1,4 @@
-namespace SupplierStaticDataApp;
+namespace Tests.Host.DebugTools;
 
 internal static class SupplierStaticDataPage
 {

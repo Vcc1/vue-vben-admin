@@ -7,13 +7,18 @@ using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Http.Json;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
+using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using Infrastructure.Sql.RoomMapping;
-using SupplierStaticDataApp;
-using SupplierStaticDataApp.Contracts;
+using NLog.Extensions.Logging;
 using System.Text.Encodings.Web;
 using System.Text.Json;
-using VBaseFramework.ServiceDefaults;
+using SupplierStaticDataApp;
+using SupplierStaticDataApp.Contracts;
+using Tests.Host.DebugTools;
+using Tests.Host.DebugTools.Contracts;
+using VBaseFramework.Core.EF.Log;
+using VBaseFramework.Core.NLog;
 using RoomMatch.Core;
 using RoomMatch.Core.RoomAnalysis;
 using RoomMatch.Core.RoomDictionary;
@@ -25,48 +30,55 @@ using FromServicesAttribute = Microsoft.AspNetCore.Mvc.FromServicesAttribute;
 
 Directory.SetCurrentDirectory(AppContext.BaseDirectory);
 
-var host = Serve.Run(new RunOptions
-{
-    Args = args,
-    ServiceName = "MT-SupplierStaticDataAppTester",
-    EnableWeb = true
-}, (services, configuration) =>
-{
-    services.AddHealthChecks();
-    services.AddConnectmateDatabaseSerializer<ConnectmateFallbackSerializer>();
-    services.AddConnectmateRemoteConfiguration(configuration);
-    services.Configure<JsonOptions>(options =>
-    {
-        var json = options.SerializerOptions;
-        json.PropertyNamingPolicy = JsonNamingPolicy.CamelCase;
-        json.DictionaryKeyPolicy = JsonNamingPolicy.CamelCase;
-        json.PropertyNameCaseInsensitive = true;
-        json.WriteIndented = true;
-        json.Encoder = JavaScriptEncoder.UnsafeRelaxedJsonEscaping;
-    });
+var builder = WebApplication.CreateBuilder(args);
+builder.Logging.ClearProviders();
+builder.Logging.AddNLog("Configs/nlog.config");
 
-    services.AddBusiness([typeof(RoomMappingDbContext).Assembly]);
-    services.AddSupplierStaticDataInfrastructure(configuration);
-    services.AddRoomMatchInfrastructure(configuration);
-    services.AddSingleton<IRoomWordDictionary, RoomDictionary>();
-    services.AddSingleton<OfficialDataSource>();
-    services.AddSingleton<ContrastOfficialDataSource>();
-    services.AddSingleton<IRoomAnalyzer, RoomAnalyzer>();
-    services.AddSingleton<RoomAnalyzer>(static provider => (RoomAnalyzer)provider.GetRequiredService<IRoomAnalyzer>());
-    services.AddSingleton<StrictEqualMatcher>();
-    services.AddSingleton<FullSequenceMatcher>();
-}, app =>
+builder.Services.AddHttpClient();
+builder.Services.AddLogging();
+builder.Services.AddHealthChecks();
+builder.Services.AddScoped<EFLoggerProvider>();
+builder.Services.AddScoped<ILogContextService, LogContextService>();
+builder.Services.AddConnectmateDatabaseSerializer<ConnectmateFallbackSerializer>();
+builder.Services.AddConnectmateRemoteConfiguration(builder.Configuration);
+builder.Services.Configure<JsonOptions>(options =>
 {
-    app.MapGet("/", () => Results.Redirect("/test"));
-    app.MapGet("/test", () => Results.Content(TestShellPage.Html, "text/html; charset=utf-8"));
-    app.MapGet("/supplier-static-data", () => Results.Content(SupplierStaticDataPage.Html, "text/html; charset=utf-8"));
-    app.MapGet("/room-match", () => Results.Content(RoomMatchPage.Html, "text/html; charset=utf-8"));
-
-    app.MapPost("/api/query", ExecuteQueryAsync);
-    app.MapPost("/api/room-match/evaluate", EvaluateRoomMatchAsync);
+    var json = options.SerializerOptions;
+    json.PropertyNamingPolicy = JsonNamingPolicy.CamelCase;
+    json.DictionaryKeyPolicy = JsonNamingPolicy.CamelCase;
+    json.PropertyNameCaseInsensitive = true;
+    json.WriteIndented = true;
+    json.Encoder = JavaScriptEncoder.UnsafeRelaxedJsonEscaping;
 });
 
-await host.RunAsync();
+builder.Services.AddBusiness([typeof(RoomMappingDbContext).Assembly]);
+builder.Services.AddSupplierStaticDataInfrastructure(builder.Configuration);
+builder.Services.AddRoomMatchInfrastructure(builder.Configuration);
+builder.Services.AddSingleton<IRoomWordDictionary, RoomDictionary>();
+builder.Services.AddSingleton<OfficialDataSource>();
+builder.Services.AddSingleton<ContrastOfficialDataSource>();
+builder.Services.AddSingleton<IRoomAnalyzer, RoomAnalyzer>();
+builder.Services.AddSingleton<RoomAnalyzer>(static provider => (RoomAnalyzer)provider.GetRequiredService<IRoomAnalyzer>());
+builder.Services.AddSingleton<StrictEqualMatcher>();
+builder.Services.AddSingleton<FullSequenceMatcher>();
+
+var app = builder.Build();
+
+app.MapGet("/", () => Results.Content(
+    DebugToolShellPage.Render("房型匹配调试", "/room-match", RoomMatchPage.Html),
+    "text/html; charset=utf-8"));
+app.MapGet("/supplier-static-data", () => Results.Content(
+    DebugToolShellPage.Render("静态数据查询调试", "/supplier-static-data", SupplierStaticDataPage.Html),
+    "text/html; charset=utf-8"));
+app.MapGet("/room-match", () => Results.Content(
+    DebugToolShellPage.Render("房型匹配调试", "/room-match", RoomMatchPage.Html),
+    "text/html; charset=utf-8"));
+
+app.MapPost("/api/query", ExecuteQueryAsync);
+app.MapPost("/api/room-match/evaluate", EvaluateRoomMatchAsync);
+app.MapHealthChecks("/alive");
+
+await app.RunAsync();
 
 static async Task<IResult> ExecuteQueryAsync(
     SupplierStaticDataQueryRequest request,
