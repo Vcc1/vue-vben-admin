@@ -35,7 +35,7 @@ public sealed class OtaRoomBuilderRepository : IOtaRoomBuilderRepository
         a.MTHotelCode,
         a.LastUpdate_Date AS LastUpdateDate,
         a.Id
-    FROM dbo.SupRoomInfo a
+    FROM dbo.SupRoomInfo AS a WITH (NOLOCK)
     WHERE a.SupId IN ({0})
       AND a.MTHotelCode IS NOT NULL
       AND LTRIM(RTRIM(a.MTHotelCode)) <> ''
@@ -88,7 +88,7 @@ public sealed class OtaRoomBuilderRepository : IOtaRoomBuilderRepository
         var supIdFilter = BuildSupIdFilter(enabledSupIds);
         var sql = $"""
             SELECT DISTINCT a.MTHotelCode
-            FROM SupRoomInfo a
+            FROM dbo.SupRoomInfo AS a WITH (NOLOCK)
             WHERE a.SupId IN ({supIdFilter})
               AND a.LastUpdate_Date >= DATEADD(DAY, {lastDaysOffset}, GETDATE())
               AND a.MTHotelCode IS NOT NULL
@@ -108,38 +108,88 @@ public sealed class OtaRoomBuilderRepository : IOtaRoomBuilderRepository
         CancellationToken cancellationToken)
     {
         _dbContext.Database.SetCommandTimeout(TimeSpan.FromMinutes(3));
-        var hotelCodeList = string.Join(",", hotelCodes.Select(static code => $"'{code.Replace("'", "''")}'"));
+        var hotelCodeParameter = CreateHotelCodesParameter(hotelCodes);
+        if (hotelCodeParameter is null)
+        {
+            return [];
+        }
+
         var supIdFilter = BuildSupIdFilter(enabledSupIds);
         var lastDaysFilter = lastDaysOffset.HasValue
             ? $" AND a.LastUpdate_Date >= DATEADD(DAY, {lastDaysOffset.Value}, GETDATE())"
             : string.Empty;
         var sql = $"""
-            SELECT a.*
-            FROM SupRoomInfo a
-            WHERE a.MTHotelCode IN ({hotelCodeList})
+            SELECT
+                a.Id,
+                a.SupId,
+                a.SHotelCode,
+                a.SRoomCode,
+                a.MTHotelCode,
+                a.SRoomName_CN AS SRoomNameCN,
+                a.SRoomName_EN AS SRoomNameEN,
+                a.SmokeType,
+                a.MaxAdt
+            FROM dbo.SupRoomInfo AS a WITH (NOLOCK)
+            WHERE a.MTHotelCode IN (SELECT Value FROM @MTHotelCodes)
               AND a.SupId IN ({supIdFilter})
-              {lastDaysFilter};
+              {lastDaysFilter}
+            OPTION (RECOMPILE);
             """;
 
-        return await _dbContext.SupRoomInfos.FromSqlRaw(sql).ToListAsync(cancellationToken);
+        var rows = await _dbContext.Database
+            .SqlQueryRaw<SupplierRoomRow>(sql, hotelCodeParameter)
+            .ToListAsync(cancellationToken);
+
+        return rows.Select(static row => new SupRoomInfo
+        {
+            Id = row.Id,
+            SupId = row.SupId,
+            SHotelCode = row.SHotelCode,
+            SRoomCode = row.SRoomCode,
+            MTHotelCode = row.MTHotelCode,
+            SRoomNameCN = row.SRoomNameCN,
+            SRoomNameEN = row.SRoomNameEN,
+            SmokeType = row.SmokeType,
+            MaxAdt = row.MaxAdt,
+            BedInfoKey = string.Empty,
+            BedInfo = string.Empty
+        }).ToList();
     }
 
     public async Task<IReadOnlyList<OTARoomInfo>> LoadOtaRoomsAsync(
         IReadOnlyCollection<string> hotelCodes,
         CancellationToken cancellationToken)
     {
-        return await _dbContext.OTARoomInfos
-            .Where(room => hotelCodes.Contains(room.MTHotelCode))
-            .ToListAsync(cancellationToken);
-    }
+        var hotelCodeParameter = CreateHotelCodesParameter(hotelCodes);
+        if (hotelCodeParameter is null)
+        {
+            return [];
+        }
 
-    public async Task<IReadOnlyList<RoomMap>> LoadRoomMapsAsync(
-        IReadOnlyCollection<string> hotelCodes,
-        CancellationToken cancellationToken)
-    {
-        return await _dbContext.RoomMaps
-            .Where(room => hotelCodes.Contains(room.MTHotelCode))
+        var sql = """
+            SELECT
+                a.Id,
+                a.MTHotelCode,
+                a.RoomNameCN,
+                a.RoomNameEN
+            FROM dbo.OTARoomInfo AS a WITH (NOLOCK)
+            WHERE a.MTHotelCode IN (SELECT Value FROM @MTHotelCodes)
+            OPTION (RECOMPILE);
+            """;
+
+        var rows = await _dbContext.Database
+            .SqlQueryRaw<OtaRoomRow>(sql, hotelCodeParameter)
             .ToListAsync(cancellationToken);
+
+        return rows.Select(static row => new OTARoomInfo
+        {
+            Id = row.Id,
+            MTHotelCode = row.MTHotelCode,
+            RoomNameCN = row.RoomNameCN,
+            RoomNameEN = row.RoomNameEN,
+            BedInfo = string.Empty,
+            DefaultWord = string.Empty
+        }).ToList();
     }
 
     public Task BulkInsertOtaRoomInfoPresAsync(
@@ -159,6 +209,33 @@ public sealed class OtaRoomBuilderRepository : IOtaRoomBuilderRepository
         return string.Join(",", supIds.Length == 0 ? [51, 32] : supIds);
     }
 
+    static SqlParameter? CreateHotelCodesParameter(IReadOnlyCollection<string> hotelCodes)
+    {
+        var normalizedCodes = hotelCodes
+            .Where(static code => !string.IsNullOrWhiteSpace(code))
+            .Select(static code => code.Trim())
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToArray();
+
+        if (normalizedCodes.Length == 0)
+        {
+            return null;
+        }
+
+        var table = new DataTable();
+        table.Columns.Add("Value", typeof(string));
+        foreach (var code in normalizedCodes)
+        {
+            table.Rows.Add(code);
+        }
+
+        return new SqlParameter("@MTHotelCodes", SqlDbType.Structured)
+        {
+            TypeName = "dbo.StringList",
+            Value = table
+        };
+    }
+
     sealed class IncrementalHotelRow
     {
         public string MTHotelCode { get; set; } = string.Empty;
@@ -166,5 +243,37 @@ public sealed class OtaRoomBuilderRepository : IOtaRoomBuilderRepository
         public DateTime LastUpdateDate { get; set; }
 
         public int Id { get; set; }
+    }
+
+    sealed class SupplierRoomRow
+    {
+        public int Id { get; set; }
+
+        public int SupId { get; set; }
+
+        public string SHotelCode { get; set; } = string.Empty;
+
+        public string SRoomCode { get; set; } = string.Empty;
+
+        public string MTHotelCode { get; set; } = string.Empty;
+
+        public string SRoomNameCN { get; set; } = string.Empty;
+
+        public string? SRoomNameEN { get; set; }
+
+        public int? SmokeType { get; set; }
+
+        public int? MaxAdt { get; set; }
+    }
+
+    sealed class OtaRoomRow
+    {
+        public int Id { get; set; }
+
+        public string MTHotelCode { get; set; } = string.Empty;
+
+        public string RoomNameCN { get; set; } = string.Empty;
+
+        public string? RoomNameEN { get; set; }
     }
 }

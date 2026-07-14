@@ -47,7 +47,23 @@ public sealed class StaticDataSupplierRoomBuildPlugin : BaseSupplierRoomBuildPlu
             return SupplierRoomEnrichmentResult.NotSupported;
         }
 
-        var result = await LoadHotelAndRoomsAsync(context, cancellationToken);
+        SupplierStaticDataResult<SupplierStaticHotelWithRoomsDto> result;
+        try
+        {
+            result = await LoadHotelAndRoomsAsync(context, cancellationToken);
+        }
+        catch (Exception ex) when (!cancellationToken.IsCancellationRequested)
+        {
+            _metrics.RecordStaticDataRoomMatch(SupId, "lookup_failed");
+            _logger.LogWarning(
+                ex,
+                "Failed to load supplier static data for MaxAdt enrichment because provider request failed. SupId={SupId}, MTHotelCode={MTHotelCode}, SHotelCode={SHotelCode}, SRoomCode={SRoomCode}",
+                SupId,
+                context.MTHotelCode,
+                context.SHotelCode,
+                context.SRoomCode);
+            return SupplierRoomEnrichmentResult.NotSupported;
+        }
 
         if (!result.Success || result.Data is null)
         {

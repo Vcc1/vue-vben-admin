@@ -26,10 +26,6 @@ public interface IOtaRoomBuilderRepository
         IReadOnlyCollection<string> hotelCodes,
         CancellationToken cancellationToken);
 
-    Task<IReadOnlyList<RoomMap>> LoadRoomMapsAsync(
-        IReadOnlyCollection<string> hotelCodes,
-        CancellationToken cancellationToken);
-
     Task BulkInsertOtaRoomInfoPresAsync(
         IReadOnlyList<OTARoomInfoPre> rooms,
         CancellationToken cancellationToken);

@@ -1,6 +1,7 @@
 using Microsoft.Extensions.Logging;
 using SupplierStaticDataApp;
 using SupplierStaticDataApp.Contracts;
+using System.Globalization;
 using System.Text.Encodings.Web;
 using System.Text.Json;
 using System.Text.Json.Nodes;
@@ -312,9 +313,9 @@ public sealed class AgodaSupplierStaticDataProvider : ISupplierStaticDataProvide
 
         var area = new SupplierStaticGeoAdministrativeAreaDto
         {
-            CountryCode = hotel.CountryId,
-            CityCode = hotel.CityId,
-            DistrictCode = hotel.AreaId
+            CountryCode = hotel.CountryId?.ToString(CultureInfo.InvariantCulture),
+            CityCode = hotel.CityId?.ToString(CultureInfo.InvariantCulture),
+            DistrictCode = hotel.AreaId?.ToString(CultureInfo.InvariantCulture)
         };
 
         return new[] { area.CountryCode, area.CityCode, area.DistrictCode }
@@ -337,16 +338,16 @@ public sealed class AgodaHotelDetailResponse
 
 public sealed class AgodaHotelDetail
 {
-    [JsonPropertyName("hotel_id")]
-    public string HotelId { get; set; } = string.Empty;
+    [JsonPropertyName("hotelId")]
+    public long HotelId { get; set; }
 
-    [JsonPropertyName("hotel_name")]
+    [JsonPropertyName("hotelName")]
     public string HotelName { get; set; } = string.Empty;
 
-    [JsonPropertyName("translated_name")]
+    [JsonPropertyName("translatedName")]
     public string TranslatedName { get; set; } = string.Empty;
 
-    [JsonPropertyName("star_rating")]
+    [JsonPropertyName("starRating")]
     public decimal? StarRating { get; set; }
 
     [JsonPropertyName("longitude")]
@@ -361,12 +362,12 @@ public sealed class AgodaHotelDetail
     [JsonPropertyName("phone")]
     public string? Phone { get; set; }
 
-    [JsonPropertyName("country_id")]
-    public string CountryId { get; set; } = string.Empty;
+    [JsonPropertyName("countryId")]
+    public long? CountryId { get; set; }
 
-    [JsonPropertyName("city_id")]
-    public string CityId { get; set; } = string.Empty;
+    [JsonPropertyName("cityId")]
+    public long? CityId { get; set; }
 
-    [JsonPropertyName("area_id")]
-    public string AreaId { get; set; } = string.Empty;
+    [JsonPropertyName("areaId")]
+    public long? AreaId { get; set; }
 }

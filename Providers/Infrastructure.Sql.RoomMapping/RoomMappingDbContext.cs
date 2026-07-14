@@ -82,6 +82,7 @@ public class RoomMappingDbContext : DbContext
     public DbSet<SupRoomInfoView> SupRoomInfoView { get; set; }
 
     public DbSet<SupHotelInfoView> SupHotelInfoViews { get; set; }
+    public DbSet<OTAHotelInfoRaw> OTAHotelInfoRaws { get; set; }
     public DbSet<SupHotelDataSource> SupHotelDataSources { get; set; }
     public DbSet<SupStaticRoomInfo> SupStaticRoomInfos { get; set; }
     public DbSet<AgodaHotelRoomSource> AgodaHotelRoomSources { get; set; }

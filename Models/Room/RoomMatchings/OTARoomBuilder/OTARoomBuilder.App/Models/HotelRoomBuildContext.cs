@@ -10,6 +10,4 @@ public sealed class HotelRoomBuildContext
     public List<SupRoomInfo> SupplierRooms { get; init; } = [];
 
     public List<OTARoomInfo> OtaRooms { get; init; } = [];
-
-    public List<RoomMap> RoomMaps { get; init; } = [];
 }

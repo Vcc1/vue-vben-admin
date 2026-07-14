@@ -103,55 +103,58 @@ public sealed class AgodaRoomListResponse
 
 public sealed class AgodaRoom
 {
-    [JsonPropertyName("hotel_id")]
-    public string HotelId { get; set; } = string.Empty;
+    [JsonPropertyName("hotelId")]
+    public long HotelId { get; set; }
 
-    [JsonPropertyName("hotel_room_type_id")]
+    [JsonPropertyName("hotelRoomtypeId")]
     public long HotelRoomTypeId { get; set; }
 
-    [JsonPropertyName("standard_caption")]
+    [JsonPropertyName("standardCaption")]
     public string StandardCaption { get; set; } = string.Empty;
 
-    [JsonPropertyName("standard_caption_translated")]
+    [JsonPropertyName("standardCaptionTranslated")]
     public string StandardCaptionTranslated { get; set; } = string.Empty;
 
-    [JsonPropertyName("max_occupancy_per_room")]
+    [JsonPropertyName("maxOccupancyPerRoom")]
     public int MaxOccupancyPerRoom { get; set; }
 
-    [JsonPropertyName("no_of_room")]
+    [JsonPropertyName("noOfRoom")]
     public int NumberOfRoom { get; set; }
 
-    [JsonPropertyName("size_of_room")]
+    [JsonPropertyName("sizeOfRoom")]
     public decimal SizeOfRoom { get; set; }
 
-    [JsonPropertyName("room_size_incl_terrace")]
-    public string RoomSizeInclTerrace { get; set; } = string.Empty;
+    [JsonPropertyName("roomSizeInclTerrace")]
+    public bool RoomSizeInclTerrace { get; set; }
 
     [JsonPropertyName("views")]
     public string Views { get; set; } = string.Empty;
 
-    [JsonPropertyName("max_extrabeds")]
+    [JsonPropertyName("maxExtrabeds")]
     public int MaxExtraBeds { get; set; }
 
-    [JsonPropertyName("max_infant_in_room")]
+    [JsonPropertyName("maxInfantInRoom")]
     public int MaxInfantInRoom { get; set; }
 
-    [JsonPropertyName("hotel_room_type_picture")]
+    [JsonPropertyName("hotelRoomtypePicture")]
     public string HotelRoomTypePicture { get; set; } = string.Empty;
 
-    [JsonPropertyName("bed_type")]
+    [JsonPropertyName("hotelRoomtypePictures")]
+    public List<string> HotelRoomTypePictures { get; set; } = [];
+
+    [JsonPropertyName("bedType")]
     public string BedType { get; set; } = string.Empty;
 
-    [JsonPropertyName("hotel_master_room_type_id")]
+    [JsonPropertyName("hotelMasterRoomtypeId")]
     public long HotelMasterRoomTypeId { get; set; }
 
-    [JsonPropertyName("hotel_room_type_alternate_name")]
+    [JsonPropertyName("hotelRoomtypeAlternateName")]
     public string HotelRoomTypeAlternateName { get; set; } = string.Empty;
 
-    [JsonPropertyName("shared_bathroom")]
-    public string SharedBathroom { get; set; } = string.Empty;
+    [JsonPropertyName("sharedBathroom")]
+    public bool SharedBathroom { get; set; }
 
-    [JsonPropertyName("smoking_nonsmoking")]
+    [JsonPropertyName("smokingNonSmokingRoom")]
     public string SmokingNonSmoking { get; set; } = string.Empty;
 
     [JsonPropertyName("gender")]

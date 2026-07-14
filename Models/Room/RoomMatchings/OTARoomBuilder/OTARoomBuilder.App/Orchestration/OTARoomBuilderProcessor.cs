@@ -135,15 +135,11 @@ public sealed class OTARoomBuilderProcessor
             lastDaysOffset,
             cancellationToken);
         var otaRooms = await _repository.LoadOtaRoomsAsync(hotelChunk, cancellationToken);
-        var roomMaps = await _repository.LoadRoomMapsAsync(hotelChunk, cancellationToken);
 
         var otaRoomLookup = otaRooms
             .GroupBy(static room => room.MTHotelCode)
             .ToDictionary(static group => group.Key, static group => group.ToList());
         var supplierRoomLookup = supplierRooms
-            .GroupBy(static room => room.MTHotelCode)
-            .ToDictionary(static group => group.Key, static group => group.ToList());
-        var roomMapLookup = roomMaps
             .GroupBy(static room => room.MTHotelCode)
             .ToDictionary(static group => group.Key, static group => group.ToList());
 
@@ -154,8 +150,7 @@ public sealed class OTARoomBuilderProcessor
             {
                 MTHotelCode = hotelCode,
                 OtaRooms = otaRoomLookup.GetValueOrDefault(hotelCode) ?? [],
-                SupplierRooms = supplierRoomLookup.GetValueOrDefault(hotelCode) ?? [],
-                RoomMaps = roomMapLookup.GetValueOrDefault(hotelCode) ?? []
+                SupplierRooms = supplierRoomLookup.GetValueOrDefault(hotelCode) ?? []
             });
         }
 
@@ -202,7 +197,6 @@ public sealed class OTARoomBuilderProcessor
         return BuildOtaRoomsAsync(
             hotel.OtaRooms,
             hotel.SupplierRooms,
-            hotel.RoomMaps,
             cancellationToken);
     }
 
@@ -217,7 +211,6 @@ public sealed class OTARoomBuilderProcessor
     async Task<List<OTARoomInfoPre>> BuildOtaRoomsAsync(
         List<OTARoomInfo> otaRoomInfos,
         List<SupRoomInfo> supplierRooms,
-        List<RoomMap> roomMaps,
         CancellationToken cancellationToken)
     {
         if (supplierRooms.Count == 0)
