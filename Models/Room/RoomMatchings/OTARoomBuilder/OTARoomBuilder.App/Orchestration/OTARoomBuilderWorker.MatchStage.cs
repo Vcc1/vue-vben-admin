@@ -11,6 +11,7 @@ public sealed partial class OTARoomBuilderWorker
         {
             while (_hotelBuildChannel.Reader.TryRead(out var item))
             {
+                _metrics.RecordQueueDequeued("hotel_build");
                 await RunMatchStageSafelyAsync(item, cancellationToken);
             }
         }
@@ -18,13 +19,20 @@ public sealed partial class OTARoomBuilderWorker
 
     async Task RunMatchStageSafelyAsync(HotelBuildQueueItem item, CancellationToken cancellationToken)
     {
+        var isHotel = item.Hotel is not null;
+        if (isHotel)
+        {
+            _metrics.RecordStageStarted("match");
+        }
+
         try
         {
             if (item.Hotel is null)
             {
                 if (item.Completion is not null)
                 {
-                    await _roomCreateChannel.Writer.WriteAsync(RoomCreateQueueItem.ForCompletion(item.Completion), cancellationToken);
+                    await _staticDataChannel.Writer.WriteAsync(StaticDataQueueItem.ForCompletion(item.Completion), cancellationToken);
+                    _metrics.RecordQueueEnqueued("static_data");
                 }
                 return;
             }
@@ -33,10 +41,11 @@ public sealed partial class OTARoomBuilderWorker
             var processor = scope.ServiceProvider.GetRequiredService<OTARoomBuilderProcessor>();
 
             cancellationToken.ThrowIfCancellationRequested();
-            var createdRooms = await processor.BuildOtaRoomsForHotelAsync(item.Hotel, cancellationToken);
-            await _roomCreateChannel.Writer.WriteAsync(
-                RoomCreateQueueItem.ForHotel(createdRooms, item.OutputMode ?? string.Empty),
+            var matchResult = await processor.MatchOtaRoomsForHotelAsync(item.Hotel, cancellationToken);
+            await _staticDataChannel.Writer.WriteAsync(
+                StaticDataQueueItem.ForHotel(matchResult, item.OutputMode ?? string.Empty),
                 cancellationToken);
+            _metrics.RecordQueueEnqueued("static_data");
         }
         catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
         {
@@ -46,8 +55,25 @@ public sealed partial class OTARoomBuilderWorker
         catch (Exception ex)
         {
             item.Completion?.TrySetException(ex);
+            if (item.Hotel is not null)
+            {
+                await _staticDataChannel.Writer.WriteAsync(
+                    StaticDataQueueItem.ForHotel(
+                        HotelRoomMatchResult.Empty(item.Hotel.MTHotelCode),
+                        item.OutputMode ?? string.Empty),
+                    cancellationToken);
+                _metrics.RecordQueueEnqueued("static_data");
+            }
             _metrics.RecordError("match_stage");
             _logger.LogError(ex, "OTARoomBuilder match stage failed");
+        }
+        finally
+        {
+            if (isHotel)
+            {
+                _metrics.RecordStageCompleted("match");
+                _metrics.RecordStageFinished("match");
+            }
         }
     }
 }

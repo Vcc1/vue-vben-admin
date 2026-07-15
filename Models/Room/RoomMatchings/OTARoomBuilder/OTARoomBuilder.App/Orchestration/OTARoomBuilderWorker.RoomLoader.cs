@@ -11,6 +11,7 @@ public sealed partial class OTARoomBuilderWorker
         {
             while (_jobChannel.Reader.TryRead(out var job))
             {
+                _metrics.RecordQueueDequeued("job");
                 await RunLoadStageSafelyAsync(job, cancellationToken);
             }
         }
@@ -60,14 +61,25 @@ public sealed partial class OTARoomBuilderWorker
 
                 foreach (var hotel in batchContext.Hotels)
                 {
-                    await _hotelBuildChannel.Writer.WriteAsync(
-                        HotelBuildQueueItem.ForHotel(hotel, batchContext.OutputMode),
-                        cancellationToken);
+                    _metrics.RecordStageStarted("load");
+                    try
+                    {
+                        await _hotelBuildChannel.Writer.WriteAsync(
+                            HotelBuildQueueItem.ForHotel(hotel, batchContext.OutputMode),
+                            cancellationToken);
+                        _metrics.RecordQueueEnqueued("hotel_build");
+                        _metrics.RecordStageCompleted("load");
+                    }
+                    finally
+                    {
+                        _metrics.RecordStageFinished("load");
+                    }
                 }
             }
 
             var completion = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
             await _hotelBuildChannel.Writer.WriteAsync(HotelBuildQueueItem.ForCompletion(completion), cancellationToken);
+            _metrics.RecordQueueEnqueued("hotel_build");
             await completion.Task.WaitAsync(cancellationToken);
 
             _logger.LogInformation(

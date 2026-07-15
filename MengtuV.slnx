@@ -13,6 +13,11 @@
     <Project Path="Models/Base/Shared/OTA.Domain/OTA.Domain.csproj" Id="6fee78ca-3838-4c9d-b2c0-e154a16ae5e5" />
   </Folder>
   <Folder Name="/Models/1.Hotel/" />
+  <Folder Name="/Models/1.Hotel/OTAHotelInfoSync/">
+    <Project Path="Models/Hotel/OTAHotelInfoSync/OTAHotelInfoSync.App/OTAHotelInfoSync.App.csproj" />
+    <Project Path="Models/Hotel/OTAHotelInfoSync/OTAHotelInfoSync.Infra/OTAHotelInfoSync.Infra.csproj" />
+    <Project Path="Models/Hotel/OTAHotelInfoSync/OTAHotelInfoSync.Cli/OTAHotelInfoSync.Cli.csproj" />
+  </Folder>
   <Folder Name="/Models/1.Hotel/HotelMatching/" />
   <Folder Name="/Models/1.Hotel/HotelMatching/MatchingPipeline/">
     <Project Path="Models/Hotel/HotelMatching/MatchingPipeline/HotelMatchingPipeline.Api/HotelMatchingPipeline.Api.csproj" />
@@ -74,6 +79,7 @@
     <Project Path="Models/Taap/ExpediaChaseRoom/ExpediaChaseRooms.Cli/ExpediaChaseRooms.Cli.csproj" />
   </Folder>
   <Folder Name="/Providers/">
+    <Project Path="Providers/Infrastructure.HTTP.OTAHotelInfo/Infrastructure.HTTP.OTAHotelInfo.csproj" />
     <Project Path="Providers/Infrastructure.HTTP.OTARoomCreate/Infrastructure.HTTP.OTARoomCreate.csproj" />
     <Project Path="Providers/Infrastructure.HTTP.Prometheus/Infrastructure.HTTP.Prometheus.csproj" />
     <Project Path="Providers/Infrastructure.HTTP.QueryPrice/Infrastructure.HTTP.QueryPrice.csproj" />

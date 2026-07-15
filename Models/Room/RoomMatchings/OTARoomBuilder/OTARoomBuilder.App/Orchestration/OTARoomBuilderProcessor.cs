@@ -194,10 +194,134 @@ public sealed class OTARoomBuilderProcessor
     {
         ArgumentNullException.ThrowIfNull(hotel);
 
-        return BuildOtaRoomsAsync(
+        return BuildOtaRoomsForHotelCoreAsync(hotel, cancellationToken);
+    }
+
+    public Task<HotelRoomMatchResult> MatchOtaRoomsForHotelAsync(
+        HotelRoomBuildContext hotel,
+        CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(hotel);
+        cancellationToken.ThrowIfCancellationRequested();
+
+        if (hotel.SupplierRooms.Count == 0)
+        {
+            _metrics.RecordSkipped(1, "supplier_rooms_empty");
+            return Task.FromResult(HotelRoomMatchResult.Empty(hotel.MTHotelCode));
+        }
+
+        var selectedPlugin = SelectPlugin(hotel.SupplierRooms);
+        if (selectedPlugin is null)
+        {
+            _metrics.RecordSkipped(1, "plugin_missing");
+            _logger.LogWarning(
+                "No supplier plugin found for hotel {MTHotelCode}. Available SupIds={SupIds}",
+                hotel.MTHotelCode,
+                string.Join(",", hotel.SupplierRooms.Select(room => room.SupId).Distinct()));
+            return Task.FromResult(HotelRoomMatchResult.Empty(hotel.MTHotelCode));
+        }
+
+        var filteredSupplierRooms = hotel.SupplierRooms
+            .Where(room => room.SupId == selectedPlugin.SupId)
+            .ToList();
+
+        return Task.FromResult(MatchFromSupplierRooms(
             hotel.OtaRooms,
-            hotel.SupplierRooms,
-            cancellationToken);
+            filteredSupplierRooms,
+            selectedPlugin,
+            cancellationToken,
+            hotel.MTHotelCode));
+    }
+
+    public async Task<List<OTARoomInfoPre>> EnrichMatchedRoomsForHotelAsync(
+        HotelRoomMatchResult matchResult,
+        CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(matchResult);
+
+        var createdRooms = new List<OTARoomInfoPre>(matchResult.Candidates.Count);
+        var enrichmentItems = new Dictionary<string, object?>(StringComparer.OrdinalIgnoreCase);
+
+        foreach (var candidate in matchResult.Candidates)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+
+            var supplierRoom = candidate.SupplierRoom;
+            var plugin = _pluginsBySupId.GetValueOrDefault(supplierRoom.SupId);
+            if ((supplierRoom.MaxAdt ?? 0) == 0)
+            {
+                if (plugin is null || !plugin.CanEnrich(supplierRoom))
+                {
+                    _metrics.RecordSkipped(1, "max_adt_missing");
+                    continue;
+                }
+
+                _logger.LogInformation(
+                    "OTARoomBuilder static data load start. Plugin={Plugin}, SupId={SupId}, MTHotelCode={MTHotelCode}, SHotelCode={SHotelCode}, SRoomCode={SRoomCode}, SupplierRoomId={SupplierRoomId}",
+                    plugin.GetType().Name,
+                    supplierRoom.SupId,
+                    supplierRoom.MTHotelCode,
+                    supplierRoom.SHotelCode,
+                    supplierRoom.SRoomCode,
+                    supplierRoom.Id);
+
+                SupplierRoomEnrichmentResult enrichmentResult;
+                try
+                {
+                    enrichmentResult = await plugin.EnrichAsync(
+                        new SupplierRoomBuildContext
+                        {
+                            SupplierRoom = supplierRoom,
+                            RoomContext = candidate.RoomContext,
+                            Items = enrichmentItems
+                        },
+                        cancellationToken);
+                }
+                catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+                {
+                    throw;
+                }
+                catch (Exception ex)
+                {
+                    _metrics.RecordStaticDataRoomMatch(supplierRoom.SupId, "lookup_failed");
+                    _logger.LogWarning(
+                        ex,
+                        "Failed to enrich supplier room with static data. SupId={SupId}, MTHotelCode={MTHotelCode}, SHotelCode={SHotelCode}, SRoomCode={SRoomCode}",
+                        supplierRoom.SupId,
+                        supplierRoom.MTHotelCode,
+                        supplierRoom.SHotelCode,
+                        supplierRoom.SRoomCode);
+                    continue;
+                }
+
+                if (enrichmentResult.Success
+                    && enrichmentResult.MaxAdt is int maxAdt
+                    && maxAdt > 0)
+                {
+                    supplierRoom.MaxAdt = maxAdt;
+                    candidate.DraftRoom.Person = (byte)Math.Min(maxAdt, byte.MaxValue);
+                    _logger.LogInformation(
+                        "OTARoomBuilder static data load success. SupId={SupId}, MTHotelCode={MTHotelCode}, SHotelCode={SHotelCode}, SRoomCode={SRoomCode}, MaxAdt={MaxAdt}",
+                        supplierRoom.SupId,
+                        supplierRoom.MTHotelCode,
+                        supplierRoom.SHotelCode,
+                        supplierRoom.SRoomCode,
+                        maxAdt);
+                }
+            }
+
+            var resolvedMaxAdt = supplierRoom.MaxAdt;
+            if (resolvedMaxAdt is not > 0)
+            {
+                _metrics.RecordSkipped(1, "max_adt_missing");
+                continue;
+            }
+
+            candidate.DraftRoom.Person = (byte)Math.Min(resolvedMaxAdt.Value, byte.MaxValue);
+            createdRooms.Add(candidate.DraftRoom);
+        }
+
+        return createdRooms;
     }
 
     public Task PersistCreatedRoomsAsync(
@@ -208,44 +332,24 @@ public sealed class OTARoomBuilderProcessor
         return PersistAsync(rooms, outputMode, cancellationToken);
     }
 
-    async Task<List<OTARoomInfoPre>> BuildOtaRoomsAsync(
-        List<OTARoomInfo> otaRoomInfos,
-        List<SupRoomInfo> supplierRooms,
+    async Task<List<OTARoomInfoPre>> BuildOtaRoomsForHotelCoreAsync(
+        HotelRoomBuildContext hotel,
         CancellationToken cancellationToken)
     {
-        if (supplierRooms.Count == 0)
-        {
-            _metrics.RecordSkipped(1, "supplier_rooms_empty");
-            return [];
-        }
-
-        var selectedPlugin = SelectPlugin(supplierRooms);
-        if (selectedPlugin is null)
-        {
-            _metrics.RecordSkipped(1, "plugin_missing");
-            _logger.LogWarning(
-                "No supplier plugin found for hotel {MTHotelCode}. Available SupIds={SupIds}",
-                supplierRooms[0].MTHotelCode,
-                string.Join(",", supplierRooms.Select(room => room.SupId).Distinct()));
-            return [];
-        }
-
-        var filteredSupplierRooms = supplierRooms
-            .Where(room => room.SupId == selectedPlugin.SupId)
-            .ToList();
-
-        return await BuildFromSupplierRoomsAsync(selectedPlugin, otaRoomInfos, filteredSupplierRooms, cancellationToken);
+        var matchResult = await MatchOtaRoomsForHotelAsync(hotel, cancellationToken);
+        return await EnrichMatchedRoomsForHotelAsync(matchResult, cancellationToken);
     }
 
-    async Task<List<OTARoomInfoPre>> BuildFromSupplierRoomsAsync(
-        ISupplierRoomBuildPlugin plugin,
+    HotelRoomMatchResult MatchFromSupplierRooms(
         List<OTARoomInfo> otaRoomInfos,
         List<SupRoomInfo> supplierRooms,
-        CancellationToken cancellationToken)
+        ISupplierRoomBuildPlugin plugin,
+        CancellationToken cancellationToken,
+        string mtHotelCode)
     {
         if (supplierRooms.Count == 0)
         {
-            return [];
+            return HotelRoomMatchResult.Empty(mtHotelCode);
         }
 
         var matcher = plugin.ResolveMatcher(_serviceProvider);
@@ -267,8 +371,7 @@ public sealed class OTARoomBuilderProcessor
             .Select(room => new SupplierRoomCandidate(room, BuildSupplierContext(room.SRoomNameCN, room.SRoomNameEN, setting)))
             .ToList();
 
-        var createdRooms = new List<OTARoomInfoPre>();
-        var enrichmentItems = new Dictionary<string, object?>(StringComparer.OrdinalIgnoreCase);
+        var candidates = new List<SupplierRoomBuildCandidate>();
 
         foreach (var candidate in supplierContexts)
         {
@@ -281,48 +384,6 @@ public sealed class OTARoomBuilderProcessor
             if (HasMatchedOtaRoom(candidate.Context, otaContexts, matcher))
             {
                 _metrics.RecordSkipped(1, "already_matched");
-                continue;
-            }
-
-            if ((candidate.Room.MaxAdt ?? 0) == 0 && plugin.CanEnrich(candidate.Room))
-            {
-                _logger.LogInformation(
-                    "OTARoomBuilder enrich start. Plugin={Plugin}, SupId={SupId}, MTHotelCode={MTHotelCode}, SHotelCode={SHotelCode}, SRoomCode={SRoomCode}, SupplierRoomId={SupplierRoomId}, SRoomNameCN={SRoomNameCN}",
-                    plugin.GetType().Name,
-                    candidate.Room.SupId,
-                    candidate.Room.MTHotelCode,
-                    candidate.Room.SHotelCode,
-                    candidate.Room.SRoomCode,
-                    candidate.Room.Id,
-                    candidate.Room.SRoomNameCN);
-                var enrichmentResult = await plugin.EnrichAsync(
-                    new SupplierRoomBuildContext
-                    {
-                        SupplierRoom = candidate.Room,
-                        RoomContext = candidate.Context.CN ?? candidate.Context.EN,
-                        Items = enrichmentItems
-                    },
-                    cancellationToken);
-
-                if (enrichmentResult.Success && enrichmentResult.MaxAdt is int maxAdt && maxAdt > 0)
-                {
-                    candidate.Room.MaxAdt = maxAdt;
-                    _logger.LogInformation(
-                        "OTARoomBuilder enrich success. Plugin={Plugin}, SupId={SupId}, MTHotelCode={MTHotelCode}, SHotelCode={SHotelCode}, SRoomCode={SRoomCode}, SupplierRoomId={SupplierRoomId}, SRoomNameCN={SRoomNameCN}, MaxAdt={MaxAdt}",
-                        plugin.GetType().Name,
-                        candidate.Room.SupId,
-                        candidate.Room.MTHotelCode,
-                        candidate.Room.SHotelCode,
-                        candidate.Room.SRoomCode,
-                        candidate.Room.Id,
-                        candidate.Room.SRoomNameCN,
-                        maxAdt);
-                }
-            }
-
-            if ((candidate.Room.MaxAdt ?? 0) == 0)
-            {
-                _metrics.RecordSkipped(1, "max_adt_missing");
                 continue;
             }
 
@@ -351,7 +412,12 @@ public sealed class OTARoomBuilderProcessor
                 (candidate.Context.CN is null || _roomNameNormalizer.FormatComplianceCheck(candidate.Context.CN)) &&
                 (candidate.Context.EN is null || _roomNameNormalizer.FormatComplianceCheck(candidate.Context.EN));
 
-            createdRooms.Add(preRoom);
+            candidates.Add(new SupplierRoomBuildCandidate
+            {
+                SupplierRoom = candidate.Room,
+                RoomContext = candidate.Context.CN ?? candidate.Context.EN,
+                DraftRoom = preRoom
+            });
             otaRoomInfos.Add(otaRoom);
 
             if (candidate.Context.EN is not null && !string.IsNullOrWhiteSpace(candidate.Context.EN.RoomNameCleaned))
@@ -365,7 +431,11 @@ public sealed class OTARoomBuilderProcessor
             }
         }
 
-        return createdRooms;
+        return new HotelRoomMatchResult
+        {
+            MTHotelCode = mtHotelCode,
+            Candidates = candidates
+        };
     }
 
     ISupplierRoomBuildPlugin? SelectPlugin(List<SupRoomInfo> supplierRooms)

@@ -84,5 +84,6 @@ public sealed partial class OTARoomBuilderWorker
     async Task EnqueueAsync(OTARoomBuildJob job, CancellationToken cancellationToken)
     {
         await _jobChannel.Writer.WriteAsync(job, cancellationToken);
+        _metrics.RecordQueueEnqueued("job");
     }
 }

@@ -11,6 +11,7 @@ public sealed partial class OTARoomBuilderWorker
         {
             while (_roomCreateChannel.Reader.TryRead(out var item))
             {
+                _metrics.RecordQueueDequeued("room_create");
                 await RunCreateStageSafelyAsync(item, cancellationToken);
             }
         }
@@ -18,6 +19,12 @@ public sealed partial class OTARoomBuilderWorker
 
     async Task RunCreateStageSafelyAsync(RoomCreateQueueItem item, CancellationToken cancellationToken)
     {
+        var isHotel = item.Rooms is not null;
+        if (isHotel)
+        {
+            _metrics.RecordStageStarted("create");
+        }
+
         try
         {
             if (item.Completion is not null)
@@ -58,6 +65,12 @@ public sealed partial class OTARoomBuilderWorker
             if (item.Completion is null)
             {
                 _metrics.DecrementPendingHotels();
+            }
+
+            if (isHotel)
+            {
+                _metrics.RecordStageCompleted("create");
+                _metrics.RecordStageFinished("create");
             }
         }
     }

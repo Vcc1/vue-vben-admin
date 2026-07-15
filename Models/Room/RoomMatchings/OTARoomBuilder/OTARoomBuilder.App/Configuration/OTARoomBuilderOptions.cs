@@ -14,6 +14,12 @@ public sealed class OTARoomBuilderOptions
     [Range(1, 100)]
     public int RoomCreateQueueCapacity { get; set; } = 100;
 
+    [Range(1, 100)]
+    public int StaticDataTaskConcurrency { get; set; } = 10;
+
+    [Range(1, 100)]
+    public int StaticDataQueueCapacity { get; set; } = 100;
+
     public int LastDaysOffset { get; set; } = -32;
 
     public string? FullSyncHotelCodes { get; set; }

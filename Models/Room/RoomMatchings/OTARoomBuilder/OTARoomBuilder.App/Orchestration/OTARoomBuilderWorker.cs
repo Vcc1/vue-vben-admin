@@ -15,7 +15,9 @@ public sealed partial class OTARoomBuilderWorker : BackgroundService
     readonly ILogger<OTARoomBuilderWorker> _logger;
     readonly Channel<OTARoomBuildJob> _jobChannel;
     readonly Channel<HotelBuildQueueItem> _hotelBuildChannel;
+    readonly Channel<StaticDataQueueItem> _staticDataChannel;
     readonly Channel<RoomCreateQueueItem> _roomCreateChannel;
+    int _activeStaticDataTasks;
 
     public OTARoomBuilderWorker(
         IServiceScopeFactory scopeFactory,
@@ -33,6 +35,7 @@ public sealed partial class OTARoomBuilderWorker : BackgroundService
             SingleWriter = false
         });
         _hotelBuildChannel = Channel.CreateBounded<HotelBuildQueueItem>(CreateBoundedOptions(ClampQueueCapacity(options.CurrentValue.HotelBuildQueueCapacity)));
+        _staticDataChannel = Channel.CreateBounded<StaticDataQueueItem>(CreateBoundedOptions(ClampQueueCapacity(options.CurrentValue.StaticDataQueueCapacity)));
         _roomCreateChannel = Channel.CreateBounded<RoomCreateQueueItem>(CreateBoundedOptions(ClampQueueCapacity(options.CurrentValue.RoomCreateQueueCapacity)));
     }
 
@@ -45,9 +48,10 @@ public sealed partial class OTARoomBuilderWorker : BackgroundService
         var incrementalProducer = RunIncrementalProducerAsync(stoppingToken);
         var hotelLoader = RunHotelLoaderAsync(stoppingToken);
         var matcher = RunMatcherAsync(stoppingToken);
+        var staticDataLoader = RunStaticDataAsync(stoppingToken);
         var creator = RunCreatorAsync(stoppingToken);
 
-        await Task.WhenAll(fullSyncProducer, incrementalProducer, hotelLoader, matcher, creator);
+        await Task.WhenAll(fullSyncProducer, incrementalProducer, hotelLoader, matcher, staticDataLoader, creator);
     }
 
     static TimeSpan GetNextDelay(string cronText)
@@ -76,6 +80,15 @@ public sealed partial class OTARoomBuilderWorker : BackgroundService
         public static HotelBuildQueueItem ForHotel(HotelRoomBuildContext hotel, string outputMode) => new(hotel, outputMode, null);
 
         public static HotelBuildQueueItem ForCompletion(TaskCompletionSource completion) => new(null, null, completion);
+    }
+
+    sealed record StaticDataQueueItem(HotelRoomMatchResult? MatchResult, string? OutputMode, TaskCompletionSource? Completion)
+    {
+        public static StaticDataQueueItem ForHotel(HotelRoomMatchResult matchResult, string outputMode)
+            => new(matchResult, outputMode, null);
+
+        public static StaticDataQueueItem ForCompletion(TaskCompletionSource completion)
+            => new(null, null, completion);
     }
 
     sealed record RoomCreateQueueItem(List<Infrastructure.Sql.RoomMapping.Entitys.OTARoomInfoPre>? Rooms, string? OutputMode, TaskCompletionSource? Completion)
