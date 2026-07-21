@@ -1,8 +1,11 @@
 using Infrastructure.Sql.RoomMapping;
 using Infrastructure.Sql.RoomMapping.Entitys;
 using Microsoft.EntityFrameworkCore;
+using OTAHotelInfoSync;
 using OTAHotelInfoSync.Contracts;
 using OTAHotelInfoSync.Models;
+using System.Security.Cryptography;
+using System.Text;
 
 namespace Infrastructure.OTAHotelInfoSync;
 
@@ -64,10 +67,11 @@ public sealed class RoomMappingOTAHotelInfoRepository : IOTAHotelInfoRepository
             .GroupBy(x => x.HotelID)
             .ToDictionary(x => x.Key, x => x.First());
 
-        var now = DateTime.Now;
+        var now = OTAHotelInfoSyncTime.LocalNow;
         foreach (var hotel in hotels)
         {
-            if (!existingByHotelId.TryGetValue(hotel.HotelID, out var entity))
+            var isNew = !existingByHotelId.TryGetValue(hotel.HotelID, out var entity);
+            if (isNew)
             {
                 entity = new OTAHotelInfoRaw
                 {
@@ -78,9 +82,18 @@ public sealed class RoomMappingOTAHotelInfoRepository : IOTAHotelInfoRepository
                 _dbContext.OTAHotelInfoRaws.Add(entity);
             }
 
-            MapHotel(entity, hotel);
-            entity.LastSyncTime = now;
-            entity.UpdateTime = now;
+            var target = entity!;
+            var previousHash = target.DataHash;
+            MapHotel(target, hotel);
+            var currentHash = ComputeDataHash(target);
+            if (isNew || previousHash is null || !previousHash.AsSpan().SequenceEqual(currentHash))
+            {
+                target.DataVersion = isNew ? 1 : Math.Max(1, target.DataVersion + 1);
+                target.DataHash = currentHash;
+                target.DataChangeTime = now;
+            }
+            target.LastSyncTime = now;
+            target.UpdateTime = now;
         }
 
         await _dbContext.SaveChangesAsync(cancellationToken);
@@ -131,5 +144,36 @@ public sealed class RoomMappingOTAHotelInfoRepository : IOTAHotelInfoRepository
         }
 
         return value[..maxLength];
+    }
+
+    static byte[] ComputeDataHash(OTAHotelInfoRaw entity)
+    {
+        var value = string.Join('\u001F',
+            entity.MTHotelCode,
+            entity.HotelName,
+            entity.HotelEnName,
+            entity.Estate,
+            entity.Flag,
+            entity.CountryID,
+            entity.ProvinceID,
+            entity.CityID,
+            entity.CountryCode,
+            entity.CountryName,
+            entity.CityCode,
+            entity.CityName,
+            entity.CountryNameEn,
+            entity.CityNameEn,
+            entity.Address,
+            entity.EnAddress,
+            entity.Tel,
+            entity.Fax,
+            entity.GpsType,
+            entity.Longitude,
+            entity.Latitude,
+            entity.PostCode,
+            entity.Email,
+            entity.StarLevel,
+            entity.LastModifyTime);
+        return SHA256.HashData(Encoding.UTF8.GetBytes(value));
     }
 }

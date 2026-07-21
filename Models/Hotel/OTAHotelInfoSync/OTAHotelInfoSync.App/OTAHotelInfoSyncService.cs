@@ -11,17 +11,20 @@ public sealed class OTAHotelInfoSyncService : IOTAHotelInfoSyncService
     readonly IOTAHotelInfoRepository _repository;
     readonly IOTAHotelInfoSource _source;
     readonly IOptionsMonitor<OTAHotelInfoSyncOptions> _options;
+    readonly OTAHotelInfoSyncRetryExecutor _retryExecutor;
     readonly ILogger<OTAHotelInfoSyncService> _logger;
 
     public OTAHotelInfoSyncService(
         IOTAHotelInfoRepository repository,
         IOTAHotelInfoSource source,
         IOptionsMonitor<OTAHotelInfoSyncOptions> options,
+        OTAHotelInfoSyncRetryExecutor retryExecutor,
         ILogger<OTAHotelInfoSyncService> logger)
     {
         _repository = repository;
         _source = source;
         _options = options;
+        _retryExecutor = retryExecutor;
         _logger = logger;
     }
 
@@ -33,14 +36,20 @@ public sealed class OTAHotelInfoSyncService : IOTAHotelInfoSyncService
             return;
         }
 
-        var hasRows = await _repository.HasAnyAsync(cancellationToken);
+        var hasRows = await ExecuteDatabaseAsync(
+            "检查本地酒店数据",
+            _repository.HasAnyAsync,
+            cancellationToken);
         if (!hasRows)
         {
             await RunInitialSyncAsync(cancellationToken);
             return;
         }
 
-        var lastModifyTime = await _repository.GetLastModifyTimeAsync(cancellationToken);
+        var lastModifyTime = await ExecuteDatabaseAsync(
+            "读取最后更新时间",
+            _repository.GetLastModifyTimeAsync,
+            cancellationToken);
         if (!lastModifyTime.HasValue)
         {
             _logger.LogWarning("OTAHotelInfoRaw has no usable LastModifyTime. Running the initial ID synchronization.");
@@ -51,8 +60,14 @@ public sealed class OTAHotelInfoSyncService : IOTAHotelInfoSyncService
         var startTime = lastModifyTime.Value.AddMinutes(-2);
         _logger.LogInformation("Starting OTA hotel incremental synchronization. StartTime={StartTime}", startTime);
 
-        var hotels = await _source.QueryByTimeAsync(startTime, null, cancellationToken);
-        var upserted = await _repository.UpsertAsync(hotels, cancellationToken);
+        var hotels = await ExecuteNetworkAsync(
+            "按时间获取增量酒店",
+            token => _source.QueryByTimeAsync(startTime, null, token),
+            cancellationToken);
+        var upserted = await ExecuteDatabaseAsync(
+            "写入增量酒店",
+            token => _repository.UpsertAsync(hotels, token),
+            cancellationToken);
 
         _logger.LogInformation(
             "OTA hotel incremental synchronization completed. Received={Received}, Upserted={Upserted}, StartTime={StartTime}",
@@ -73,17 +88,23 @@ public sealed class OTAHotelInfoSyncService : IOTAHotelInfoSyncService
         var totalUpserted = 0;
         while (!cancellationToken.IsCancellationRequested)
         {
-            var hotels = await _source.QueryByMinHotelIdAsync(
-                minHotelId,
-                RemotePageSize,
+            var hotels = await ExecuteNetworkAsync(
+                $"按酒店 ID 获取全量批次（MinHotelId={minHotelId}）",
+                token => _source.QueryByMinHotelIdAsync(
+                    minHotelId,
+                    RemotePageSize,
+                    token),
                 cancellationToken);
             if (hotels.Count == 0)
             {
                 break;
             }
 
-            totalUpserted += await _repository.UpsertAsync(hotels, cancellationToken);
-            var nextMinHotelId = hotels[^1].HotelID;
+            totalUpserted += await ExecuteDatabaseAsync(
+                $"写入全量酒店批次（MinHotelId={minHotelId}）",
+                token => _repository.UpsertAsync(hotels, token),
+                cancellationToken);
+            var nextMinHotelId = hotels.Max(e => e.HotelID);
             if (nextMinHotelId <= minHotelId)
             {
                 throw new InvalidOperationException(
@@ -100,6 +121,22 @@ public sealed class OTAHotelInfoSyncService : IOTAHotelInfoSyncService
         }
 
         _logger.LogInformation("OTA hotel initial synchronization completed. TotalUpserted={TotalUpserted}", totalUpserted);
+    }
+
+    Task<T> ExecuteNetworkAsync<T>(
+        string operation,
+        Func<CancellationToken, Task<T>> action,
+        CancellationToken cancellationToken)
+    {
+        return _retryExecutor.ExecuteAsync("网络请求", operation, action, cancellationToken);
+    }
+
+    Task<T> ExecuteDatabaseAsync<T>(
+        string operation,
+        Func<CancellationToken, Task<T>> action,
+        CancellationToken cancellationToken)
+    {
+        return _retryExecutor.ExecuteAsync("数据库操作", operation, action, cancellationToken);
     }
 
 }

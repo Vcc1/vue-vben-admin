@@ -12,9 +12,13 @@ public sealed class RawHotelData
 
     public HotelDataType Type { get; }
 
-    public int? Id { get; init; }
+    public long? Id { get; init; }
+
+    public int? PlatformHotelId { get; init; }
 
     public int? SupplierId { get; init; }
+
+    public int? SourceSystemId { get; init; }
 
     public string HotelCode { get; }
 
@@ -23,6 +27,10 @@ public sealed class RawHotelData
     public int? State { get; init; }
 
     public int? SaleTopLevel { get; init; }
+
+    public int? IsHandMatch { get; init; }
+
+    public int? ReMatchState { get; init; }
 
     public string? CountryCode { get; init; }
 
@@ -36,7 +44,31 @@ public sealed class RawHotelData
 
     public string? HotelNameEn { get; init; }
 
-    public int? StarLevel { get; init; }
+    public string? EnAddress { get; init; }
+
+    public int? Estate { get; init; }
+
+    public int? Flag { get; init; }
+
+    public int? AreaId { get; init; }
+
+    public int? CountryId { get; init; }
+
+    public int? ProvinceId { get; init; }
+
+    public int? RootCityId { get; init; }
+
+    public int? CityId { get; init; }
+
+    public string? CountryNameEn { get; init; }
+
+    public string? CityNameEn { get; init; }
+
+    public string? WebSite { get; init; }
+
+    public string? RawStarLevel { get; init; }
+
+    public decimal? StarLevel { get; init; }
 
     public string? Telephone { get; init; }
 
@@ -63,4 +95,8 @@ public sealed class RawHotelData
     public string? UpdatedBy { get; init; }
 
     public DateTimeOffset? UpdatedAt { get; init; }
+
+    public long SourceDataVersion { get; init; }
+
+    public string? SourceDataHash { get; init; }
 }

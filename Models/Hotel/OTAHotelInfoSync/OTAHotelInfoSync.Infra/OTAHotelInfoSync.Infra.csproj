@@ -14,6 +14,7 @@
     <ProjectReference Include="..\OTAHotelInfoSync.App\OTAHotelInfoSync.App.csproj" />
     <ProjectReference Include="..\..\..\..\BaseFrameworks\VBaseFramework.Core\VBaseFramework.Core.csproj" />
     <ProjectReference Include="..\..\..\..\Providers\Infrastructure.HTTP.OTAHotelInfo\Infrastructure.HTTP.OTAHotelInfo.csproj" />
+    <ProjectReference Include="..\..\..\..\Providers\Infrastructure.HTTP.WorkWechatAlert\Infrastructure.HTTP.WorkWechatAlert.csproj" />
     <ProjectReference Include="..\..\..\..\Providers\Infrastructure.Sql.RoomMapping\Infrastructure.Sql.RoomMapping.csproj" />
   </ItemGroup>
 

@@ -8,8 +8,6 @@ namespace Infrastructure.Sql.RoomMapping.Entitys;
 
 public sealed class OTAHotelInfoRaw : IHasEntityConfiguration<OTAHotelInfoRaw>
 {
-    public long Id { get; set; }
-
     public int HotelID { get; set; }
 
     public string MTHotelCode { get; set; } = null!;
@@ -74,15 +72,20 @@ public sealed class OTAHotelInfoRaw : IHasEntityConfiguration<OTAHotelInfoRaw>
 
     public DateTime UpdateTime { get; set; }
 
+    public long DataVersion { get; set; }
+
+    public byte[]? DataHash { get; set; }
+
+    public DateTime DataChangeTime { get; set; }
+
     public static void Configure(EntityTypeBuilder<OTAHotelInfoRaw> builder)
     {
         const string collation = "Chinese_PRC_CI_AS";
 
         builder.ToTable("OTAHotelInfoRaw", "dbo");
-        builder.HasKey(x => x.Id).HasName("PK_OTAHotelInfoRaw");
+        builder.HasKey(x => x.HotelID).HasName("PK_OTAHotelInfoRaw");
 
-        builder.Property(x => x.Id).ValueGeneratedOnAdd();
-        builder.Property(x => x.HotelID).IsRequired();
+        builder.Property(x => x.HotelID).ValueGeneratedNever().IsRequired();
         builder.Property(x => x.MTHotelCode).IsRequired().HasMaxLength(100).IsUnicode(false).UseCollation(collation);
         builder.Property(x => x.HotelName).IsRequired().HasMaxLength(200).UseCollation(collation);
         builder.Property(x => x.HotelEnName).HasMaxLength(300).UseCollation(collation);
@@ -114,5 +117,10 @@ public sealed class OTAHotelInfoRaw : IHasEntityConfiguration<OTAHotelInfoRaw>
         builder.Property(x => x.LastSyncTime).IsRequired().HasColumnType("datetime").HasDefaultValueSql("getdate()").ValueGeneratedOnAdd();
         builder.Property(x => x.CreateTime).IsRequired().HasColumnType("datetime").HasDefaultValueSql("getdate()").ValueGeneratedOnAdd();
         builder.Property(x => x.UpdateTime).IsRequired().HasColumnType("datetime").HasDefaultValueSql("getdate()").ValueGeneratedOnAdd();
+        builder.Property(x => x.DataVersion).IsRequired().HasDefaultValue(1L);
+        builder.Property(x => x.DataHash).HasMaxLength(32);
+        builder.Property(x => x.DataChangeTime).IsRequired().HasColumnType("datetime2(3)").HasDefaultValueSql("sysdatetime()");
+        builder.HasIndex(x => new { x.DataChangeTime, x.HotelID });
+        builder.HasIndex(x => new { x.DataVersion, x.HotelID });
     }
 }

@@ -18,17 +18,15 @@ public sealed class CleanedHotel
         string? telephone = null,
         string? fax = null,
         string? email = null,
-        int? starLevel = null,
+        decimal? starLevel = null,
         int? gpsType = null,
         decimal? longitude = null,
         decimal? latitude = null)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(hotelCode);
-        ArgumentException.ThrowIfNullOrWhiteSpace(hotelName);
-
         Type = type;
         HotelCode = hotelCode;
-        HotelName = hotelName;
+        HotelName = hotelName ?? string.Empty;
         SupplierId = supplierId;
         MtHotelCode = mtHotelCode;
         CountryCode = countryCode;
@@ -77,11 +75,36 @@ public sealed class CleanedHotel
 
     public string? Email { get; }
 
-    public int? StarLevel { get; }
+    public decimal? StarLevel { get; }
 
     public int? GpsType { get; }
 
     public decimal? Longitude { get; }
 
     public decimal? Latitude { get; }
+
+    public string? RegionLevel1Code { get; init; }
+
+    public string? RegionLevel1Name { get; init; }
+
+    public string? RegionLevel2Code { get; init; }
+
+    public string? RegionLevel2Name { get; init; }
+
+    public string? RegionLevel3Code { get; init; }
+
+    public string? RegionLevel3Name { get; init; }
+
+    public RegionResolveStatus RegionResolveStatus { get; init; } = RegionResolveStatus.Unknown;
+
+    public IReadOnlyList<string> NormalizedPhones { get; init; } = [];
+
+    public IReadOnlyList<NormalizedPhone> NormalizedPhoneDetails { get; init; } = [];
+
+    public HotelDataQualityStatus DataQualityStatus { get; init; } = HotelDataQualityStatus.Unknown;
+
+    public HotelDataQualityFlags DataQualityFlags { get; init; } = HotelDataQualityFlags.None;
+
+    public bool IsQualityValid => DataQualityStatus == HotelDataQualityStatus.Valid
+        && DataQualityFlags == HotelDataQualityFlags.None;
 }

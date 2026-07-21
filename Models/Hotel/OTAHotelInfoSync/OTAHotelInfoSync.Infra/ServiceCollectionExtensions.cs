@@ -1,5 +1,6 @@
 using Framework.Core.IOC;
 using Infrastructure.HTTP.OTAHotelInfo;
+using Infrastructure.HTTP.WorkWechatAlert;
 using Infrastructure.Sql.RoomMapping;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
@@ -22,8 +23,10 @@ public static class ServiceCollectionExtensions
 
         services.AddOtaHotelInfoHttp(options =>
             configuration.GetSection("OTAHotelInfo").Bind(options));
+        services.AddWorkWechatAlertHttpProvider();
         services.AddScoped<IOTAHotelInfoSource, OtaHotelInfoSource>();
         services.AddScoped<IOTAHotelInfoRepository, RoomMappingOTAHotelInfoRepository>();
+        services.AddSingleton<IOTAHotelInfoSyncNotifier, WorkWechatOTAHotelInfoSyncNotifier>();
         return services;
     }
 }

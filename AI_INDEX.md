@@ -21,7 +21,7 @@
 - Core room matching logic: `Models/Room/RoomMatchings/Core/RoomMatch.Core.App` and `Models/Room/RoomMatchings/Core/RoomMatch.Domain`
 - Shared OTA domain: `Models/Base/Shared/OTA.Domain`
 - Provider implementations: `Providers/Infrastructure.*`
-- TAAP/Expedia chain: `Models/Taap/ExpediaChaseRoom/**` plus `Providers/Infrastructure.Web.Taap`
+- Price/Expedia chain: `Models/Price/ExpediaChaseRoom/**` plus `Providers/Infrastructure.Web.Taap`
 
 ## 3. Executable Services
 
@@ -34,7 +34,7 @@
 - `Models/Room/SupRoomInfo/Ingestion/SupRoomInfoRedisToSql.Cli`
   ServiceName: `MT-SupRoomInfoRedisToSql`
 
-- `Models/Taap/ExpediaChaseRoom/ExpediaChaseRooms.Cli`
+- `Models/Price/ExpediaChaseRoom/ExpediaChaseRooms.Cli`
   ServiceName: `MT-ExpediaChaseRooms`
 
 - `Models/MetricsAndAlerts/GrafanaAlert/GrafanaAlertWebhook.Api`
@@ -63,8 +63,8 @@
 - Metrics and alerts:
   `Models/MetricsAndAlerts/GrafanaAlert`, `Models/MetricsAndAlerts/MetricsAndAlerts`
 
-- TAAP:
-  `Models/Taap/ExpediaChaseRoom`
+- Price:
+  `Models/Price/ExpediaChaseRoom`
 
 ## 5. Reading Order
 
@@ -75,7 +75,7 @@
   `Models/Room/RoomMatchings/Core/OTARoomInfoCompletion.Cli`, then `Models/Room/RoomMatchings/Core/RoomMatch.Core.App`, then supplier/static-data providers.
 
 - Expedia chase-room issue:
-  `Models/Taap/ExpediaChaseRoom/ExpediaChaseRooms.Cli`, then `Models/Taap/ExpediaChaseRoom/ExpediaChaseRoom.App`, then `Providers/Infrastructure.Web.Taap` and `Providers/Infrastructure.Sql.SupCacheDB`.
+  `Models/Price/ExpediaChaseRoom/ExpediaChaseRooms.Cli`, then `Models/Price/ExpediaChaseRoom/ExpediaChaseRoom.App`, then `Providers/Infrastructure.Web.Taap` and `Providers/Infrastructure.Sql.SupCacheDB`.
 
 ## 6. Maintenance Notes
 

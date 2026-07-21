@@ -12,8 +12,8 @@ public sealed class HotelNameMatcher
     {
         options ??= new HotelNameMatcherOptions();
 
-        var left = BuildWordView(leftHotelName);
-        var right = BuildWordView(rightHotelName);
+        var left = BuildWordView(leftHotelName, options.CjkDictionary);
+        var right = BuildWordView(rightHotelName, options.CjkDictionary);
 
         if (TryMatchWords(left, right, out var kind))
         {
@@ -25,7 +25,7 @@ public sealed class HotelNameMatcher
         var leftIgnore = RemoveIgnoreWords(left.NormalizedSource, normalizedIgnoreWords);
         if (leftIgnore.RemovedWords.Count > 0)
         {
-            var leftAfterIgnore = BuildWordView(leftIgnore.NameWithoutIgnoreWords);
+            var leftAfterIgnore = BuildWordView(leftIgnore.NameWithoutIgnoreWords, options.CjkDictionary);
             if (TryMatchWords(leftAfterIgnore, right, out _))
             {
                 return HotelNameMatchResult.Matched(
@@ -40,7 +40,7 @@ public sealed class HotelNameMatcher
         var rightIgnore = RemoveIgnoreWords(right.NormalizedSource, normalizedIgnoreWords);
         if (rightIgnore.RemovedWords.Count > 0)
         {
-            var rightAfterIgnore = BuildWordView(rightIgnore.NameWithoutIgnoreWords);
+            var rightAfterIgnore = BuildWordView(rightIgnore.NameWithoutIgnoreWords, options.CjkDictionary);
             if (TryMatchWords(left, rightAfterIgnore, out _))
             {
                 return HotelNameMatchResult.Matched(
@@ -56,6 +56,11 @@ public sealed class HotelNameMatcher
     }
 
     public static HotelNameWordView BuildWordView(string? hotelName)
+        => BuildWordView(hotelName, new HotelNameMatcherOptions().CjkDictionary);
+
+    public static HotelNameWordView BuildWordView(
+        string? hotelName,
+        IReadOnlyCollection<string>? cjkDictionary)
     {
         if (string.IsNullOrWhiteSpace(hotelName))
         {
@@ -71,14 +76,49 @@ public sealed class HotelNameMatcher
         var separatorHasWhitespace = false;
         var separatorHasSymbol = false;
 
-        foreach (var originalChar in normalized)
+        var dictionary = (cjkDictionary ?? []).Where(x => !string.IsNullOrWhiteSpace(x))
+            .Select(x => x.Normalize(NormalizationForm.FormC))
+            .Distinct(StringComparer.Ordinal)
+            .OrderByDescending(x => x.Length)
+            .ToArray();
+
+        for (var index = 0; index < normalized.Length; index++)
         {
+            var originalChar = normalized[index];
             if (CharUnicodeInfo.GetUnicodeCategory(originalChar) == UnicodeCategory.NonSpacingMark)
             {
                 continue;
             }
 
             var c = char.ToLowerInvariant(ToHalfWidth(originalChar));
+
+            if (IsCjk(c))
+            {
+                FlushCurrentWord(currentWord, words);
+                var start = index;
+                while (index + 1 < normalized.Length && IsCjk(ToHalfWidth(normalized[index + 1])))
+                {
+                    index++;
+                }
+
+                var run = normalized[start..(index + 1)].ToLowerInvariant();
+                normalizedSource.Append(run);
+                foreach (var token in TokenizeCjkRun(run, dictionary))
+                {
+                    if (words.Count > 0)
+                    {
+                        boundaries.Add(new HotelNameWordBoundary(compactName.Length, false));
+                    }
+
+                    words.Add(token);
+                    compactName.Append(token);
+                }
+
+                separatorHasWhitespace = false;
+                separatorHasSymbol = false;
+                continue;
+            }
+
             normalizedSource.Append(c);
             if (IsWordChar(c))
             {
@@ -106,7 +146,9 @@ public sealed class HotelNameMatcher
 
         FlushCurrentWord(currentWord, words);
 
-        var cleanedName = string.Join(' ', words);
+        var cleanedName = words.Count > 0 && words.All(word => word.All(IsCjk))
+            ? string.Concat(words)
+            : string.Join(' ', words);
 
         return new HotelNameWordView(
             cleanedName,
@@ -114,6 +156,23 @@ public sealed class HotelNameMatcher
             compactName.ToString().Normalize(NormalizationForm.FormC),
             boundaries,
             normalizedSource.ToString().Normalize(NormalizationForm.FormC));
+    }
+
+    static IReadOnlyList<string> TokenizeCjkRun(string run, IReadOnlyList<string> dictionary)
+    {
+        var result = new List<string>();
+        for (var index = 0; index < run.Length;)
+        {
+            var token = dictionary.FirstOrDefault(candidate =>
+                index + candidate.Length <= run.Length
+                && run.AsSpan(index, candidate.Length).Equals(candidate.AsSpan(), StringComparison.Ordinal));
+
+            token ??= run[index].ToString();
+            result.Add(token);
+            index += token.Length;
+        }
+
+        return result;
     }
 
     public static string Normalize(string? hotelName)

@@ -1,17 +1,12 @@
 using Infrastructure.OTAHotelInfoSync;
-using Microsoft.Extensions.Configuration;
-using Microsoft.Extensions.DependencyInjection;
+using MengTu.Connectmate.Client;
+using MengTu.Connectmate.Client.Tool;
 using Microsoft.Extensions.Hosting;
 using OTAHotelInfoSync;
-using System.Diagnostics;
 using VBaseFramework.ServiceDefaults;
 
-var processModule = Process.GetCurrentProcess().MainModule;
-if (processModule is not null)
-{
-    var pathToContentRoot = Path.GetDirectoryName(processModule.FileName)!;
-    Directory.SetCurrentDirectory(pathToContentRoot);
-}
+Environment.SetEnvironmentVariable("TZ", "Asia/Shanghai");
+TimeZoneInfo.ClearCachedData();
 
 var host = Serve.Run(new RunOptions
 {
@@ -19,6 +14,8 @@ var host = Serve.Run(new RunOptions
     ServiceName = "MT-OTAHotelInfoSync",
 }, (services, configuration) =>
 {
+    services.AddConnectmateDatabaseSerializer<ConnectmateFallbackSerializer>();
+    services.AddConnectmateRemoteConfiguration(configuration);
     services.AddOTAHotelInfoSyncInfrastructure(configuration);
     services.AddOTAHotelInfoSync(configuration);
 });

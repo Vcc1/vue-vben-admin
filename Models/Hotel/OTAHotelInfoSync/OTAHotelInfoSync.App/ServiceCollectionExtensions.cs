@@ -17,9 +17,14 @@ public static class ServiceCollectionExtensions
             .AddOptions<OTAHotelInfoSyncOptions>()
             .Bind(configuration.GetSection(sectionName))
             .ValidateDataAnnotations()
+            .Validate(
+                static options => options.AlertToUsers is { Length: > 0 }
+                    && options.AlertToUsers.Any(static x => !string.IsNullOrWhiteSpace(x)),
+                $"{sectionName}:AlertToUsers must contain at least one user.")
             .ValidateOnStart();
 
         services.AddScoped<IOTAHotelInfoSyncService, OTAHotelInfoSyncService>();
+        services.AddSingleton<OTAHotelInfoSyncRetryExecutor>();
         services.AddHostedService<OTAHotelInfoSyncWorker>();
         return services;
     }
