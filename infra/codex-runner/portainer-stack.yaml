@@ -35,6 +35,13 @@ services:
       VERIFY_COMMAND: ${VERIFY_COMMAND:-}
       GIT_AUTHOR_NAME: ${GIT_AUTHOR_NAME:-Codex Optimizer}
       GIT_AUTHOR_EMAIL: ${GIT_AUTHOR_EMAIL:-codex-optimizer@localhost}
+      CODEX_BASE_URL: ${CODEX_BASE_URL:-http://192.168.1.130:8080}
+      CODEX_MODEL_PROVIDER: ${CODEX_MODEL_PROVIDER:-OpenAI}
+      CODEX_MODEL: ${CODEX_MODEL:-gpt-5.5}
+      CODEX_REVIEW_MODEL: ${CODEX_REVIEW_MODEL:-gpt-5.5}
+      CODEX_REASONING_EFFORT: ${CODEX_REASONING_EFFORT:-xhigh}
+      OPENAI_API_KEY: ${OPENAI_API_KEY:-}
+      OPENAI_API_KEY_FILE: ${OPENAI_API_KEY_FILE:-}
       TZ: ${TZ:-Asia/Shanghai}
     volumes:
       - workspace:/workspace

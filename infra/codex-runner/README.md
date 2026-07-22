@@ -75,6 +75,25 @@ printf '%s' "$OPENAI_API_KEY" | docker compose exec -T codex codex login --with-
 unset OPENAI_API_KEY
 ```
 
+### 第三方转发地址
+
+如果使用第三方 Responses API 转发，在 Portainer 的环境变量中设置：
+
+```text
+CODEX_BASE_URL=http://192.168.1.130:8080
+CODEX_MODEL_PROVIDER=OpenAI
+CODEX_MODEL=gpt-5.5
+CODEX_REVIEW_MODEL=gpt-5.5
+CODEX_REASONING_EFFORT=xhigh
+OPENAI_API_KEY=新的Key
+```
+
+容器启动时会自动生成 `CODEX_HOME/config.toml` 和 `CODEX_HOME/auth.json`，Key 不会写入
+镜像或 Git。Portainer 环境变量通常仍可在容器详情中被管理员查看，因此应使用专用、可撤销
+的服务 Key；你在聊天或截图中已经暴露过的 Key 必须立即撤销并重新生成。
+
+修改这些变量后需要重新部署或强制重建 `codex` 容器，确保启动脚本重新生成配置。
+
 ## 3. 交互使用
 
 ```bash
