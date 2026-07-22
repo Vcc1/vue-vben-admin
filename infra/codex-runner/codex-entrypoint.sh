@@ -46,7 +46,8 @@ if [[ -n "${OPENAI_API_KEY_FILE:-}" && -f "${OPENAI_API_KEY_FILE}" ]]; then
     api_key="$(<"${OPENAI_API_KEY_FILE}")"
 fi
 if [[ -n "${api_key}" ]]; then
-    jq -n --arg key "${api_key}" '{OPENAI_API_KEY: $key}' > "${codex_home}/auth.json"
+    OPENAI_API_KEY="${api_key}" AUTH_JSON_PATH="${codex_home}/auth.json" node -e \
+        'require("fs").writeFileSync(process.env.AUTH_JSON_PATH, JSON.stringify({OPENAI_API_KEY: process.env.OPENAI_API_KEY}, null, 2) + "\n")'
     chmod 0600 "${codex_home}/auth.json"
     unset OPENAI_API_KEY
 fi

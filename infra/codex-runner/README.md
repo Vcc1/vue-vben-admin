@@ -3,10 +3,10 @@
 该目录提供一个可部署到 `192.168.1.130` 的 Codex 工具容器。镜像包含：
 
 - .NET 10 SDK
-- Git 和 OpenSSH Client
+- Git（当前 Portainer 方案使用 HTTPS 仓库认证）
 - Node.js 22
 - Codex CLI 0.145.0（可通过构建参数更新）
-- `ripgrep`、`jq`、`curl` 等代码分析工具
+- `curl` 和基础 Linux 代码分析工具
 
 源码、Codex 登录凭据、NuGet 缓存和运行日志都在卷中持久化，不会打进镜像。
 
@@ -22,6 +22,9 @@
 3. Branch 填 `main`，保存并部署。
 4. 在 Environment variables 中设置 `GIT_REPOSITORY_URL`，值为要持续优化的代码仓库地址。
 5. 如果是私有仓库，设置 `GIT_SSH_PATH` 为服务器上的 deploy key 目录；公有仓库可保留默认值。
+
+当前 Portainer Stack 也会读取同目录下的 `新建 文本文档.env`。测试环境可以直接在该文件中
+配置 Git、第三方 Codex 地址和临时 Key，然后推送后重新部署；生产环境不要提交真实长期 Key。
 
 该 Compose 文件位于 `infra/codex-runner`，所以 build context 使用 `../..` 回到 Portainer
 检出的 Git 仓库根目录，再从根目录读取 `infra/codex-runner/Dockerfile`。
