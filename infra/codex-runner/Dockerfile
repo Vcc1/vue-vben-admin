@@ -10,8 +10,19 @@ FROM mcr.microsoft.com/dotnet/sdk:10.0
 ARG USER_UID=1000
 ARG USER_GID=1000
 
-RUN groupadd --gid "${USER_GID}" codex \
-    && useradd --uid "${USER_UID}" --gid "${USER_GID}" --create-home --shell /bin/bash codex
+RUN set -eux; \
+    codex_group="$(getent group "${USER_GID}" | cut -d: -f1 || true)"; \
+    if [ -z "${codex_group}" ]; then \
+        groupadd --gid "${USER_GID}" codex; \
+        codex_group=codex; \
+    fi; \
+    if ! id -u codex >/dev/null 2>&1; then \
+        if getent passwd "${USER_UID}" >/dev/null 2>&1; then \
+            useradd --gid "${codex_group}" --create-home --shell /bin/bash codex; \
+        else \
+            useradd --uid "${USER_UID}" --gid "${codex_group}" --create-home --shell /bin/bash codex; \
+        fi; \
+    fi
 
 COPY --from=codex-cli /usr/local/ /usr/local/
 COPY infra/codex-runner/init-workspace.sh /usr/local/bin/init-workspace
