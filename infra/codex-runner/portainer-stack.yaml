@@ -2,8 +2,8 @@ services:
   repo-init:
     image: mengtuv-codex-runner:${CODEX_VERSION:-0.145.0}
     build:
-      # Portainer uses the checked-out Git repository root as the project directory.
-      context: .
+      # The Compose file is under infra/codex-runner; move back to the Git root.
+      context: ../..
       dockerfile: infra/codex-runner/Dockerfile
       args:
         CODEX_VERSION: ${CODEX_VERSION:-0.145.0}

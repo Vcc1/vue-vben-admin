@@ -23,8 +23,8 @@
 4. 在 Environment variables 中设置 `GIT_REPOSITORY_URL`，值为要持续优化的代码仓库地址。
 5. 如果是私有仓库，设置 `GIT_SSH_PATH` 为服务器上的 deploy key 目录；公有仓库可保留默认值。
 
-该 Stack 的 build context 是 Portainer 检出的 Git 仓库根目录。不要把 `context: .` 改成
-`../..`，否则 Portainer 会到 `/data/compose/infra` 查找 Dockerfile 并部署失败。
+该 Compose 文件位于 `infra/codex-runner`，所以 build context 使用 `../..` 回到 Portainer
+检出的 Git 仓库根目录，再从根目录读取 `infra/codex-runner/Dockerfile`。
 
 `repo-init` 容器第一次启动时会把仓库克隆到名为 `workspace` 的持久卷；它随后显示为
 `Exited (0)` 是正常的。`codex` 容器应保持运行。
