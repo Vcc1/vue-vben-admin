@@ -31,27 +31,22 @@ public static class CountryCodeNormalizer
     static IReadOnlyDictionary<string, string> BuildCodeMap()
     {
         var result = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
-        for (var first = 'A'; first <= 'Z'; first++)
+        // Specific cultures already represent the valid ISO regions. Building from
+        // them avoids probing all 676 alpha-2 combinations and using caught
+        // ArgumentExceptions as validation for invalid region codes.
+        foreach (var culture in CultureInfo.GetCultures(CultureTypes.SpecificCultures))
         {
-            for (var second = 'A'; second <= 'Z'; second++)
+            var region = new RegionInfo(culture.Name);
+            var alpha2 = region.TwoLetterISORegionName.ToUpperInvariant();
+            var alpha3 = region.ThreeLetterISORegionName.ToUpperInvariant();
+            if (alpha2.Length == 2
+                && alpha2.All(static character => character is >= 'A' and <= 'Z')
+                && alpha3.Length == 3
+                && alpha3.All(static character => character is >= 'A' and <= 'Z')
+                && alpha2 is not "CS" and not "IV")
             {
-                var alpha2 = $"{first}{second}";
-                try
-                {
-                    var region = new RegionInfo(alpha2);
-                    var alpha3 = region.ThreeLetterISORegionName.ToUpperInvariant();
-                    if (alpha3.Length == 3
-                        && alpha3.All(static character => character is >= 'A' and <= 'Z')
-                        && alpha2 is not "CS" and not "IV")
-                    {
-                        result[alpha2] = alpha2;
-                        result[alpha3] = alpha2;
-                    }
-                }
-                catch (ArgumentException)
-                {
-                    // Some ISO territories have no specific .NET culture and are added below.
-                }
+                result[alpha2] = alpha2;
+                result[alpha3] = alpha2;
             }
         }
 

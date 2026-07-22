@@ -21,6 +21,8 @@ public sealed class RoomMappingHotelRepository :
     const byte DeliverySending = 1;
     const byte DeliveryDelivered = 2;
     const byte DeliveryFailed = 3;
+    static readonly DateTime SqlDateTimeMinimum = new(1753, 1, 1);
+    static readonly DateTime SqlDateTimeMaximum = new(9999, 12, 31, 23, 59, 59, 997);
 
     static readonly JsonSerializerOptions JsonOptions = CreateJsonOptions();
     readonly RoomMappingDbContext _dbContext;
@@ -155,7 +157,7 @@ public sealed class RoomMappingHotelRepository :
             await SaveCleanedHotelsWithRetryAsync(results, cancellationToken);
             return results.Count;
         }
-        catch (DbUpdateException batchException) when (!IsTransientSqlFailure(batchException))
+        catch (Exception batchException) when (batchException is not OperationCanceledException && !IsTransientSqlFailure(batchException))
         {
             _dbContext.ChangeTracker.Clear();
             if (results.Count == 1)
@@ -165,6 +167,7 @@ public sealed class RoomMappingHotelRepository :
             }
 
             var savedCount = 0;
+            var failures = new List<HotelCleaningFailureRecord>();
             foreach (var result in results)
             {
                 try
@@ -172,10 +175,10 @@ public sealed class RoomMappingHotelRepository :
                     await SaveCleanedHotelsWithRetryAsync([result], cancellationToken);
                     savedCount++;
                 }
-                catch (DbUpdateException ex) when (!IsTransientSqlFailure(ex))
+                catch (Exception ex) when (ex is not OperationCanceledException && !IsTransientSqlFailure(ex))
                 {
                     _dbContext.ChangeTracker.Clear();
-                    await RecordCleaningFailuresAsync([CreateFailureRecord(result, ex)], cancellationToken);
+                    failures.Add(CreateFailureRecord(result, ex));
                 }
                 catch (Exception ex) when (IsTransientSqlFailure(ex))
                 {
@@ -187,9 +190,11 @@ public sealed class RoomMappingHotelRepository :
                         result.Raw.Type,
                         result.Raw.Id ?? result.Raw.PlatformHotelId,
                         result.Raw.HotelCode);
-                    await RecordCleaningFailuresAsync([CreateFailureRecord(result, ex)], cancellationToken);
+                    failures.Add(CreateFailureRecord(result, ex));
                 }
             }
+
+            await RecordCleaningFailuresAsync(failures, cancellationToken);
 
             return savedCount;
         }
@@ -263,68 +268,540 @@ public sealed class RoomMappingHotelRepository :
         {
             if (group.Key == HotelDataType.Platform)
             {
-                var hotelIds = group.Select(x => x.Raw.PlatformHotelId ?? checked((int)(x.Raw.Id ?? 0))).Where(x => x > 0).ToArray();
-                var existing = await _dbContext.OTAHotelInfos.AsTracking()
-                    .Include(x => x.Phones)
-                    .Where(x => hotelIds.Contains(x.HotelID))
-                    .ToDictionaryAsync(x => x.HotelID, cancellationToken);
-                foreach (var result in group)
-                {
-                    var hotelId = result.Raw.PlatformHotelId ?? checked((int)(result.Raw.Id ?? 0));
-                    if (hotelId <= 0)
-                    {
-                        throw new InvalidOperationException("OTA raw row is missing HotelID.");
-                    }
-
-                    if (!existing.TryGetValue(hotelId, out var entity))
-                    {
-                        entity = new OTAHotelInfo { HotelID = hotelId, CreateTime = now };
-                        _dbContext.OTAHotelInfos.Add(entity);
-                    }
-
-                    Map(entity, result, now);
-                    ReplacePhones(entity.HotelID, entity.Phones, result.Cleaned.NormalizedPhoneDetails, now);
-                }
+                await BulkUpsertOtaHotelsAsync(group.ToArray(), now, cancellationToken);
             }
             else
             {
-                var supHotelIds = group.Select(x => checked((int)(x.Raw.Id ?? 0))).Where(x => x > 0).ToArray();
-                var existing = await _dbContext.SupHotelInfos.AsTracking()
-                    .Include(x => x.Phones)
-                    .Where(x => supHotelIds.Contains(x.SupHotelId))
-                    .ToDictionaryAsync(x => x.SupHotelId, cancellationToken);
-                foreach (var result in group)
-                {
-                    var supHotelId = checked((int)(result.Raw.Id ?? 0));
-                    if (supHotelId <= 0)
-                    {
-                        throw new InvalidOperationException("Supplier raw row is missing SupHotelId.");
-                    }
-
-                    if (!existing.TryGetValue(supHotelId, out var entity))
-                    {
-                        entity = new SupHotelInfoClean { SupHotelId = supHotelId, CreateTime = now };
-                        _dbContext.SupHotelInfos.Add(entity);
-                    }
-
-                    var normalizedChanged = !BytesEqual(entity.NormalizedDataHash, ParseHash(result.NormalizedDataHash));
-                    Map(entity, result, now);
-                    ReplacePhones(entity.SupHotelId, entity.Phones, result.Cleaned.NormalizedPhoneDetails, now);
-                    if (!result.IsMatchable)
-                    {
-                        entity.MatchStatus = (byte)HotelMatchStatus.DataProblem;
-                    }
-                    else if (normalizedChanged && string.IsNullOrWhiteSpace(entity.MTHotelCode))
-                    {
-                        entity.MatchStatus = (byte)HotelMatchStatus.Pending;
-                        entity.MatchError = null;
-                    }
-                }
+                await BulkUpsertSupplierHotelsAsync(group.ToArray(), now, cancellationToken);
             }
         }
 
-        await _dbContext.SaveChangesAsync(cancellationToken);
         _dbContext.ChangeTracker.Clear();
+    }
+
+    async Task BulkUpsertOtaHotelsAsync(
+        IReadOnlyCollection<HotelCleaningResult> results,
+        DateTime now,
+        CancellationToken cancellationToken)
+    {
+        var rows = results.Select(result =>
+        {
+            var entity = new OTAHotelInfo { CreateTime = now };
+            Map(entity, result, now);
+            if (entity.HotelID <= 0)
+            {
+                throw new InvalidOperationException("OTA raw row is missing HotelID.");
+            }
+
+            return new
+            {
+                hotelId = entity.HotelID,
+                mtHotelCode = entity.MTHotelCode,
+                hotelName = entity.HotelName,
+                hotelEnName = entity.HotelEnName,
+                cityCode = entity.CityCode,
+                address = entity.Address,
+                enAddress = entity.EnAddress,
+                estate = entity.Estate,
+                flag = entity.Flag,
+                areaId = entity.AreaID,
+                countryId = entity.CountryID,
+                provinceId = entity.ProvinceID,
+                rootCityId = entity.RootCityID,
+                cityId = entity.CityID,
+                countryName = entity.CountryName,
+                countryCode = entity.CountryCode,
+                countryNameEn = entity.CountryNameEn,
+                cityName = entity.CityName,
+                cityNameEn = entity.CityNameEn,
+                tel = entity.Tel,
+                fax = entity.Fax,
+                postCode = entity.PostCode,
+                email = entity.Email,
+                webSite = entity.WebSite,
+                starLevel = entity.StarLevel,
+                coordType = entity.CoordType,
+                longitude = entity.Longitude,
+                latitude = entity.Latitude,
+                sourceLastModifyTime = FormatSqlDateTime(entity.SourceLastModifyTime, entity.HotelID),
+                cleanVersion = entity.CleanVersion,
+                sourceDataVersion = entity.SourceDataVersion,
+                sourceDataHash = result.SourceDataHash,
+                normalizedDataHash = result.NormalizedDataHash,
+                regionLevel1Code = entity.RegionLevel1Code,
+                regionLevel1Name = entity.RegionLevel1Name,
+                regionLevel2Code = entity.RegionLevel2Code,
+                regionLevel2Name = entity.RegionLevel2Name,
+                regionLevel3Code = entity.RegionLevel3Code,
+                regionLevel3Name = entity.RegionLevel3Name,
+                regionResolveStatus = entity.RegionResolveStatus,
+                regionFenceVersion = entity.RegionFenceVersion,
+                cleanStatus = entity.CleanStatus,
+                cleanError = entity.CleanError,
+                dataQualityStatus = entity.DataQualityStatus,
+                dataQualityFlags = entity.DataQualityFlags,
+                dataQualityDetailsJson = entity.DataQualityDetailsJson,
+                phones = result.Cleaned.NormalizedPhoneDetails.Select((phone, index) => new
+                {
+                    ordinal = checked((short)index),
+                    sourcePhone = phone.Raw,
+                    normalizedPhone = phone.E164,
+                    countryIsoCode = phone.RegionCode,
+                    nationalNumber = phone.NationalNumber,
+                    countryCallingCode = phone.CountryCallingCode,
+                    numberType = phone.NumberType,
+                    areaCode = phone.AreaCode,
+                    extension = phone.Extension,
+                    isValid = phone.IsValid,
+                    parseError = phone.Error
+                })
+            };
+        }).ToArray();
+        var json = JsonSerializer.Serialize(rows, JsonOptions);
+        var payloadParameter = new SqlParameter("@payload", System.Data.SqlDbType.NVarChar, -1) { Value = json };
+        var nowParameter = new SqlParameter("@now", System.Data.SqlDbType.DateTime2) { Value = now };
+
+        await _dbContext.Database.ExecuteSqlRawAsync("""
+            SET NOCOUNT ON;
+            SET XACT_ABORT ON;
+            BEGIN TRANSACTION;
+            BEGIN TRY
+                MERGE dbo.OTAHotelInfo WITH (HOLDLOCK) AS target
+                USING
+                (
+                    SELECT *
+                    FROM OPENJSON(@payload)
+                    WITH
+                    (
+                        HotelID int '$.hotelId',
+                        MTHotelCode varchar(100) '$.mtHotelCode',
+                        HotelName nvarchar(200) '$.hotelName',
+                        HotelEnName nvarchar(300) '$.hotelEnName',
+                        CityCode varchar(90) '$.cityCode',
+                        Address nvarchar(300) '$.address',
+                        EnAddress nvarchar(500) '$.enAddress',
+                        Estate int '$.estate',
+                        Flag tinyint '$.flag',
+                        AreaID int '$.areaId',
+                        CountryID int '$.countryId',
+                        ProvinceID int '$.provinceId',
+                        RootCityID int '$.rootCityId',
+                        CityID int '$.cityId',
+                        CountryName varchar(64) '$.countryName',
+                        CountryCode varchar(128) '$.countryCode',
+                        CountryNameEn nvarchar(100) '$.countryNameEn',
+                        CityName varchar(64) '$.cityName',
+                        CityNameEn nvarchar(100) '$.cityNameEn',
+                        Tel nvarchar(60) '$.tel',
+                        Fax nvarchar(60) '$.fax',
+                        PostCode varchar(50) '$.postCode',
+                        Email varchar(100) '$.email',
+                        WebSite varchar(500) '$.webSite',
+                        StarLevel decimal(3,1) '$.starLevel',
+                        CoordType tinyint '$.coordType',
+                        Longitude decimal(10,7) '$.longitude',
+                        Latitude decimal(10,7) '$.latitude',
+                        SourceLastModifyTime datetime '$.sourceLastModifyTime',
+                        CleanVersion int '$.cleanVersion',
+                        SourceDataVersion bigint '$.sourceDataVersion',
+                        SourceDataHash varchar(64) '$.sourceDataHash',
+                        NormalizedDataHash varchar(64) '$.normalizedDataHash',
+                        RegionLevel1Code varchar(50) '$.regionLevel1Code',
+                        RegionLevel1Name nvarchar(100) '$.regionLevel1Name',
+                        RegionLevel2Code varchar(50) '$.regionLevel2Code',
+                        RegionLevel2Name nvarchar(100) '$.regionLevel2Name',
+                        RegionLevel3Code varchar(50) '$.regionLevel3Code',
+                        RegionLevel3Name nvarchar(100) '$.regionLevel3Name',
+                        RegionResolveStatus tinyint '$.regionResolveStatus',
+                        RegionFenceVersion int '$.regionFenceVersion',
+                        CleanStatus tinyint '$.cleanStatus',
+                        CleanError nvarchar(1000) '$.cleanError',
+                        DataQualityStatus tinyint '$.dataQualityStatus',
+                        DataQualityFlags bigint '$.dataQualityFlags',
+                        DataQualityDetailsJson nvarchar(max) '$.dataQualityDetailsJson'
+                    )
+                ) AS source ON source.HotelID = target.HotelID
+                WHEN MATCHED THEN UPDATE SET
+                    target.MTHotelCode = source.MTHotelCode,
+                    target.HotelName = source.HotelName,
+                    target.HotelEnName = source.HotelEnName,
+                    target.CityCode = source.CityCode,
+                    target.Address = source.Address,
+                    target.EnAddress = source.EnAddress,
+                    target.Estate = source.Estate,
+                    target.Flag = source.Flag,
+                    target.AreaID = source.AreaID,
+                    target.CountryID = source.CountryID,
+                    target.ProvinceID = source.ProvinceID,
+                    target.RootCityID = source.RootCityID,
+                    target.CityID = source.CityID,
+                    target.CountryName = source.CountryName,
+                    target.CountryCode = source.CountryCode,
+                    target.CountryNameEn = source.CountryNameEn,
+                    target.CityName = source.CityName,
+                    target.CityNameEn = source.CityNameEn,
+                    target.Tel = source.Tel,
+                    target.Fax = source.Fax,
+                    target.PostCode = source.PostCode,
+                    target.Email = source.Email,
+                    target.WebSite = source.WebSite,
+                    target.StarLevel = source.StarLevel,
+                    target.CoordType = source.CoordType,
+                    target.Longitude = source.Longitude,
+                    target.Latitude = source.Latitude,
+                    target.SourceLastModifyTime = source.SourceLastModifyTime,
+                    target.CleanVersion = source.CleanVersion,
+                    target.CleanTime = @now,
+                    target.UpdateTime = @now,
+                    target.SourceDataVersion = source.SourceDataVersion,
+                    target.SourceDataHash = CONVERT(varbinary(32), source.SourceDataHash, 2),
+                    target.NormalizedDataHash = CONVERT(varbinary(32), source.NormalizedDataHash, 2),
+                    target.RegionLevel1Code = source.RegionLevel1Code,
+                    target.RegionLevel1Name = source.RegionLevel1Name,
+                    target.RegionLevel2Code = source.RegionLevel2Code,
+                    target.RegionLevel2Name = source.RegionLevel2Name,
+                    target.RegionLevel3Code = source.RegionLevel3Code,
+                    target.RegionLevel3Name = source.RegionLevel3Name,
+                    target.RegionResolveStatus = source.RegionResolveStatus,
+                    target.RegionFenceVersion = source.RegionFenceVersion,
+                    target.CleanStatus = source.CleanStatus,
+                    target.CleanError = source.CleanError,
+                    target.DataQualityStatus = source.DataQualityStatus,
+                    target.DataQualityFlags = source.DataQualityFlags,
+                    target.DataQualityDetailsJson = source.DataQualityDetailsJson
+                WHEN NOT MATCHED THEN INSERT
+                (
+                    HotelID, MTHotelCode, HotelName, HotelEnName, CityCode, Address, EnAddress,
+                    Estate, Flag, AreaID, CountryID, ProvinceID, RootCityID, CityID,
+                    CountryName, CountryCode, CountryNameEn, CityName, CityNameEn, Tel, Fax,
+                    PostCode, Email, WebSite, StarLevel, CoordType, Longitude, Latitude,
+                    SourceLastModifyTime, CleanVersion, CleanTime, CreateTime, UpdateTime,
+                    SourceDataVersion, SourceDataHash, NormalizedDataHash,
+                    RegionLevel1Code, RegionLevel1Name, RegionLevel2Code, RegionLevel2Name,
+                    RegionLevel3Code, RegionLevel3Name, RegionResolveStatus, RegionFenceVersion,
+                    CleanStatus, CleanError, DataQualityStatus, DataQualityFlags, DataQualityDetailsJson
+                )
+                VALUES
+                (
+                    source.HotelID, source.MTHotelCode, source.HotelName, source.HotelEnName,
+                    source.CityCode, source.Address, source.EnAddress, source.Estate, source.Flag,
+                    source.AreaID, source.CountryID, source.ProvinceID, source.RootCityID, source.CityID,
+                    source.CountryName, source.CountryCode, source.CountryNameEn, source.CityName,
+                    source.CityNameEn, source.Tel, source.Fax, source.PostCode, source.Email,
+                    source.WebSite, source.StarLevel, source.CoordType, source.Longitude, source.Latitude,
+                    source.SourceLastModifyTime, source.CleanVersion, @now, @now,
+                    @now, source.SourceDataVersion,
+                    CONVERT(varbinary(32), source.SourceDataHash, 2),
+                    CONVERT(varbinary(32), source.NormalizedDataHash, 2),
+                    source.RegionLevel1Code, source.RegionLevel1Name, source.RegionLevel2Code,
+                    source.RegionLevel2Name, source.RegionLevel3Code, source.RegionLevel3Name,
+                    source.RegionResolveStatus, source.RegionFenceVersion, source.CleanStatus,
+                    source.CleanError, source.DataQualityStatus, source.DataQualityFlags,
+                    source.DataQualityDetailsJson
+                );
+
+                DELETE phone
+                FROM dbo.OTAHotelPhone AS phone
+                INNER JOIN OPENJSON(@payload)
+                    WITH (HotelID int '$.hotelId') AS hotel ON hotel.HotelID = phone.HotelID;
+
+                INSERT dbo.OTAHotelPhone
+                (
+                    HotelID, Ordinal, SourcePhone, NormalizedPhone, CountryIsoCode,
+                    NationalNumber, CountryCallingCode, NumberType, AreaCode, Extension,
+                    IsValid, ParseError, CreateTime, UpdateTime
+                )
+                SELECT
+                    hotel.HotelID, phone.Ordinal, phone.SourcePhone, phone.NormalizedPhone,
+                    phone.CountryIsoCode, phone.NationalNumber, phone.CountryCallingCode,
+                    phone.NumberType, phone.AreaCode, phone.Extension, phone.IsValid,
+                    phone.ParseError, @now, @now
+                FROM OPENJSON(@payload)
+                    WITH (HotelID int '$.hotelId', Phones nvarchar(max) '$.phones' AS JSON) AS hotel
+                CROSS APPLY OPENJSON(hotel.Phones)
+                    WITH
+                    (
+                        Ordinal smallint '$.ordinal',
+                        SourcePhone nvarchar(100) '$.sourcePhone',
+                        NormalizedPhone varchar(32) '$.normalizedPhone',
+                        CountryIsoCode char(2) '$.countryIsoCode',
+                        NationalNumber varchar(32) '$.nationalNumber',
+                        CountryCallingCode varchar(8) '$.countryCallingCode',
+                        NumberType varchar(32) '$.numberType',
+                        AreaCode varchar(16) '$.areaCode',
+                        Extension varchar(20) '$.extension',
+                        IsValid bit '$.isValid',
+                        ParseError varchar(200) '$.parseError'
+                    ) AS phone;
+
+                COMMIT TRANSACTION;
+            END TRY
+            BEGIN CATCH
+                IF @@TRANCOUNT > 0 ROLLBACK TRANSACTION;
+                THROW;
+            END CATCH;
+            """, [payloadParameter, nowParameter], cancellationToken);
+    }
+
+    async Task BulkUpsertSupplierHotelsAsync(
+        IReadOnlyCollection<HotelCleaningResult> results,
+        DateTime now,
+        CancellationToken cancellationToken)
+    {
+        var rows = results.Select(result =>
+        {
+            var supHotelId = checked((int)(result.Raw.Id ?? 0));
+            if (supHotelId <= 0)
+            {
+                throw new InvalidOperationException("Supplier raw row is missing SupHotelId.");
+            }
+
+            var entity = new SupHotelInfoClean { SupHotelId = supHotelId, CreateTime = now };
+            Map(entity, result, now);
+            return new
+            {
+                supHotelId,
+                supId = entity.SupId,
+                sHotelCode = entity.SHotelCode,
+                mtHotelCode = entity.MTHotelCode,
+                state = entity.State,
+                sSaleTopLevel = entity.SSaleTopLevel,
+                isHandMatch = entity.IsHandMatch,
+                reMatchState = entity.ReMatchState,
+                hotelName = entity.HotelName,
+                hotelNameEn = entity.HotelNameEn,
+                tel = entity.Tel,
+                fax = entity.Fax,
+                address = entity.Address,
+                postCode = entity.PostCode,
+                email = entity.Email,
+                starLevel = entity.StarLevel,
+                coordType = entity.CoordType,
+                longitude = entity.Longitude,
+                latitude = entity.Latitude,
+                regionLevel1Code = entity.RegionLevel1Code,
+                regionLevel1Name = entity.RegionLevel1Name,
+                regionLevel2Code = entity.RegionLevel2Code,
+                regionLevel2Name = entity.RegionLevel2Name,
+                regionLevel3Code = entity.RegionLevel3Code,
+                regionLevel3Name = entity.RegionLevel3Name,
+                regionResolveStatus = entity.RegionResolveStatus,
+                regionFenceVersion = entity.RegionFenceVersion,
+                sourceDataVersion = entity.SourceDataVersion,
+                sourceDataHash = result.SourceDataHash,
+                normalizedDataHash = result.NormalizedDataHash,
+                cleanVersion = entity.CleanVersion,
+                cleanStatus = entity.CleanStatus,
+                cleanError = entity.CleanError,
+                dataQualityStatus = entity.DataQualityStatus,
+                dataQualityFlags = entity.DataQualityFlags,
+                dataQualityDetailsJson = entity.DataQualityDetailsJson,
+                isMatchable = result.IsMatchable,
+                phones = result.Cleaned.NormalizedPhoneDetails.Select((phone, index) => new
+                {
+                    ordinal = checked((short)index),
+                    raw = phone.Raw,
+                    e164 = phone.E164,
+                    nationalNumber = phone.NationalNumber,
+                    countryCallingCode = phone.CountryCallingCode,
+                    regionCode = phone.RegionCode,
+                    numberType = phone.NumberType,
+                    areaCode = phone.AreaCode,
+                    extension = phone.Extension,
+                    isValid = phone.IsValid,
+                    error = phone.Error
+                })
+            };
+        }).ToArray();
+        var json = JsonSerializer.Serialize(rows, JsonOptions);
+        var payloadParameter = new SqlParameter("@payload", System.Data.SqlDbType.NVarChar, -1) { Value = json };
+        var nowParameter = new SqlParameter("@now", System.Data.SqlDbType.DateTime2) { Value = now };
+        var dataProblemParameter = new SqlParameter("@dataProblem", System.Data.SqlDbType.TinyInt)
+        {
+            Value = (byte)HotelMatchStatus.DataProblem
+        };
+        var pendingParameter = new SqlParameter("@pending", System.Data.SqlDbType.TinyInt)
+        {
+            Value = (byte)HotelMatchStatus.Pending
+        };
+
+        await _dbContext.Database.ExecuteSqlRawAsync("""
+            SET NOCOUNT ON;
+            SET XACT_ABORT ON;
+            BEGIN TRANSACTION;
+            BEGIN TRY
+                MERGE dbo.SupHotelInfo WITH (HOLDLOCK) AS target
+                USING
+                (
+                    SELECT *
+                    FROM OPENJSON(@payload)
+                    WITH
+                    (
+                        SupHotelId int '$.supHotelId',
+                        SupId int '$.supId',
+                        SHotelCode nvarchar(50) '$.sHotelCode',
+                        MTHotelCode varchar(100) '$.mtHotelCode',
+                        State int '$.state',
+                        SSaleTopLevel int '$.sSaleTopLevel',
+                        IsHandMatch int '$.isHandMatch',
+                        ReMatchState int '$.reMatchState',
+                        HotelName nvarchar(200) '$.hotelName',
+                        HotelNameEn nvarchar(200) '$.hotelNameEn',
+                        Tel nvarchar(100) '$.tel',
+                        Fax nvarchar(100) '$.fax',
+                        Address nvarchar(500) '$.address',
+                        PostCode varchar(50) '$.postCode',
+                        Email varchar(100) '$.email',
+                        StarLevel decimal(3,1) '$.starLevel',
+                        CoordType tinyint '$.coordType',
+                        Longitude decimal(10,7) '$.longitude',
+                        Latitude decimal(10,7) '$.latitude',
+                        RegionLevel1Code varchar(50) '$.regionLevel1Code',
+                        RegionLevel1Name nvarchar(100) '$.regionLevel1Name',
+                        RegionLevel2Code varchar(50) '$.regionLevel2Code',
+                        RegionLevel2Name nvarchar(100) '$.regionLevel2Name',
+                        RegionLevel3Code varchar(50) '$.regionLevel3Code',
+                        RegionLevel3Name nvarchar(100) '$.regionLevel3Name',
+                        RegionResolveStatus tinyint '$.regionResolveStatus',
+                        RegionFenceVersion int '$.regionFenceVersion',
+                        SourceDataVersion bigint '$.sourceDataVersion',
+                        SourceDataHash varchar(64) '$.sourceDataHash',
+                        NormalizedDataHash varchar(64) '$.normalizedDataHash',
+                        CleanVersion int '$.cleanVersion',
+                        CleanStatus tinyint '$.cleanStatus',
+                        CleanError nvarchar(1000) '$.cleanError',
+                        DataQualityStatus tinyint '$.dataQualityStatus',
+                        DataQualityFlags bigint '$.dataQualityFlags',
+                        DataQualityDetailsJson nvarchar(max) '$.dataQualityDetailsJson',
+                        IsMatchable bit '$.isMatchable'
+                    )
+                ) AS source ON source.SupHotelId = target.SupHotelId
+                WHEN MATCHED THEN UPDATE SET
+                    target.SupId = source.SupId,
+                    target.SHotelCode = source.SHotelCode,
+                    target.MTHotelCode = source.MTHotelCode,
+                    target.State = source.State,
+                    target.SSaleTopLevel = source.SSaleTopLevel,
+                    target.IsHandMatch = source.IsHandMatch,
+                    target.ReMatchState = source.ReMatchState,
+                    target.HotelName = source.HotelName,
+                    target.HotelNameEn = source.HotelNameEn,
+                    target.Tel = source.Tel,
+                    target.Fax = source.Fax,
+                    target.Address = source.Address,
+                    target.PostCode = source.PostCode,
+                    target.Email = source.Email,
+                    target.StarLevel = source.StarLevel,
+                    target.CoordType = source.CoordType,
+                    target.Longitude = source.Longitude,
+                    target.Latitude = source.Latitude,
+                    target.RegionLevel1Code = source.RegionLevel1Code,
+                    target.RegionLevel1Name = source.RegionLevel1Name,
+                    target.RegionLevel2Code = source.RegionLevel2Code,
+                    target.RegionLevel2Name = source.RegionLevel2Name,
+                    target.RegionLevel3Code = source.RegionLevel3Code,
+                    target.RegionLevel3Name = source.RegionLevel3Name,
+                    target.RegionResolveStatus = source.RegionResolveStatus,
+                    target.RegionFenceVersion = source.RegionFenceVersion,
+                    target.SourceDataVersion = source.SourceDataVersion,
+                    target.SourceDataHash = CONVERT(varbinary(32), source.SourceDataHash, 2),
+                    target.NormalizedDataHash = CONVERT(varbinary(32), source.NormalizedDataHash, 2),
+                    target.CleanVersion = source.CleanVersion,
+                    target.CleanStatus = source.CleanStatus,
+                    target.CleanError = source.CleanError,
+                    target.CleanTime = @now,
+                    target.DataQualityStatus = source.DataQualityStatus,
+                    target.DataQualityFlags = source.DataQualityFlags,
+                    target.DataQualityDetailsJson = source.DataQualityDetailsJson,
+                    target.MatchStatus = CASE
+                        WHEN source.IsMatchable = 0 THEN @dataProblem
+                        WHEN ISNULL(target.NormalizedDataHash, 0x)
+                             <> ISNULL(CONVERT(varbinary(32), source.NormalizedDataHash, 2), 0x)
+                             AND NULLIF(LTRIM(RTRIM(source.MTHotelCode)), '') IS NULL
+                            THEN @pending
+                        ELSE target.MatchStatus
+                    END,
+                    target.MatchError = CASE
+                        WHEN source.IsMatchable = 1
+                             AND ISNULL(target.NormalizedDataHash, 0x)
+                                 <> ISNULL(CONVERT(varbinary(32), source.NormalizedDataHash, 2), 0x)
+                             AND NULLIF(LTRIM(RTRIM(source.MTHotelCode)), '') IS NULL
+                            THEN NULL
+                        ELSE target.MatchError
+                    END,
+                    target.UpdateTime = @now
+                WHEN NOT MATCHED THEN INSERT
+                (
+                    SupHotelId, SupId, SHotelCode, MTHotelCode, State, SSaleTopLevel,
+                    IsHandMatch, ReMatchState, HotelName, HotelNameEn, Tel, Fax, Address,
+                    PostCode, Email, StarLevel, CoordType, Longitude, Latitude,
+                    RegionLevel1Code, RegionLevel1Name, RegionLevel2Code, RegionLevel2Name,
+                    RegionLevel3Code, RegionLevel3Name, RegionResolveStatus, RegionFenceVersion,
+                    SourceDataVersion, SourceDataHash, NormalizedDataHash, CleanVersion,
+                    CleanStatus, CleanError, CleanTime, DataQualityStatus, DataQualityFlags,
+                    DataQualityDetailsJson, MatchStatus, CreateTime, UpdateTime
+                )
+                VALUES
+                (
+                    source.SupHotelId, source.SupId, source.SHotelCode, source.MTHotelCode,
+                    source.State, source.SSaleTopLevel, source.IsHandMatch, source.ReMatchState,
+                    source.HotelName, source.HotelNameEn, source.Tel, source.Fax, source.Address,
+                    source.PostCode, source.Email, source.StarLevel, source.CoordType,
+                    source.Longitude, source.Latitude, source.RegionLevel1Code, source.RegionLevel1Name,
+                    source.RegionLevel2Code, source.RegionLevel2Name, source.RegionLevel3Code,
+                    source.RegionLevel3Name, source.RegionResolveStatus, source.RegionFenceVersion,
+                    source.SourceDataVersion, CONVERT(varbinary(32), source.SourceDataHash, 2),
+                    CONVERT(varbinary(32), source.NormalizedDataHash, 2), source.CleanVersion,
+                    source.CleanStatus, source.CleanError, @now, source.DataQualityStatus,
+                    source.DataQualityFlags, source.DataQualityDetailsJson,
+                    CASE WHEN source.IsMatchable = 1 THEN @pending ELSE @dataProblem END,
+                    @now, @now
+                );
+
+                DELETE phone
+                FROM dbo.SupHotelPhone AS phone
+                INNER JOIN OPENJSON(@payload)
+                    WITH (SupHotelId int '$.supHotelId') AS hotel
+                    ON hotel.SupHotelId = phone.SupHotelId;
+
+                INSERT dbo.SupHotelPhone
+                (
+                    SupHotelId, Ordinal, Raw, E164, NationalNumber, CountryCallingCode,
+                    RegionCode, NumberType, AreaCode, Extension, IsValid, Error,
+                    CreateTime, UpdateTime
+                )
+                SELECT
+                    hotel.SupHotelId, phone.Ordinal, phone.Raw, phone.E164,
+                    phone.NationalNumber, phone.CountryCallingCode, phone.RegionCode,
+                    phone.NumberType, phone.AreaCode, phone.Extension, phone.IsValid,
+                    phone.Error, @now, @now
+                FROM OPENJSON(@payload)
+                    WITH (SupHotelId int '$.supHotelId', Phones nvarchar(max) '$.phones' AS JSON) AS hotel
+                CROSS APPLY OPENJSON(hotel.Phones)
+                    WITH
+                    (
+                        Ordinal smallint '$.ordinal',
+                        Raw nvarchar(100) '$.raw',
+                        E164 varchar(32) '$.e164',
+                        NationalNumber varchar(32) '$.nationalNumber',
+                        CountryCallingCode varchar(8) '$.countryCallingCode',
+                        RegionCode char(2) '$.regionCode',
+                        NumberType varchar(32) '$.numberType',
+                        AreaCode varchar(16) '$.areaCode',
+                        Extension varchar(20) '$.extension',
+                        IsValid bit '$.isValid',
+                        Error varchar(100) '$.error'
+                    ) AS phone;
+
+                COMMIT TRANSACTION;
+            END TRY
+            BEGIN CATCH
+                IF @@TRANCOUNT > 0 ROLLBACK TRANSACTION;
+                THROW;
+            END CATCH;
+            """,
+            [payloadParameter, nowParameter, dataProblemParameter, pendingParameter],
+            cancellationToken);
     }
 
     public async Task RecordCleaningFailuresAsync(
@@ -378,40 +855,77 @@ public sealed class RoomMappingHotelRepository :
         CancellationToken cancellationToken)
     {
         var now = DateTime.Now;
-        foreach (var failure in failures
-                     .GroupBy(x => new { x.SourceType, x.DataId })
-                     .Select(x => x.Last()))
-        {
-            var sourceType = (byte)failure.SourceType;
-            var entity = await _dbContext.HotelCleaningFailures.AsTracking()
-                .SingleOrDefaultAsync(
-                    x => x.SourceType == sourceType && x.DataId == failure.DataId,
-                    cancellationToken);
-            if (entity is null)
+        var rows = failures
+            .GroupBy(x => new { x.SourceType, x.DataId })
+            .Select(group => group.Last())
+            .Select(failure => new
             {
-                entity = new HotelCleaningFailure
-                {
-                    SourceType = sourceType,
-                    DataId = failure.DataId,
-                    FirstFailureTime = now,
-                    FailureCount = 0
-                };
-                _dbContext.HotelCleaningFailures.Add(entity);
-            }
+                sourceType = (byte)failure.SourceType,
+                dataId = failure.DataId,
+                supplierId = failure.SupplierId,
+                sourceId = failure.SourceId,
+                hotelCode = Truncate(failure.HotelCode, 200),
+                exceptionType = Truncate(failure.ExceptionType, 500),
+                exceptionMessage = Truncate(failure.ExceptionMessage, 4000),
+                stackTrace = failure.StackTrace,
+                cleanVersion = failure.CleanVersion,
+                regionBoundaryVersion = failure.RegionBoundaryVersion
+            })
+            .ToArray();
+        var json = JsonSerializer.Serialize(rows, JsonOptions);
+        var payloadParameter = new SqlParameter("@payload", System.Data.SqlDbType.NVarChar, -1) { Value = json };
+        var nowParameter = new SqlParameter("@now", System.Data.SqlDbType.DateTime2) { Value = now };
 
-            entity.SupplierId = failure.SupplierId;
-            entity.SourceId = failure.SourceId;
-            entity.HotelCode = Truncate(failure.HotelCode, 200);
-            entity.ExceptionType = Truncate(failure.ExceptionType, 500);
-            entity.ExceptionMessage = Truncate(failure.ExceptionMessage, 4000);
-            entity.StackTrace = failure.StackTrace;
-            entity.CleanVersion = failure.CleanVersion;
-            entity.RegionBoundaryVersion = failure.RegionBoundaryVersion;
-            entity.FailureCount++;
-            entity.LastFailureTime = now;
-        }
+        await _dbContext.Database.ExecuteSqlRawAsync("""
+            SET NOCOUNT ON;
 
-        await _dbContext.SaveChangesAsync(cancellationToken);
+            MERGE dbo.HotelCleaningFailure WITH (HOLDLOCK) AS target
+            USING
+            (
+                SELECT *
+                FROM OPENJSON(@payload)
+                WITH
+                (
+                    SourceType tinyint '$.sourceType',
+                    DataId bigint '$.dataId',
+                    SupplierId int '$.supplierId',
+                    SourceId int '$.sourceId',
+                    HotelCode nvarchar(200) '$.hotelCode',
+                    ExceptionType varchar(500) '$.exceptionType',
+                    ExceptionMessage nvarchar(4000) '$.exceptionMessage',
+                    StackTrace nvarchar(max) '$.stackTrace',
+                    CleanVersion int '$.cleanVersion',
+                    RegionBoundaryVersion int '$.regionBoundaryVersion'
+                )
+            ) AS source
+                ON source.SourceType = target.SourceType
+               AND source.DataId = target.DataId
+            WHEN MATCHED THEN UPDATE SET
+                target.SupplierId = source.SupplierId,
+                target.SourceId = source.SourceId,
+                target.HotelCode = source.HotelCode,
+                target.ExceptionType = source.ExceptionType,
+                target.ExceptionMessage = source.ExceptionMessage,
+                target.StackTrace = source.StackTrace,
+                target.CleanVersion = source.CleanVersion,
+                target.RegionBoundaryVersion = source.RegionBoundaryVersion,
+                target.FailureCount = target.FailureCount + 1,
+                target.LastFailureTime = @now
+            WHEN NOT MATCHED THEN INSERT
+            (
+                SourceType, DataId, SupplierId, SourceId, HotelCode, ExceptionType,
+                ExceptionMessage, StackTrace, CleanVersion, RegionBoundaryVersion,
+                FailureCount, FirstFailureTime, LastFailureTime
+            )
+            VALUES
+            (
+                source.SourceType, source.DataId, source.SupplierId, source.SourceId,
+                source.HotelCode, source.ExceptionType, source.ExceptionMessage,
+                source.StackTrace, source.CleanVersion, source.RegionBoundaryVersion,
+                1, @now, @now
+            );
+            """, [payloadParameter, nowParameter], cancellationToken);
+
         _dbContext.ChangeTracker.Clear();
     }
 
@@ -823,7 +1337,7 @@ public sealed class RoomMappingHotelRepository :
 
     static void MapRegions(OTAHotelInfo entity, CleanedHotel clean)
     {
-        entity.RegionLevel1Code = clean.RegionLevel1Code;
+        entity.RegionLevel1Code = CountryCodeNormalizer.ToAlpha2(clean.RegionLevel1Code) ?? clean.RegionLevel1Code;
         entity.RegionLevel1Name = clean.RegionLevel1Name;
         entity.RegionLevel2Code = clean.RegionLevel2Code;
         entity.RegionLevel2Name = clean.RegionLevel2Name;
@@ -834,7 +1348,7 @@ public sealed class RoomMappingHotelRepository :
 
     static void MapRegions(SupHotelInfoClean entity, CleanedHotel clean)
     {
-        entity.RegionLevel1Code = clean.RegionLevel1Code;
+        entity.RegionLevel1Code = CountryCodeNormalizer.ToAlpha2(clean.RegionLevel1Code) ?? clean.RegionLevel1Code;
         entity.RegionLevel1Name = clean.RegionLevel1Name;
         entity.RegionLevel2Code = clean.RegionLevel2Code;
         entity.RegionLevel2Name = clean.RegionLevel2Name;
@@ -919,65 +1433,25 @@ public sealed class RoomMappingHotelRepository :
         => new(phone.Raw, phone.E164, phone.NationalNumber, phone.CountryCallingCode, phone.AreaCode,
             phone.Extension, phone.IsValid, phone.Error, phone.RegionCode, phone.NumberType);
 
-    static void ReplacePhones(int hotelId, ICollection<OTAHotelPhone> target, IReadOnlyList<NormalizedPhone> source, DateTime now)
-    {
-        var existing = target.ToDictionary(x => x.Ordinal);
-        for (var index = 0; index < source.Count; index++)
-        {
-            var phone = source[index];
-            var ordinal = checked((short)index);
-            if (!existing.Remove(ordinal, out var entity))
-            {
-                entity = new OTAHotelPhone
-                {
-                    HotelID = hotelId,
-                    Ordinal = ordinal,
-                    CreateTime = now
-                };
-                target.Add(entity);
-            }
-
-            entity.SourcePhone = phone.Raw;
-            entity.NormalizedPhone = phone.E164;
-            entity.CountryIsoCode = phone.RegionCode;
-            entity.NationalNumber = phone.NationalNumber;
-            entity.CountryCallingCode = phone.CountryCallingCode;
-            entity.NumberType = phone.NumberType;
-            entity.AreaCode = phone.AreaCode;
-            entity.Extension = phone.Extension;
-            entity.IsValid = phone.IsValid;
-            entity.ParseError = phone.Error;
-            entity.UpdateTime = now;
-        }
-
-        foreach (var removed in existing.Values)
-        {
-            target.Remove(removed);
-        }
-    }
-
-    static void ReplacePhones(int supHotelId, ICollection<SupHotelPhone> target, IReadOnlyList<NormalizedPhone> source, DateTime now)
-    {
-        target.Clear();
-        for (var index = 0; index < source.Count; index++)
-        {
-            var phone = source[index];
-            target.Add(new SupHotelPhone
-            {
-                SupHotelId = supHotelId, Ordinal = checked((short)index), Raw = phone.Raw, E164 = phone.E164,
-                NationalNumber = phone.NationalNumber, CountryCallingCode = phone.CountryCallingCode,
-                RegionCode = phone.RegionCode, NumberType = phone.NumberType, AreaCode = phone.AreaCode,
-                Extension = phone.Extension, IsValid = phone.IsValid, Error = phone.Error,
-                CreateTime = now, UpdateTime = now
-            });
-        }
-    }
-
     static byte[] ParseHash(string value) => Convert.FromHexString(value);
 
     static string? FormatHash(byte[]? value) => value is null ? null : Convert.ToHexString(value);
 
-    static bool BytesEqual(byte[]? left, byte[] right) => left is not null && left.AsSpan().SequenceEqual(right);
+    static string? FormatSqlDateTime(DateTime? value, int hotelId)
+    {
+        if (value is null)
+        {
+            return null;
+        }
+
+        if (value < SqlDateTimeMinimum || value > SqlDateTimeMaximum)
+        {
+            throw new InvalidOperationException(
+                $"OTA hotel {hotelId} has SourceLastModifyTime outside the SQL datetime range: {value:O}.");
+        }
+
+        return value.Value.ToString("yyyy-MM-dd'T'HH:mm:ss.fff", CultureInfo.InvariantCulture);
+    }
 
     void SkipResultsForSession(IEnumerable<HotelCleaningResult> results)
     {

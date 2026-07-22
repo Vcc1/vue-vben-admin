@@ -13,6 +13,7 @@ using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using System.Diagnostics;
+using VBase.AppMetrics;
 using VBaseFramework.ServiceDefaults;
 
 Environment.SetEnvironmentVariable("TZ", "Asia/Shanghai");
@@ -44,6 +45,16 @@ var host = Serve.Run(new RunOptions
 {
     services.AddConnectmateDatabaseSerializer<ConnectmateFallbackSerializer>();
     services.AddConnectmateRemoteConfiguration(configuration);
+    services.AddAppMetrics(configuration, options =>
+    {
+        options.ServiceName = "HotelMatchingPipeline";
+        options.MeterName = "AppMetrics";
+        options.AdditionalMeterNames = options.AdditionalMeterNames
+            .Concat([HotelCleaningMetrics.ScopeName])
+            .Distinct()
+            .ToArray();
+    });
+    services.AddSingleton<HotelCleaningMetrics>();
     services
         .AddHotelMatchingApplication(configuration)
         .AddHotelMatchingInfrastructure(configuration)

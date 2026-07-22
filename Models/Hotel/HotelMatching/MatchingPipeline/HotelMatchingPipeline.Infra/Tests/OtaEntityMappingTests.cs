@@ -23,6 +23,7 @@ public sealed class OtaEntityMappingTests
         Assert.Equal([nameof(OTAHotelInfo.HotelID)], clean.FindPrimaryKey()!.Properties.Select(x => x.Name));
         Assert.Null(clean.FindProperty("Id"));
         Assert.Null(clean.FindProperty("RawId"));
+        Assert.False(clean.IsSqlOutputClauseUsed());
 
         var phone = database.Model.FindEntityType(typeof(OTAHotelPhone))!;
         Assert.Equal(

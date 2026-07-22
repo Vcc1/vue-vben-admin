@@ -21,6 +21,9 @@ public sealed class HotelCleaningOptions
     [Range(1, 1_000)]
     public int SaveBatchSize { get; set; } = 100;
 
+    [Range(1, 10_000)]
+    public int QueueCapacity { get; set; } = 10_000;
+
     [Range(1, 64)]
     public int MemoryBudgetGiB { get; set; } = 10;
 

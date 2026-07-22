@@ -61,7 +61,7 @@ public sealed class OTAHotelInfo : IHasEntityConfiguration<OTAHotelInfo>
     {
         const string collation = "Chinese_PRC_CI_AS";
 
-        builder.ToTable("OTAHotelInfo", "dbo");
+        builder.ToTable("OTAHotelInfo", "dbo", table => table.UseSqlOutputClause(false));
         builder.HasKey(x => x.HotelID).HasName("PK_OTAHotelInfo");
         builder.Property(x => x.HotelID).ValueGeneratedNever().IsRequired();
         builder.Property(x => x.MTHotelCode).HasMaxLength(100).IsUnicode(false).UseCollation(collation).IsRequired();

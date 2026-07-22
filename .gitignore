@@ -147,3 +147,5 @@ docker-compose.override.yml
 tmp/
 4.Presentation/MetricsAndAlerts/TestMetrics.zip
 .qoder/
+.artifacts/
+infra/

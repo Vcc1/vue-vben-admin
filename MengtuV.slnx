@@ -67,6 +67,15 @@
     <Project Path="Models/Price/ExpediaChaseRoom/ExpediaChaseRoom.Infra/ExpediaChaseRoom.Infra.csproj" />
     <Project Path="Models/Price/ExpediaChaseRoom/ExpediaChaseRooms.Cli/ExpediaChaseRooms.Cli.csproj" />
   </Folder>
+  <Folder Name="/Models/3.Price/HotelPriceAvailability/">
+    <Project Path="Models/Price/HotelPriceAvailability/HotelPriceAvailability.App/HotelPriceAvailability.App.csproj" />
+    <Project Path="Models/Price/HotelPriceAvailability/HotelPriceAvailability.App/Tests/HotelPriceAvailability.App.Tests.csproj" />
+    <Project Path="Models/Price/HotelPriceAvailability/HotelPriceAvailability.Cli/HotelPriceAvailability.Cli.csproj" />
+    <Project Path="Models/Price/HotelPriceAvailability/HotelPriceAvailability.Domain/HotelPriceAvailability.Domain.csproj" />
+    <Project Path="Models/Price/HotelPriceAvailability/HotelPriceAvailability.Domain/Tests/HotelPriceAvailability.Domain.Tests.csproj" />
+    <Project Path="Models/Price/HotelPriceAvailability/HotelPriceAvailability.Infra/HotelPriceAvailability.Infra.csproj" />
+    <Project Path="Models/Price/HotelPriceAvailability/HotelPriceAvailability.Infra/Tests/HotelPriceAvailability.Infra.Tests.csproj" />
+  </Folder>
   <Folder Name="/Models/4.MetricsAndAlerts/" />
   <Folder Name="/Models/4.MetricsAndAlerts/GrafanaAlert/">
     <Project Path="Models/MetricsAndAlerts/GrafanaAlert/GrafanaAlert.App/GrafanaAlert.App.csproj" />
