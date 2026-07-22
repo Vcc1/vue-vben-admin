@@ -1,0 +1,5 @@
+services:
+  codex:
+    volumes:
+      # Replace this with an absolute path to a deploy-key-only SSH directory.
+      - /opt/mengtu-codex/ssh:/home/codex/.ssh:ro

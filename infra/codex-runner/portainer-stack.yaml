@@ -1,0 +1,56 @@
+services:
+  repo-init:
+    image: mengtuv-codex-runner:${CODEX_VERSION:-0.145.0}
+    build:
+      # Portainer uses the checked-out Git repository root as the project directory.
+      context: .
+      dockerfile: infra/codex-runner/Dockerfile
+      args:
+        CODEX_VERSION: ${CODEX_VERSION:-0.145.0}
+        USER_UID: ${USER_UID:-1000}
+        USER_GID: ${USER_GID:-1000}
+    command: ["init-workspace"]
+    restart: "no"
+    environment:
+      GIT_REPOSITORY_URL: ${GIT_REPOSITORY_URL:?Set GIT_REPOSITORY_URL in Portainer}
+      BASE_BRANCH: ${BASE_BRANCH:-main}
+    volumes:
+      - workspace:/workspace
+      - ${GIT_SSH_PATH:-/opt/mengtu-codex/ssh}:/home/codex/.ssh:ro
+
+  codex:
+    image: mengtuv-codex-runner:${CODEX_VERSION:-0.145.0}
+    restart: unless-stopped
+    depends_on:
+      repo-init:
+        condition: service_completed_successfully
+    working_dir: /workspace
+    environment:
+      BASE_BRANCH: ${BASE_BRANCH:-main}
+      OPTIMIZATION_BRANCH: ${OPTIMIZATION_BRANCH:-codex/long-term-room-matching}
+      OPTIMIZATION_PROJECT: ${OPTIMIZATION_PROJECT:-Models/Room/RoomMatchings/Core}
+      GIT_SYNC: ${GIT_SYNC:-true}
+      AUTO_COMMIT: ${AUTO_COMMIT:-true}
+      AUTO_PUSH: ${AUTO_PUSH:-false}
+      VERIFY_COMMAND: ${VERIFY_COMMAND:-}
+      GIT_AUTHOR_NAME: ${GIT_AUTHOR_NAME:-Codex Optimizer}
+      GIT_AUTHOR_EMAIL: ${GIT_AUTHOR_EMAIL:-codex-optimizer@localhost}
+      TZ: ${TZ:-Asia/Shanghai}
+    volumes:
+      - workspace:/workspace
+      - codex-home:/home/codex/.codex
+      - nuget-cache:/home/codex/.nuget/packages
+      - codex-runs:/runs
+      - ${GIT_SSH_PATH:-/opt/mengtu-codex/ssh}:/home/codex/.ssh:ro
+    healthcheck:
+      test: ["CMD-SHELL", "test -d /workspace/.git && codex --version >/dev/null && dotnet --version >/dev/null"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 20s
+
+volumes:
+  workspace:
+  codex-home:
+  nuget-cache:
+  codex-runs:

@@ -1,0 +1,41 @@
+name: mengtuv-codex
+
+services:
+  codex:
+    image: mengtuv-codex-runner:${CODEX_VERSION:-0.145.0}
+    build:
+      context: ../..
+      dockerfile: infra/codex-runner/Dockerfile
+      args:
+        CODEX_VERSION: ${CODEX_VERSION:-0.145.0}
+        USER_UID: ${USER_UID:-1000}
+        USER_GID: ${USER_GID:-1000}
+    restart: unless-stopped
+    working_dir: /workspace
+    environment:
+      BASE_BRANCH: ${BASE_BRANCH:-main}
+      OPTIMIZATION_BRANCH: ${OPTIMIZATION_BRANCH:-codex/long-term-room-matching}
+      OPTIMIZATION_PROJECT: ${OPTIMIZATION_PROJECT:-Models/Room/RoomMatchings/Core}
+      GIT_SYNC: ${GIT_SYNC:-true}
+      AUTO_COMMIT: ${AUTO_COMMIT:-true}
+      AUTO_PUSH: ${AUTO_PUSH:-false}
+      VERIFY_COMMAND: ${VERIFY_COMMAND:-}
+      GIT_AUTHOR_NAME: ${GIT_AUTHOR_NAME:-Codex Optimizer}
+      GIT_AUTHOR_EMAIL: ${GIT_AUTHOR_EMAIL:-codex-optimizer@localhost}
+      TZ: ${TZ:-Asia/Shanghai}
+    volumes:
+      - ${WORKSPACE_PATH:-./workspace}:/workspace
+      - codex-home:/home/codex/.codex
+      - nuget-cache:/home/codex/.nuget/packages
+      - codex-runs:/runs
+    healthcheck:
+      test: ["CMD-SHELL", "codex --version >/dev/null && dotnet --version >/dev/null && git --version >/dev/null"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
+
+volumes:
+  codex-home:
+  nuget-cache:
+  codex-runs:
