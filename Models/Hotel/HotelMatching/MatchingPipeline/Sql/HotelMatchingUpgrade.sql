@@ -65,6 +65,18 @@ IF COL_LENGTH('dbo.OTAHotelInfo', 'DataQualityFlags') IS NULL
 IF COL_LENGTH('dbo.OTAHotelInfo', 'DataQualityDetailsJson') IS NULL
     ALTER TABLE dbo.OTAHotelInfo ADD DataQualityDetailsJson nvarchar(max) NULL;
 
+IF OBJECT_ID('dbo.SupHotelInfo', 'U') IS NOT NULL
+BEGIN
+    IF COL_LENGTH('dbo.SupHotelInfo', 'CountryCode') IS NULL
+        ALTER TABLE dbo.SupHotelInfo ADD CountryCode nvarchar(50) NULL;
+    IF COL_LENGTH('dbo.SupHotelInfo', 'CountryName') IS NULL
+        ALTER TABLE dbo.SupHotelInfo ADD CountryName nvarchar(50) NULL;
+    IF COL_LENGTH('dbo.SupHotelInfo', 'CityCode') IS NULL
+        ALTER TABLE dbo.SupHotelInfo ADD CityCode nvarchar(50) NULL;
+    IF COL_LENGTH('dbo.SupHotelInfo', 'CityName') IS NULL
+        ALTER TABLE dbo.SupHotelInfo ADD CityName nvarchar(100) NULL;
+END;
+
 -- Remove the earlier JSON phone draft. Phone rows are created by HotelMatchingCreate.sql.
 IF COL_LENGTH('dbo.OTAHotelInfo', 'NormalizedPhonesJson') IS NOT NULL
     ALTER TABLE dbo.OTAHotelInfo DROP COLUMN NormalizedPhonesJson;
@@ -83,8 +95,9 @@ IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = 'UX_OTAHotelInfo_RawId' AN
     CREATE UNIQUE INDEX UX_OTAHotelInfo_RawId ON dbo.OTAHotelInfo(RawId);
 IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = 'IX_OTAHotelInfo_MTHotelCode' AND object_id = OBJECT_ID('dbo.OTAHotelInfo'))
     CREATE INDEX IX_OTAHotelInfo_MTHotelCode ON dbo.OTAHotelInfo(MTHotelCode);
-IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = 'IX_OTAHotelInfo_Clean' AND object_id = OBJECT_ID('dbo.OTAHotelInfo'))
-    CREATE INDEX IX_OTAHotelInfo_Clean ON dbo.OTAHotelInfo(CleanStatus, DataQualityStatus, CleanVersion);
+IF EXISTS (SELECT 1 FROM sys.indexes WHERE name = 'IX_OTAHotelInfo_Clean' AND object_id = OBJECT_ID('dbo.OTAHotelInfo'))
+    DROP INDEX IX_OTAHotelInfo_Clean ON dbo.OTAHotelInfo;
+CREATE INDEX IX_OTAHotelInfo_Clean ON dbo.OTAHotelInfo(Estate, CleanStatus, DataQualityStatus, CleanVersion);
 
 IF OBJECT_ID('dbo.TR_OTAHotelInfo_SetGeoPoint', 'TR') IS NULL
     EXEC('CREATE TRIGGER dbo.TR_OTAHotelInfo_SetGeoPoint ON dbo.OTAHotelInfo AFTER INSERT, UPDATE AS BEGIN SET NOCOUNT ON; UPDATE target SET GeoPoint = CASE WHEN target.Latitude IS NULL OR target.Longitude IS NULL THEN NULL ELSE geography::Point(target.Latitude, target.Longitude, 4326) END FROM dbo.OTAHotelInfo target INNER JOIN inserted item ON item.Id = target.Id; END');

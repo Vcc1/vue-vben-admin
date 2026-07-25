@@ -82,6 +82,10 @@ BEGIN
         ReMatchState int NULL,
         HotelName nvarchar(200) NULL,
         HotelNameEn nvarchar(200) NULL,
+        CountryCode nvarchar(50) NULL,
+        CountryName nvarchar(50) NULL,
+        CityCode nvarchar(50) NULL,
+        CityName nvarchar(100) NULL,
         Tel nvarchar(100) NULL,
         Fax nvarchar(100) NULL,
         Address nvarchar(500) NULL,
@@ -213,7 +217,7 @@ IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = 'UX_OTAHotelInfo_RawId' AN
 IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = 'IX_OTAHotelInfo_MTHotelCode' AND object_id = OBJECT_ID('dbo.OTAHotelInfo'))
     CREATE INDEX IX_OTAHotelInfo_MTHotelCode ON dbo.OTAHotelInfo(MTHotelCode);
 IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = 'IX_OTAHotelInfo_Clean' AND object_id = OBJECT_ID('dbo.OTAHotelInfo'))
-    CREATE INDEX IX_OTAHotelInfo_Clean ON dbo.OTAHotelInfo(CleanStatus, DataQualityStatus, CleanVersion);
+    CREATE INDEX IX_OTAHotelInfo_Clean ON dbo.OTAHotelInfo(Estate, CleanStatus, DataQualityStatus, CleanVersion);
 IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = 'IX_SupHotelInfoRaw_DataChangeTime' AND object_id = OBJECT_ID('dbo.SupHotelInfoRaw'))
     CREATE INDEX IX_SupHotelInfoRaw_DataChangeTime ON dbo.SupHotelInfoRaw(DataChangeTime, Id);
 IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = 'IX_SupHotelInfoRaw_DataVersion' AND object_id = OBJECT_ID('dbo.SupHotelInfoRaw'))

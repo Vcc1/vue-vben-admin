@@ -9,11 +9,15 @@ services:
         CODEX_VERSION: ${CODEX_VERSION:-0.145.0}
         USER_UID: ${USER_UID:-1000}
         USER_GID: ${USER_GID:-1000}
+        HTTP_PROXY: ${HTTP_PROXY:-http://192.168.1.43:7890}
+        HTTPS_PROXY: ${HTTPS_PROXY:-http://192.168.1.43:7890}
     command: ["init-workspace"]
     restart: "no"
     init: true
     env_file:
       - ./新建 文本文档.env
+    environment:
+      ENABLE_SSHD: "false"
     volumes:
       - workspace:/workspace
       - ${GIT_SSH_PATH:-/opt/mengtu-codex/ssh}:/home/codex/.ssh:ro
@@ -26,6 +30,8 @@ services:
       repo-init:
         condition: service_completed_successfully
     working_dir: /workspace
+    ports:
+      - "2222:22"
     env_file:
       - ./新建 文本文档.env
     volumes:
@@ -34,6 +40,7 @@ services:
       - nuget-cache:/home/codex/.nuget/packages
       - codex-runs:/runs
       - ${GIT_SSH_PATH:-/opt/mengtu-codex/ssh}:/home/codex/.ssh:ro
+      - ssh-hostkeys:/var/lib/codex/ssh-hostkeys
     healthcheck:
       test: ["CMD-SHELL", "test -d /workspace/.git && codex --version >/dev/null && dotnet --version >/dev/null"]
       interval: 30s
@@ -46,3 +53,4 @@ volumes:
   codex-home:
   nuget-cache:
   codex-runs:
+  ssh-hostkeys:

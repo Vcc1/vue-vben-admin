@@ -24,6 +24,16 @@ public sealed class OtaEntityMappingTests
         Assert.Null(clean.FindProperty("Id"));
         Assert.Null(clean.FindProperty("RawId"));
         Assert.False(clean.IsSqlOutputClauseUsed());
+        var cleanIndex = clean.GetIndexes().Single(index => index.GetDatabaseName() == "IX_OTAHotelInfo_Clean");
+        Assert.Equal(
+            [
+                nameof(OTAHotelInfo.Estate),
+                nameof(OTAHotelInfo.CleanStatus),
+                nameof(OTAHotelInfo.DataQualityStatus),
+                nameof(OTAHotelInfo.CleanVersion)
+            ],
+            cleanIndex.Properties.Select(x => x.Name));
+        Assert.Contains(clean.GetIndexes(), index => index.GetDatabaseName() == "IX_OTAHotelInfo_CleaningSnapshot");
 
         var phone = database.Model.FindEntityType(typeof(OTAHotelPhone))!;
         Assert.Equal(
@@ -52,12 +62,30 @@ public sealed class OtaEntityMappingTests
         var clean = database.Model.FindEntityType(typeof(SupHotelInfoClean))!;
         Assert.Equal([nameof(SupHotelInfoClean.SupHotelId)], clean.FindPrimaryKey()!.Properties.Select(x => x.Name));
         Assert.NotNull(clean.FindProperty(nameof(SupHotelInfoClean.MTHotelCode)));
+        Assert.NotNull(clean.FindProperty(nameof(SupHotelInfoClean.CountryCode)));
+        Assert.NotNull(clean.FindProperty(nameof(SupHotelInfoClean.CountryName)));
+        Assert.NotNull(clean.FindProperty(nameof(SupHotelInfoClean.CityCode)));
+        Assert.NotNull(clean.FindProperty(nameof(SupHotelInfoClean.CityName)));
         Assert.Null(clean.FindProperty("Id"));
         Assert.Null(clean.FindProperty("RawId"));
         Assert.Null(clean.FindProperty("ExistingMTHotelCode"));
+        Assert.Contains(clean.GetIndexes(), index => index.GetDatabaseName() == "IX_SupHotelInfo_CleaningSnapshot");
 
         var phone = database.Model.FindEntityType(typeof(SupHotelPhone))!;
         Assert.NotNull(phone.FindProperty(nameof(SupHotelPhone.SupHotelId)));
         Assert.Null(phone.FindProperty("SupHotelInfoId"));
+
+        var failure = database.Model.FindEntityType(typeof(HotelCleaningFailure))!;
+        Assert.Contains(
+            failure.GetIndexes(),
+            index => index.GetDatabaseName() == "IX_HotelCleaningFailure_CleaningSnapshot");
+
+        var matchResult = database.Model.FindEntityType(typeof(HotelMatchResult))!;
+        var businessKey = matchResult.GetIndexes().Single(
+            index => index.GetDatabaseName() == "UX_HotelMatchResult_BusinessKey");
+        Assert.True(businessKey.IsUnique);
+        Assert.Equal(
+            [nameof(HotelMatchResult.SupHotelId)],
+            businessKey.Properties.Select(property => property.Name));
     }
 }

@@ -8,6 +8,24 @@ public sealed record HotelMatchWorkItem(
     string NormalizedDataHash,
     int CleanVersion);
 
+public interface IHotelMatchPipelineRepository
+{
+    Task LoadPendingSupplierHotelIdsAsync(
+        Func<int, CancellationToken, ValueTask> enqueueId,
+        CancellationToken cancellationToken);
+
+    Task<HotelMatchingWorkItem> LoadMatchingWorkItemAsync(
+        int supHotelId,
+        int recallRadiusMeters,
+        int maxCandidates,
+        CancellationToken cancellationToken);
+
+    Task SaveMatchEvaluationsAsync(
+        IReadOnlyCollection<HotelMatchEvaluation> evaluations,
+        int matchingVersion,
+        CancellationToken cancellationToken);
+}
+
 public interface IHotelMatchingRepository
 {
     Task<IReadOnlyList<HotelMatchWorkItem>> ClaimUnmatchedSupplierHotelsAsync(

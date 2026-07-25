@@ -27,6 +27,7 @@ public static class ServiceCollectionExtensions
         services.AddSingleton<IHotelStarLevelConverter, ConfiguredSupplierStarLevelConverter>();
         services.AddSingleton<IHotelStarLevelNormalizer, HotelStarLevelNormalizer>();
         services.AddSingleton<HotelMatchEvaluator>();
+        services.AddSingleton<HotelFactMatchEvaluator>();
         services.AddScoped<HotelCleaner>();
         services.AddScoped<HotelCleaningService>();
         services.AddScoped<HotelMatchingService>();

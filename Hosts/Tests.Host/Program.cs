@@ -1,4 +1,7 @@
 using Framework.Core.IOC;
+using HotelMatchingPipeline.App;
+using HotelMatchingPipeline.Infra;
+using HotelMatchingPipeline.Domain.Hotels;
 using Infrastructure.SupplierStaticData;
 using MengTu.Connectmate.Client;
 using MengTu.Connectmate.Client.Tool;
@@ -9,6 +12,7 @@ using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
+using Microsoft.Extensions.DependencyInjection.Extensions;
 using Infrastructure.Sql.RoomMapping;
 using NLog.Extensions.Logging;
 using System.Text.Encodings.Web;
@@ -52,6 +56,12 @@ builder.Services.Configure<JsonOptions>(options =>
 });
 
 builder.Services.AddBusiness([typeof(RoomMappingDbContext).Assembly]);
+builder.Services.AddHotelMatchingApplication(builder.Configuration);
+builder.Services.AddHotelMatchingInfrastructure(builder.Configuration);
+builder.Services.RemoveAll<HotelCleaner>();
+builder.Services.RemoveAll<HotelCleaningService>();
+builder.Services.RemoveAll<HotelMatchingService>();
+builder.Services.RemoveAll<HotelDebugService>();
 builder.Services.AddSupplierStaticDataInfrastructure(builder.Configuration);
 builder.Services.AddRoomMatchInfrastructure(builder.Configuration);
 builder.Services.AddSingleton<IRoomWordDictionary, RoomDictionary>();
@@ -61,6 +71,7 @@ builder.Services.AddSingleton<IRoomAnalyzer, RoomAnalyzer>();
 builder.Services.AddSingleton<RoomAnalyzer>(static provider => (RoomAnalyzer)provider.GetRequiredService<IRoomAnalyzer>());
 builder.Services.AddSingleton<StrictEqualMatcher>();
 builder.Services.AddSingleton<FullSequenceMatcher>();
+builder.Services.AddControllers();
 
 var app = builder.Build();
 
@@ -73,9 +84,19 @@ app.MapGet("/supplier-static-data", () => Results.Content(
 app.MapGet("/room-match", () => Results.Content(
     DebugToolShellPage.Render("房型匹配调试", "/room-match", RoomMatchPage.Html),
     "text/html; charset=utf-8"));
+app.MapGet("/hotel-match-results", () => Results.Content(
+    DebugToolShellPage.Render("酒店匹配结果", "/hotel-match-results", HotelMatchDataPage.Html),
+    "text/html; charset=utf-8"));
+app.MapGet("/hotel-match-conflicts", () => Results.Content(
+    DebugToolShellPage.Render("酒店重复候选", "/hotel-match-conflicts", HotelMatchDataPage.Html),
+    "text/html; charset=utf-8"));
+app.MapGet("/hotel-match-deliveries", () => Results.Content(
+    DebugToolShellPage.Render("酒店匹配投递", "/hotel-match-deliveries", HotelMatchDataPage.Html),
+    "text/html; charset=utf-8"));
 
 app.MapPost("/api/query", ExecuteQueryAsync);
 app.MapPost("/api/room-match/evaluate", EvaluateRoomMatchAsync);
+app.MapControllers();
 app.MapHealthChecks("/alive");
 
 await app.RunAsync();

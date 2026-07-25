@@ -93,7 +93,10 @@ public sealed class OTAHotelInfo : IHasEntityConfiguration<OTAHotelInfo>
         builder.HasOne<OTAHotelInfoRaw>().WithOne()
             .HasForeignKey<OTAHotelInfo>(x => x.HotelID).OnDelete(DeleteBehavior.Restrict);
         builder.HasIndex(x => x.MTHotelCode).HasDatabaseName("IX_OTAHotelInfo_MTHotelCode");
-        builder.HasIndex(x => new { x.CleanStatus, x.DataQualityStatus, x.CleanVersion })
+        builder.HasIndex(x => new { x.Estate, x.CleanStatus, x.DataQualityStatus, x.CleanVersion })
             .HasDatabaseName("IX_OTAHotelInfo_Clean");
+        builder.HasIndex(x => new { x.CleanVersion, x.RegionFenceVersion, x.HotelID })
+            .IncludeProperties(x => new { x.SourceDataVersion, x.CleanTime })
+            .HasDatabaseName("IX_OTAHotelInfo_CleaningSnapshot");
     }
 }

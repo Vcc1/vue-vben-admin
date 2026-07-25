@@ -14,12 +14,14 @@
     <PackageReference Include="Microsoft.Extensions.Options" Version="10.0.4" />
     <PackageReference Include="NetTopologySuite" Version="2.6.0" />
     <PackageReference Include="Newtonsoft.Json" Version="13.0.4" />
+    <PackageReference Include="StackExchange.Redis" Version="2.8.0" />
   </ItemGroup>
 
   <ItemGroup>
     <ProjectReference Include="..\HotelMatchingPipeline.App\HotelMatchingPipeline.App.csproj" />
     <ProjectReference Include="..\HotelMatchingPipeline.Domain\HotelMatchingPipeline.Domain.csproj" />
     <ProjectReference Include="..\..\..\..\..\Providers\Infrastructure.Sql.RoomMapping\Infrastructure.Sql.RoomMapping.csproj" />
+    <ProjectReference Include="..\..\..\..\..\BaseFrameworks\VBaseFramework.Core\VBaseFramework.Core.csproj" />
   </ItemGroup>
 
   <ItemGroup>

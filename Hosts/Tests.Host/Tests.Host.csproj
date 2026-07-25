@@ -19,6 +19,9 @@
   </ItemGroup>
 
   <ItemGroup>
+    <ProjectReference Include="..\..\Models\Hotel\HotelMatching\MatchingPipeline\HotelMatchingPipeline.App\HotelMatchingPipeline.App.csproj" />
+    <ProjectReference Include="..\..\Models\Hotel\HotelMatching\MatchingPipeline\HotelMatchingPipeline.Domain\HotelMatchingPipeline.Domain.csproj" />
+    <ProjectReference Include="..\..\Models\Hotel\HotelMatching\MatchingPipeline\HotelMatchingPipeline.Infra\HotelMatchingPipeline.Infra.csproj" />
     <ProjectReference Include="..\..\Models\Room\RoomMatchings\Core\RoomMatch.Infra\RoomMatch.Infra.csproj" />
     <ProjectReference Include="..\..\BaseFrameworks\VBaseFramework.Core\VBaseFramework.Core.csproj" />
     <ProjectReference Include="..\..\BaseFrameworks\VBaseFramework.ServiceDefaults\VBaseFramework.ServiceDefaults.csproj" />

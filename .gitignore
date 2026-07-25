@@ -148,3 +148,4 @@ tmp/
 4.Presentation/MetricsAndAlerts/TestMetrics.zip
 .qoder/
 .artifacts/
+.codex-build/

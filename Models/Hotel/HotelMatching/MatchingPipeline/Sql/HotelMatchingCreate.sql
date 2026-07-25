@@ -30,6 +30,8 @@ BEGIN
         State int NOT NULL CONSTRAINT DF_SupHotelInfo_State DEFAULT (0),
         SSaleTopLevel int NULL, IsHandMatch int NULL, ReMatchState int NULL,
         HotelName nvarchar(200) NULL, HotelNameEn nvarchar(200) NULL,
+        CountryCode nvarchar(50) NULL, CountryName nvarchar(50) NULL,
+        CityCode nvarchar(50) NULL, CityName nvarchar(100) NULL,
         Tel nvarchar(100) NULL, Fax nvarchar(100) NULL,
         Address nvarchar(500) NULL, PostCode varchar(50) NULL, Email varchar(100) NULL,
         StarLevel decimal(3,1) NULL, CoordType tinyint NOT NULL CONSTRAINT DF_SupHotelInfo_CoordType DEFAULT (0),

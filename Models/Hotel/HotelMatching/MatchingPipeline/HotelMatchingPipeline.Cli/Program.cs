@@ -23,14 +23,14 @@ Directory.SetCurrentDirectory(AppContext.BaseDirectory);
 var command = args
     .FirstOrDefault(static arg => !arg.StartsWith("-", StringComparison.Ordinal))
     ?.Trim()
-    .ToLowerInvariant() ?? "clean-once";
+    .ToLowerInvariant() ?? "run-all";
 if (command == "help" || args.Any(static arg => arg is "--help" or "-h"))
 {
-    Console.WriteLine("Usage: HotelMatchingPipeline.Cli clean-once | match-loop");
+    Console.WriteLine("Usage: HotelMatchingPipeline.Cli run-all | clean-once | match-loop");
     return;
 }
 
-if (command is not "clean-once" and not "match-loop")
+if (command is not "run-all" and not "clean-once" and not "match-loop")
 {
     Console.Error.WriteLine($"Unknown command: {command}");
     Environment.ExitCode = 2;
@@ -55,12 +55,13 @@ var host = Serve.Run(new RunOptions
             .ToArray();
     });
     services.AddSingleton<HotelCleaningMetrics>();
+    services.AddSingleton<HotelMatchingMetrics>();
     services
         .AddHotelMatchingApplication(configuration)
         .AddHotelMatchingInfrastructure(configuration)
         .AddBusiness([typeof(RoomMappingDbContext).Assembly]);
 
-    if (command == "clean-once")
+    if (command is "run-all" or "clean-once")
     {
         var cleaningOptions = new HotelCleaningOptions();
         configuration.GetSection(HotelCleaningOptions.SectionName).Bind(cleaningOptions);

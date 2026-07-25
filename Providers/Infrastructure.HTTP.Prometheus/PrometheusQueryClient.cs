@@ -51,7 +51,6 @@ public sealed class PrometheusQueryClient : IPrometheusQueryClient
         MonitorTargetType targetType,
         CancellationToken cancellationToken = default)
     {
-        var options = _options.CurrentValue;
         var result = targetType == MonitorTargetType.Application
             ? await QueryResultsAsync(
                 BuildAppMetricsInstancesQuery(targetKey),
@@ -59,6 +58,29 @@ public sealed class PrometheusQueryClient : IPrometheusQueryClient
             : await QueryResultsAsync(
                 BuildInstancesQuery(targetKey, targetType),
                 cancellationToken);
+
+        return ParseInstances(result);
+    }
+
+    public async Task<IReadOnlyList<TargetInstanceDto>> GetRecentInstancesAsync(
+        string targetKey,
+        MonitorTargetType targetType,
+        CancellationToken cancellationToken = default)
+    {
+        var result = targetType == MonitorTargetType.Application
+            ? await QueryResultsAsync(
+                BuildRecentAppMetricsInstancesQuery(targetKey),
+                cancellationToken)
+            : await QueryResultsAsync(
+                BuildRecentInstancesQuery(targetKey),
+                cancellationToken);
+
+        return ParseInstances(result);
+    }
+
+    IReadOnlyList<TargetInstanceDto> ParseInstances(JsonElement result)
+    {
+        var options = _options.CurrentValue;
         var now = DateTimeOffset.UtcNow.ToUnixTimeSeconds();
         var instances = new List<TargetInstanceDto>();
 
@@ -210,6 +232,22 @@ public sealed class PrometheusQueryClient : IPrometheusQueryClient
     {
         var escapedTargetKey = MetricsAndAlertsUtilities.EscapePrometheusLabelValue(targetKey);
         return $"max by(exported_instance) (app_last_heartbeat_timestamp{{exported_job=\"{escapedTargetKey}\"}})";
+    }
+
+    string BuildRecentInstancesQuery(string targetKey)
+    {
+        var options = _options.CurrentValue;
+        var metric = options.HeartbeatMetricName;
+        var escapedTargetKey = MetricsAndAlertsUtilities.EscapePrometheusLabelValue(targetKey);
+        return "max by(instance_key) (" +
+            $"max_over_time({metric}{{target_key=\"{escapedTargetKey}\"}}[24h]))";
+    }
+
+    string BuildRecentAppMetricsInstancesQuery(string targetKey)
+    {
+        var escapedTargetKey = MetricsAndAlertsUtilities.EscapePrometheusLabelValue(targetKey);
+        return "max by(exported_instance) (" +
+            $"max_over_time(app_last_heartbeat_timestamp{{exported_job=\"{escapedTargetKey}\"}}[24h]))";
     }
 
     static string? TryGetString(JsonElement element, string name)

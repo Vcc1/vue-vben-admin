@@ -7,7 +7,10 @@ internal static class DebugToolShellPage
     private static readonly DebugToolMenuItem[] MenuItems =
     [
         new("房型匹配调试", "/room-match", "RM"),
-        new("静态数据查询", "/supplier-static-data", "SD")
+        new("静态数据查询", "/supplier-static-data", "SD"),
+        new("酒店匹配结果", "/hotel-match-results", "MR"),
+        new("酒店重复候选", "/hotel-match-conflicts", "MC"),
+        new("酒店匹配投递", "/hotel-match-deliveries", "MD")
     ];
 
     public static string Render(string title, string activePath, string pageHtml)

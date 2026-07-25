@@ -739,7 +739,7 @@ public sealed class TargetAliveAlertWorker : BackgroundService
                 var recentOfflineInstances = Array.Empty<TargetInstanceDto>();
                 if (rule.TargetType == MonitorTargetType.Application && onlineCount < rule.MinAliveCount)
                 {
-                    var instances = await prometheus.GetInstancesAsync(rule.TargetKey, rule.TargetType, cancellationToken);
+                    var instances = await prometheus.GetRecentInstancesAsync(rule.TargetKey, rule.TargetType, cancellationToken);
                     recentOfflineInstances = GetRecentOfflineInstances(instances, rule.OfflineSeconds, rule.MinAliveCount - onlineCount);
                 }
 

@@ -41,6 +41,185 @@ public sealed class GeoBoundaryResolverTests
     }
 
     [Fact]
+    public async Task Resolver_treats_a_boundary_point_as_contained()
+    {
+        var directory = Directory.CreateTempSubdirectory("hotel-boundaries-edge-");
+        try
+        {
+            await WriteBoundaryAsync(directory.FullName, 0, "TST", "Test Country", "TST", 0, 0, 10, 10);
+            await WriteBoundaryAsync(directory.FullName, 1, "ADM1-1", "Test Province", "TST", 1, 1, 9, 9);
+            await WriteBoundaryAsync(directory.FullName, 2, "ADM2-1", "Test City", "TST", 2, 2, 8, 8);
+
+            var loaded = await GeoBoundaryLoader.LoadAsync(directory.FullName, 7);
+            using var resolver = loaded.Resolver;
+            var region = resolver.Resolve(2, 5);
+
+            Assert.Equal(RegionResolveStatus.Resolved, region.Status);
+            Assert.Equal("ADM2-1", region.Level3Code);
+        }
+        finally
+        {
+            directory.Delete(recursive: true);
+        }
+    }
+
+    [Fact]
+    public async Task Resolver_assigns_a_point_within_300_meters_of_a_single_country_boundary()
+    {
+        var directory = Directory.CreateTempSubdirectory("hotel-boundaries-near-country-");
+        try
+        {
+            await WriteBoundaryAsync(directory.FullName, 0, "AAA", "Country A", "AAA", 0, 0, 1, 1);
+            await WriteBoundaryAsync(directory.FullName, 1, "ADM1-A", "Province A", "AAA", 0, 0, 1, 1);
+            await WriteBoundaryAsync(directory.FullName, 2, "ADM2-A", "City A", "AAA", 0, 0, 1, 1);
+
+            var loaded = await GeoBoundaryLoader.LoadAsync(directory.FullName, 7);
+            using var resolver = loaded.Resolver;
+            var region = resolver.Resolve(1.001m, 0.5m);
+
+            Assert.Equal(RegionResolveStatus.Resolved, region.Status);
+            Assert.Equal("AAA", region.Level1Code);
+            Assert.Null(region.Level2Code);
+            Assert.Null(region.Level3Code);
+        }
+        finally
+        {
+            directory.Delete(recursive: true);
+        }
+    }
+
+    [Fact]
+    public async Task Resolver_chooses_the_nearest_country_when_multiple_boundaries_are_within_300_meters()
+    {
+        var directory = Directory.CreateTempSubdirectory("hotel-boundaries-nearest-country-");
+        try
+        {
+            await WriteBoundaryAsync(directory.FullName, 0, "AAA", "Country A", "AAA", 0, 0, 1, 1);
+            await AppendBoundaryAsync(directory.FullName, 0, "BBB", "Country B", "BBB", 1.0025, 0, 2, 1);
+            await WriteBoundaryAsync(directory.FullName, 1, "ADM1-A", "Province A", "AAA", 0, 0, 1, 1);
+            await WriteBoundaryAsync(directory.FullName, 2, "ADM2-A", "City A", "AAA", 0, 0, 1, 1);
+
+            var loaded = await GeoBoundaryLoader.LoadAsync(directory.FullName, 7);
+            using var resolver = loaded.Resolver;
+            var region = resolver.Resolve(1.001m, 0.5m);
+
+            Assert.Equal(RegionResolveStatus.Resolved, region.Status);
+            Assert.Equal("AAA", region.Level1Code);
+
+            var databasePreferredRegion = resolver.Resolve(1.001m, 0.5m, "BBB");
+            Assert.Equal(RegionResolveStatus.Resolved, databasePreferredRegion.Status);
+            Assert.Equal("BBB", databasePreferredRegion.Level1Code);
+        }
+        finally
+        {
+            directory.Delete(recursive: true);
+        }
+    }
+
+    [Fact]
+    public async Task Resolver_uses_database_country_only_when_it_matches_an_overlapping_candidate()
+    {
+        var directory = Directory.CreateTempSubdirectory("hotel-boundaries-database-country-");
+        try
+        {
+            await WriteBoundaryAsync(directory.FullName, 0, "AAA", "Country A", "AAA", 0, 0, 10, 10);
+            await AppendBoundaryAsync(directory.FullName, 0, "BBB", "Country B", "BBB", 0, 0, 10, 10);
+            await WriteBoundaryAsync(directory.FullName, 1, "ADM1-A", "Province A", "AAA", 20, 20, 30, 30);
+            await WriteBoundaryAsync(directory.FullName, 2, "ADM2-A", "City A", "AAA", 22, 22, 28, 28);
+
+            var loaded = await GeoBoundaryLoader.LoadAsync(directory.FullName, 7);
+            using var resolver = loaded.Resolver;
+
+            var matched = resolver.Resolve(5, 5, "BBB");
+            Assert.Equal(RegionResolveStatus.Resolved, matched.Status);
+            Assert.Equal("BBB", matched.Level1Code);
+
+            var unmatched = resolver.Resolve(5, 5, "CCC");
+            Assert.Equal(RegionResolveStatus.BoundaryAmbiguous, unmatched.Status);
+        }
+        finally
+        {
+            directory.Delete(recursive: true);
+        }
+    }
+
+    [Fact]
+    public async Task Resolver_returns_not_found_when_the_nearest_country_is_more_than_300_meters_away()
+    {
+        var directory = Directory.CreateTempSubdirectory("hotel-boundaries-distant-country-");
+        try
+        {
+            await WriteBoundaryAsync(directory.FullName, 0, "AAA", "Country A", "AAA", 0, 0, 1, 1);
+            await WriteBoundaryAsync(directory.FullName, 1, "ADM1-A", "Province A", "AAA", 0, 0, 1, 1);
+            await WriteBoundaryAsync(directory.FullName, 2, "ADM2-A", "City A", "AAA", 0, 0, 1, 1);
+
+            var loaded = await GeoBoundaryLoader.LoadAsync(directory.FullName, 7);
+            using var resolver = loaded.Resolver;
+            var region = resolver.Resolve(1.003m, 0.5m);
+
+            Assert.Equal(RegionResolveStatus.NotFound, region.Status);
+        }
+        finally
+        {
+            directory.Delete(recursive: true);
+        }
+    }
+
+    [Fact]
+    public async Task Resolver_returns_ambiguous_when_two_country_boundaries_are_equally_near()
+    {
+        var directory = Directory.CreateTempSubdirectory("hotel-boundaries-equal-country-");
+        try
+        {
+            await WriteBoundaryAsync(directory.FullName, 0, "AAA", "Country A", "AAA", 0, 0, 1, 1);
+            await AppendBoundaryAsync(directory.FullName, 0, "BBB", "Country B", "BBB", 1.002, 0, 2, 1);
+            await WriteBoundaryAsync(directory.FullName, 1, "ADM1-A", "Province A", "AAA", 0, 0, 1, 1);
+            await WriteBoundaryAsync(directory.FullName, 2, "ADM2-A", "City A", "AAA", 0, 0, 1, 1);
+
+            var loaded = await GeoBoundaryLoader.LoadAsync(directory.FullName, 7);
+            using var resolver = loaded.Resolver;
+            var region = resolver.Resolve(1.001m, 0.5m);
+
+            Assert.Equal(RegionResolveStatus.BoundaryAmbiguous, region.Status);
+        }
+        finally
+        {
+            directory.Delete(recursive: true);
+        }
+    }
+
+    [Fact]
+    public async Task Resolver_assigns_the_same_nearby_country_concurrently()
+    {
+        var directory = Directory.CreateTempSubdirectory("hotel-boundaries-concurrent-country-");
+        try
+        {
+            await WriteBoundaryAsync(directory.FullName, 0, "AAA", "Country A", "AAA", 0, 0, 1, 1);
+            await WriteBoundaryAsync(directory.FullName, 1, "ADM1-A", "Province A", "AAA", 0, 0, 1, 1);
+            await WriteBoundaryAsync(directory.FullName, 2, "ADM2-A", "City A", "AAA", 0, 0, 1, 1);
+
+            var loaded = await GeoBoundaryLoader.LoadAsync(directory.FullName, 7);
+            using var resolver = loaded.Resolver;
+            var results = new RegionResolution[1_000];
+            Parallel.For(
+                0,
+                results.Length,
+                new ParallelOptions { MaxDegreeOfParallelism = 8 },
+                index => results[index] = resolver.Resolve(1.001m, 0.5m));
+
+            Assert.All(results, region =>
+            {
+                Assert.Equal(RegionResolveStatus.Resolved, region.Status);
+                Assert.Equal("AAA", region.Level1Code);
+            });
+        }
+        finally
+        {
+            directory.Delete(recursive: true);
+        }
+    }
+
+    [Fact]
     public async Task Loader_counts_feature_without_properties_as_invalid_without_failing()
     {
         var directory = Directory.CreateTempSubdirectory("hotel-boundaries-invalid-");

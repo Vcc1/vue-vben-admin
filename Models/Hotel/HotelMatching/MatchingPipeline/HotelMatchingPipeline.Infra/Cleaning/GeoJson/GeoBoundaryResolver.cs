@@ -2,9 +2,11 @@ using System.Diagnostics;
 using System.Security.Cryptography;
 using HotelMatchingPipeline.Domain.Hotels;
 using NetTopologySuite;
+using NetTopologySuite.Algorithm.Locate;
 using NetTopologySuite.Geometries;
 using NetTopologySuite.Geometries.Prepared;
 using NetTopologySuite.Index.Strtree;
+using NetTopologySuite.Operation.Distance;
 using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
 
@@ -28,12 +30,22 @@ sealed record BoundaryNode(
 
 public sealed class GeoBoundaryResolver : IHotelRegionResolver, IDisposable
 {
+    const double CountryFallbackDistanceMeters = 300;
+    const double EarthRadiusMeters = 6_371_008.8;
+    const double EqualDistanceToleranceMeters = 0.01;
+
+    static readonly GeometryFactory GeometryFactory = NtsGeometryServices.Instance.CreateGeometryFactory(4326);
+
     STRtree<BoundaryNode>? _adm0Index;
     STRtree<BoundaryNode>? _adm1Index;
     STRtree<BoundaryNode>? _adm2Index;
     Dictionary<string, BoundaryNode>? _adm0ByCode;
     Dictionary<string, BoundaryNode>? _adm1ByCode;
     Dictionary<string, BoundaryNode>? _adm2ByCode;
+    Dictionary<string, IndexedPointInAreaLocator>? _adm0Locators;
+    Dictionary<string, IndexedPointInAreaLocator>? _adm1Locators;
+    Dictionary<string, IndexedPointInAreaLocator>? _adm2Locators;
+    Dictionary<string, Lazy<IndexedFacetDistance>>? _adm0DistanceIndexes;
     bool _disposed;
 
     internal GeoBoundaryResolver(
@@ -51,76 +63,287 @@ public sealed class GeoBoundaryResolver : IHotelRegionResolver, IDisposable
         _adm0ByCode = adm0ByCode;
         _adm1ByCode = adm1ByCode;
         _adm2ByCode = adm2ByCode;
+        _adm0Locators = BuildLocators(adm0ByCode.Values);
+        _adm1Locators = BuildLocators(adm1ByCode.Values);
+        _adm2Locators = BuildLocators(adm2ByCode.Values);
+        _adm0DistanceIndexes = BuildDistanceIndexes(adm0ByCode.Values);
         BoundaryVersion = boundaryVersion;
     }
 
     public int BoundaryVersion { get; }
 
     public RegionResolution Resolve(decimal longitude, decimal latitude, CancellationToken cancellationToken = default)
+        => Resolve(longitude, latitude, null, cancellationToken);
+
+    public RegionResolution Resolve(
+        decimal longitude,
+        decimal latitude,
+        string? preferredCountryCode,
+        CancellationToken cancellationToken = default)
     {
         ThrowIfDisposed();
         cancellationToken.ThrowIfCancellationRequested();
-        var point = NtsGeometryServices.Instance.CreateGeometryFactory(4326).CreatePoint(new Coordinate((double)longitude, (double)latitude));
+        var coordinate = new Coordinate((double)longitude, (double)latitude);
+        var envelope = new Envelope(coordinate);
 
-        var adm2Matches = FindContaining(_adm2Index!, point);
-        if (adm2Matches.Count == 1)
+        var adm2Match = FindContaining(_adm2Index!, _adm2Locators!, coordinate, envelope, preferredCountryCode);
+        if (adm2Match.Node is { } adm2Node)
         {
-            var adm2 = adm2Matches[0];
-            var adm1 = adm2.ParentCode is not null && _adm1ByCode!.TryGetValue(adm2.ParentCode, out var adm1Value) ? adm1Value : null;
-            var adm0 = adm2.ParentParentCode is not null && _adm0ByCode!.TryGetValue(adm2.ParentParentCode, out var adm0Value) ? adm0Value : null;
+            var adm1 = adm2Node.ParentCode is not null && _adm1ByCode!.TryGetValue(adm2Node.ParentCode, out var adm1Value) ? adm1Value : null;
+            var adm0 = adm2Node.ParentParentCode is not null && _adm0ByCode!.TryGetValue(adm2Node.ParentParentCode, out var adm0Value) ? adm0Value : null;
             return new RegionResolution(
-                adm0?.Code ?? adm2.CountryCode,
+                adm0?.Code ?? adm2Node.CountryCode,
                 adm0?.Name,
                 adm1?.Code,
                 adm1?.Name,
-                adm2.Code,
-                adm2.Name,
+                adm2Node.Code,
+                adm2Node.Name,
                 RegionResolveStatus.Resolved,
                 BoundaryVersion);
         }
 
-        if (adm2Matches.Count > 1)
+        if (adm2Match.IsAmbiguous)
         {
             return new RegionResolution(null, null, null, null, null, null, RegionResolveStatus.BoundaryAmbiguous, BoundaryVersion);
         }
 
-        var adm1Matches = FindContaining(_adm1Index!, point);
-        if (adm1Matches.Count == 1)
+        var adm1Match = FindContaining(_adm1Index!, _adm1Locators!, coordinate, envelope, preferredCountryCode);
+        if (adm1Match.Node is { } adm1Node)
         {
-            var adm1 = adm1Matches[0];
-            var adm0 = adm1.ParentCode is not null && _adm0ByCode!.TryGetValue(adm1.ParentCode, out var adm0Value) ? adm0Value : null;
+            var adm0 = adm1Node.ParentCode is not null && _adm0ByCode!.TryGetValue(adm1Node.ParentCode, out var adm0Value) ? adm0Value : null;
             return new RegionResolution(
-                adm0?.Code ?? adm1.CountryCode,
+                adm0?.Code ?? adm1Node.CountryCode,
                 adm0?.Name,
-                adm1.Code,
-                adm1.Name,
+                adm1Node.Code,
+                adm1Node.Name,
                 null,
                 null,
                 RegionResolveStatus.Resolved,
                 BoundaryVersion);
         }
 
-        if (adm1Matches.Count > 1)
+        if (adm1Match.IsAmbiguous)
         {
             return new RegionResolution(null, null, null, null, null, null, RegionResolveStatus.BoundaryAmbiguous, BoundaryVersion);
         }
 
-        var adm0Matches = FindContaining(_adm0Index!, point);
-        if (adm0Matches.Count == 1)
+        var adm0Match = FindContaining(_adm0Index!, _adm0Locators!, coordinate, envelope, preferredCountryCode);
+        if (adm0Match.Node is { } adm0Node)
         {
-            var adm0 = adm0Matches[0];
-            return new RegionResolution(adm0.Code, adm0.Name, null, null, null, null, RegionResolveStatus.Resolved, BoundaryVersion);
+            return new RegionResolution(adm0Node.Code, adm0Node.Name, null, null, null, null, RegionResolveStatus.Resolved, BoundaryVersion);
         }
 
-        return adm0Matches.Count > 1
+        if (adm0Match.IsAmbiguous)
+        {
+            return new RegionResolution(null, null, null, null, null, null, RegionResolveStatus.BoundaryAmbiguous, BoundaryVersion);
+        }
+
+        var nearestCountry = FindNearestCountry(coordinate, preferredCountryCode);
+        if (nearestCountry.Node is { } nearestCountryNode)
+        {
+            return new RegionResolution(
+                nearestCountryNode.Code,
+                nearestCountryNode.Name,
+                null,
+                null,
+                null,
+                null,
+                RegionResolveStatus.Resolved,
+                BoundaryVersion);
+        }
+
+        return nearestCountry.IsAmbiguous
             ? new RegionResolution(null, null, null, null, null, null, RegionResolveStatus.BoundaryAmbiguous, BoundaryVersion)
             : RegionResolution.NotFound(BoundaryVersion);
     }
 
-    static List<BoundaryNode> FindContaining(STRtree<BoundaryNode> index, Point point)
-        => index.Query(point.EnvelopeInternal)
-            .Where(candidate => candidate.Geometry.Covers(point))
-            .ToList();
+    ContainmentMatch FindNearestCountry(Coordinate coordinate, string? preferredCountryCode)
+    {
+        var point = GeometryFactory.CreatePoint(coordinate);
+        BoundaryNode? nearest = null;
+        BoundaryNode? preferred = null;
+        var nearestDistanceMeters = double.PositiveInfinity;
+        var isAmbiguous = false;
+        var candidateCount = 0;
+        var preferredCount = 0;
+
+        foreach (var candidate in QueryNearbyCountries(coordinate, CountryFallbackDistanceMeters))
+        {
+            var nearestPoints = _adm0DistanceIndexes![candidate.Code].Value.NearestPoints(point);
+            var distanceMeters = GreatCircleDistanceMeters(coordinate, nearestPoints[0]);
+            if (distanceMeters > CountryFallbackDistanceMeters)
+            {
+                continue;
+            }
+
+            candidateCount++;
+            if (MatchesPreferredCountry(candidate, preferredCountryCode))
+            {
+                preferred = candidate;
+                preferredCount++;
+            }
+
+            if (distanceMeters < nearestDistanceMeters - EqualDistanceToleranceMeters)
+            {
+                nearest = candidate;
+                nearestDistanceMeters = distanceMeters;
+                isAmbiguous = false;
+            }
+            else if (Math.Abs(distanceMeters - nearestDistanceMeters) <= EqualDistanceToleranceMeters)
+            {
+                isAmbiguous = true;
+            }
+        }
+
+        if (candidateCount > 1 && preferredCount == 1)
+        {
+            return new ContainmentMatch(preferred, false);
+        }
+
+        return isAmbiguous
+            ? new ContainmentMatch(null, true)
+            : new ContainmentMatch(nearest, false);
+    }
+
+    IEnumerable<BoundaryNode> QueryNearbyCountries(Coordinate coordinate, double distanceMeters)
+    {
+        var angularDistance = distanceMeters / EarthRadiusMeters;
+        var latitudeDelta = angularDistance * 180 / Math.PI;
+        var latitudeRadians = coordinate.Y * Math.PI / 180;
+        var minLatitude = Math.Max(-90, coordinate.Y - latitudeDelta);
+        var maxLatitude = Math.Min(90, coordinate.Y + latitudeDelta);
+        var crossesPole = coordinate.Y - latitudeDelta <= -90 || coordinate.Y + latitudeDelta >= 90;
+        var longitudeDelta = crossesPole || Math.Abs(Math.Cos(latitudeRadians)) < 1e-12
+            ? 180
+            : Math.Min(180, Math.Asin(Math.Min(1, Math.Sin(angularDistance) / Math.Abs(Math.Cos(latitudeRadians)))) * 180 / Math.PI);
+        var minLongitude = coordinate.X - longitudeDelta;
+        var maxLongitude = coordinate.X + longitudeDelta;
+        var seenCodes = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+
+        if (minLongitude >= -180 && maxLongitude <= 180)
+        {
+            foreach (var candidate in _adm0Index!.Query(new Envelope(minLongitude, maxLongitude, minLatitude, maxLatitude)))
+            {
+                if (seenCodes.Add(candidate.Code))
+                {
+                    yield return candidate;
+                }
+            }
+
+            yield break;
+        }
+
+        var firstEnvelope = minLongitude < -180
+            ? new Envelope(-180, maxLongitude, minLatitude, maxLatitude)
+            : new Envelope(minLongitude, 180, minLatitude, maxLatitude);
+        var secondEnvelope = minLongitude < -180
+            ? new Envelope(minLongitude + 360, 180, minLatitude, maxLatitude)
+            : new Envelope(-180, maxLongitude - 360, minLatitude, maxLatitude);
+        foreach (var envelope in new[] { firstEnvelope, secondEnvelope })
+        {
+            foreach (var candidate in _adm0Index!.Query(envelope))
+            {
+                if (seenCodes.Add(candidate.Code))
+                {
+                    yield return candidate;
+                }
+            }
+        }
+    }
+
+    static double GreatCircleDistanceMeters(Coordinate left, Coordinate right)
+    {
+        var latitude1 = left.Y * Math.PI / 180;
+        var latitude2 = right.Y * Math.PI / 180;
+        var latitudeDelta = latitude2 - latitude1;
+        var longitudeDelta = (right.X - left.X) * Math.PI / 180;
+        var haversine = Math.Sin(latitudeDelta / 2) * Math.Sin(latitudeDelta / 2)
+            + Math.Cos(latitude1) * Math.Cos(latitude2)
+            * Math.Sin(longitudeDelta / 2) * Math.Sin(longitudeDelta / 2);
+        return EarthRadiusMeters * 2 * Math.Atan2(Math.Sqrt(haversine), Math.Sqrt(Math.Max(0, 1 - haversine)));
+    }
+
+    static ContainmentMatch FindContaining(
+        STRtree<BoundaryNode> index,
+        IReadOnlyDictionary<string, IndexedPointInAreaLocator> locators,
+        Coordinate coordinate,
+        Envelope envelope,
+        string? preferredCountryCode)
+    {
+        BoundaryNode? match = null;
+        BoundaryNode? preferred = null;
+        var matchCount = 0;
+        var preferredCount = 0;
+        foreach (var candidate in index.Query(envelope))
+        {
+            if (locators[candidate.Code].Locate(coordinate) == Location.Exterior)
+            {
+                continue;
+            }
+
+            if (matchCount == 0)
+            {
+                match = candidate;
+                matchCount = 1;
+                continue;
+            }
+
+            if (matchCount == 1 && MatchesPreferredCountry(match!, preferredCountryCode))
+            {
+                preferred = match;
+                preferredCount = 1;
+            }
+
+            matchCount++;
+            if (MatchesPreferredCountry(candidate, preferredCountryCode))
+            {
+                preferred = candidate;
+                preferredCount++;
+            }
+        }
+
+        if (matchCount <= 1)
+        {
+            return new ContainmentMatch(match, false);
+        }
+
+        return preferredCount == 1
+            ? new ContainmentMatch(preferred, false)
+            : new ContainmentMatch(null, true);
+    }
+
+    static bool MatchesPreferredCountry(BoundaryNode candidate, string? preferredCountryCode)
+        => CountryCodeNormalizer.AreEquivalent(
+            candidate.Level == 0 ? candidate.Code : candidate.CountryCode,
+            preferredCountryCode);
+
+    static Dictionary<string, IndexedPointInAreaLocator> BuildLocators(IEnumerable<BoundaryNode> nodes)
+    {
+        var result = new Dictionary<string, IndexedPointInAreaLocator>(StringComparer.OrdinalIgnoreCase);
+        foreach (var node in nodes)
+        {
+            result.Add(node.Code, new IndexedPointInAreaLocator(node.Geometry));
+        }
+
+        return result;
+    }
+
+    static Dictionary<string, Lazy<IndexedFacetDistance>> BuildDistanceIndexes(IEnumerable<BoundaryNode> nodes)
+    {
+        var result = new Dictionary<string, Lazy<IndexedFacetDistance>>(StringComparer.OrdinalIgnoreCase);
+        foreach (var node in nodes)
+        {
+            result.Add(
+                node.Code,
+                new Lazy<IndexedFacetDistance>(
+                    () => new IndexedFacetDistance(node.Geometry),
+                    LazyThreadSafetyMode.ExecutionAndPublication));
+        }
+
+        return result;
+    }
+
+    readonly record struct ContainmentMatch(BoundaryNode? Node, bool IsAmbiguous);
 
     void ThrowIfDisposed()
     {
@@ -144,6 +367,10 @@ public sealed class GeoBoundaryResolver : IHotelRegionResolver, IDisposable
         _adm0ByCode = null;
         _adm1ByCode = null;
         _adm2ByCode = null;
+        _adm0Locators = null;
+        _adm1Locators = null;
+        _adm2Locators = null;
+        _adm0DistanceIndexes = null;
     }
 }
 

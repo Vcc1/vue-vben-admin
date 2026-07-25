@@ -30,19 +30,24 @@ internal sealed class HotelMatchingPipelineWorker : BackgroundService
     {
         try
         {
-            await using var scope = _scopeFactory.CreateAsyncScope();
             if (_options.Command == "clean-once")
             {
+                await using var scope = _scopeFactory.CreateAsyncScope();
                 var count = await scope.ServiceProvider
                     .GetRequiredService<HotelCleaningService>()
                     .RunOnceAsync(stoppingToken);
                 _logger.LogInformation("Hotel cleaning completed. Count={Count}", count);
             }
-            else
+            else if (_options.Command == "match-loop")
             {
+                await using var scope = _scopeFactory.CreateAsyncScope();
                 await scope.ServiceProvider
                     .GetRequiredService<HotelMatchingService>()
                     .RunLoopAsync(stoppingToken);
+            }
+            else
+            {
+                await RunAllAsync(stoppingToken);
             }
         }
         catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested)
@@ -57,5 +62,45 @@ internal sealed class HotelMatchingPipelineWorker : BackgroundService
         {
             _lifetime.StopApplication();
         }
+    }
+
+    async Task RunAllAsync(CancellationToken stoppingToken)
+    {
+        _logger.LogInformation("Starting cleaning and matching pipelines concurrently.");
+
+        var cleaningTask = Task.Run(
+            async () =>
+            {
+                await using var scope = _scopeFactory.CreateAsyncScope();
+                _logger.LogInformation("Hotel cleaning pipeline started.");
+                return await scope.ServiceProvider
+                    .GetRequiredService<HotelCleaningService>()
+                    .RunOnceAsync(stoppingToken);
+            },
+            CancellationToken.None);
+
+        var matchingTask = Task.Run(
+            async () =>
+            {
+                await using var scope = _scopeFactory.CreateAsyncScope();
+                _logger.LogInformation("Hotel matching pipeline started.");
+                await scope.ServiceProvider
+                    .GetRequiredService<HotelMatchingService>()
+                    .RunLoopAsync(stoppingToken);
+            },
+            CancellationToken.None);
+
+        var firstCompletedTask = await Task.WhenAny(cleaningTask, matchingTask);
+        if (firstCompletedTask == matchingTask)
+        {
+            await matchingTask;
+            return;
+        }
+
+        var cleanedCount = await cleaningTask;
+        _logger.LogInformation(
+            "Hotel cleaning completed while matching continues. Count={Count}",
+            cleanedCount);
+        await matchingTask;
     }
 }

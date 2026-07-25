@@ -48,9 +48,37 @@ public sealed class HotelCleaner
         var sourceHash = string.IsNullOrWhiteSpace(raw.SourceDataHash)
             ? HotelDataHasher.HashRaw(raw)
             : raw.SourceDataHash;
-        var coordinate = HotelCoordinateNormalizer.Normalize(raw.Longitude, raw.Latitude, raw.GpsType);
         var flags = HotelDataQualityFlags.None;
         var details = new Dictionary<string, string?>(StringComparer.Ordinal);
+        var coordinate = HotelCoordinateNormalizer.Normalize(raw.Longitude, raw.Latitude, raw.GpsType);
+        var region = coordinate.IsValid
+            ? _regionResolver.Resolve(
+                coordinate.Longitude!.Value,
+                coordinate.Latitude!.Value,
+                raw.CountryCode,
+                cancellationToken)
+            : RegionResolution.NotFound();
+
+        if (CountryCodeNormalizer.IsAlphaCode(raw.CountryCode)
+            && raw.CountryCode is { } databaseCountryCode
+            && !RegionMatchesCountry(region, databaseCountryCode))
+        {
+            var swappedCoordinate = HotelCoordinateNormalizer.Normalize(raw.Latitude, raw.Longitude, raw.GpsType);
+            if (swappedCoordinate.IsValid)
+            {
+                var swappedRegion = _regionResolver.Resolve(
+                    swappedCoordinate.Longitude!.Value,
+                    swappedCoordinate.Latitude!.Value,
+                    raw.CountryCode,
+                    cancellationToken);
+                if (RegionMatchesCountry(swappedRegion, databaseCountryCode))
+                {
+                    coordinate = swappedCoordinate;
+                    region = swappedRegion;
+                    details["coordinate_order"] = "swapped_to_match_country";
+                }
+            }
+        }
 
         if (!coordinate.IsValid)
         {
@@ -59,10 +87,6 @@ public sealed class HotelCleaner
                 : HotelDataQualityFlags.CoordinateInvalid;
             details["coordinate"] = coordinate.Error;
         }
-
-        var region = coordinate.IsValid
-            ? _regionResolver.Resolve(coordinate.Longitude!.Value, coordinate.Latitude!.Value, cancellationToken)
-            : RegionResolution.NotFound();
 
         if (region.Status == RegionResolveStatus.NotFound)
         {
@@ -187,4 +211,7 @@ public sealed class HotelCleaner
 
     static string? GetCallingCode(string? countryCode)
         => TryGetCallingCode(countryCode, out var callingCode) ? callingCode : null;
+
+    static bool RegionMatchesCountry(RegionResolution region, string countryCode)
+        => region.IsResolved && CountryCodeNormalizer.AreEquivalentIsoCodes(region.Level1Code, countryCode);
 }

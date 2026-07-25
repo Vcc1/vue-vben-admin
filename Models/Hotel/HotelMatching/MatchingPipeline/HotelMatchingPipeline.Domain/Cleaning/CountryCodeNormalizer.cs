@@ -13,6 +13,27 @@ public static class CountryCodeNormalizer
         return string.IsNullOrWhiteSpace(value) ? null : CodeToAlpha2.GetValueOrDefault(value);
     }
 
+    public static bool IsAlphaCode(string? countryCode)
+    {
+        var value = countryCode?.Trim();
+        return value is { Length: 2 or 3 }
+            && value.All(static character => character is >= 'A' and <= 'Z' or >= 'a' and <= 'z');
+    }
+
+    public static bool AreEquivalentIsoCodes(string? left, string? right)
+    {
+        if (!IsAlphaCode(left) || !IsAlphaCode(right))
+        {
+            return false;
+        }
+
+        var leftAlpha2 = ToAlpha2(left);
+        var rightAlpha2 = ToAlpha2(right);
+        return leftAlpha2 is not null
+            && rightAlpha2 is not null
+            && string.Equals(leftAlpha2, rightAlpha2, StringComparison.Ordinal);
+    }
+
     public static bool AreEquivalent(string? left, string? right)
     {
         var leftAlpha2 = ToAlpha2(left);

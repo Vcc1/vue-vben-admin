@@ -14,6 +14,7 @@ namespace HotelMatchingPipeline.Infra.Sql;
 
 public sealed class RoomMappingHotelRepository :
     IHotelCleaningRepository,
+    IHotelMatchPipelineRepository,
     IHotelMatchingRepository,
     IHotelMatchDeliveryRepository
 {
@@ -25,12 +26,42 @@ public sealed class RoomMappingHotelRepository :
     static readonly DateTime SqlDateTimeMaximum = new(9999, 12, 31, 23, 59, 59, 997);
 
     static readonly JsonSerializerOptions JsonOptions = CreateJsonOptions();
+    sealed record HotelMatchResultWriteRow(
+        int SupHotelId,
+        string MTHotelCode,
+        int MatchingVersion,
+        byte NameEvidenceSourceType,
+        int NameEvidenceHotelId,
+        byte NameMatchKind,
+        string? NamePendingValue,
+        string? NameEvidenceValue,
+        byte CoordinateEvidenceSourceType,
+        int CoordinateEvidenceHotelId,
+        double DistanceMeters,
+        byte? StarEvidenceSourceType,
+        int? StarEvidenceHotelId,
+        string? StarPendingValue,
+        string? StarEvidenceValue,
+        byte? AddressEvidenceSourceType,
+        int? AddressEvidenceHotelId,
+        string? AddressPendingValue,
+        string? AddressEvidenceValue,
+        byte? PhoneEvidenceSourceType,
+        int? PhoneEvidenceHotelId,
+        string? PhonePendingValue,
+        string? PhoneEvidenceValue,
+        int OtaFactCount,
+        int SupplierFactCount,
+        string? EvidenceJson);
+
     readonly RoomMappingDbContext _dbContext;
+    readonly string _connectionString;
     readonly IHotelStarLevelNormalizer _starLevelNormalizer;
     readonly IHotelStarLevelIssueRecorder _starLevelIssueRecorder;
     readonly ILogger<RoomMappingHotelRepository> _logger;
     readonly HashSet<int> _sessionSkippedPlatformIds = [];
     readonly HashSet<int> _sessionSkippedSupplierIds = [];
+    bool? _hotelMatchResultHasLegacyMatchingVersion;
 
     public RoomMappingHotelRepository(
         RoomMappingDbContext dbContext,
@@ -39,106 +70,230 @@ public sealed class RoomMappingHotelRepository :
         ILogger<RoomMappingHotelRepository> logger)
     {
         _dbContext = dbContext;
+        _connectionString = dbContext.Database.GetConnectionString()
+            ?? throw new InvalidOperationException("RoomMapping database connection string is not configured.");
         _starLevelNormalizer = starLevelNormalizer;
         _starLevelIssueRecorder = starLevelIssueRecorder;
         _logger = logger;
         _dbContext.Database.SetCommandTimeout(TimeSpan.FromMinutes(5));
     }
 
-    public async Task<HotelCleaningProgress> GetCleaningProgressAsync(
+    public async Task<HotelCleaningWorkSet> LoadCleaningWorkSetAsync(
         HotelDataType type,
         DateTimeOffset changedSince,
         int cleanVersion,
         int regionBoundaryVersion,
+        int pendingIdBatchSize,
+        Action<HotelCleaningScanProgress> reportScanProgress,
+        Func<int, CancellationToken, ValueTask> enqueuePendingId,
         CancellationToken cancellationToken)
     {
-        var changedSinceLocal = changedSince.LocalDateTime;
-        if (type == HotelDataType.Platform)
+        await using var connection = new SqlConnection(_connectionString);
+        await connection.OpenAsync(cancellationToken);
+
+        var idColumn = type == HotelDataType.Platform ? "HotelID" : "SupHotelId";
+        var rawTable = type == HotelDataType.Platform ? "dbo.OTAHotelInfoRaw" : "dbo.SupHotelInfoRaw";
+        var cleanTable = type == HotelDataType.Platform ? "dbo.OTAHotelInfo" : "dbo.SupHotelInfo";
+        var sourceTotal = await GetEstimatedRowCountAsync(connection, rawTable, cancellationToken);
+        reportScanProgress(new HotelCleaningScanProgress(sourceTotal, 0, 0, 0, 0));
+        var indexState = await GetCleaningIndexStateAsync(
+            connection,
+            cleanTable,
+            type == HotelDataType.Platform
+                ? "IX_OTAHotelInfo_CleaningSnapshot"
+                : "IX_SupHotelInfo_CleaningSnapshot",
+            cancellationToken);
+        _logger.LogInformation(
+            "Hotel cleaning ID snapshot index state. Source={Source}, CleanSnapshotIndex={CleanSnapshotIndex}, FailureSnapshotIndex={FailureSnapshotIndex}",
+            type,
+            indexState.CleanSnapshot,
+            indexState.FailureSnapshot);
+
+        // Classify with covering indexes in SQL and return only the small pending-ID set.
+        await using var command = connection.CreateCommand();
+        command.CommandTimeout = 900;
+        command.CommandText = $"""
+            SELECT raw.{idColumn}
+            FROM {rawTable} AS raw
+            LEFT MERGE JOIN {cleanTable} AS clean
+                ON clean.{idColumn} = raw.{idColumn}
+               AND clean.CleanVersion = @cleanVersion
+               AND clean.RegionFenceVersion = @regionBoundaryVersion
+               AND clean.SourceDataVersion = raw.DataVersion
+               AND (raw.DataChangeTime < @changedSince OR clean.CleanTime >= raw.DataChangeTime)
+            LEFT MERGE JOIN dbo.HotelCleaningFailure AS failure
+                ON failure.SourceType = @sourceType
+               AND failure.CleanVersion = @cleanVersion
+               AND failure.RegionBoundaryVersion = @regionBoundaryVersion
+               AND failure.DataId = raw.{idColumn}
+            WHERE clean.{idColumn} IS NULL
+              AND failure.DataId IS NULL
+            ORDER BY raw.{idColumn}
+            OPTION (MERGE JOIN, MAXDOP 4, RECOMPILE);
+
+            SELECT COUNT_BIG(*)
+            FROM dbo.HotelCleaningFailure AS failure
+            INNER MERGE JOIN {rawTable} AS raw
+                ON raw.{idColumn} = TRY_CONVERT(int, failure.DataId)
+            WHERE failure.SourceType = @sourceType
+              AND failure.CleanVersion = @cleanVersion
+              AND failure.RegionBoundaryVersion = @regionBoundaryVersion
+              AND failure.DataId BETWEEN 1 AND 2147483647
+            OPTION (MERGE JOIN, MAXDOP 4, RECOMPILE);
+            """;
+        command.Parameters.Add(new SqlParameter("@sourceType", System.Data.SqlDbType.TinyInt)
         {
-            var total = await _dbContext.OTAHotelInfoRaws.LongCountAsync(cancellationToken);
-            var cleaned = await (
-                from raw in _dbContext.OTAHotelInfoRaws
-                join clean in _dbContext.OTAHotelInfos on raw.HotelID equals clean.HotelID
-                where clean.CleanVersion == cleanVersion
-                    && clean.RegionFenceVersion == regionBoundaryVersion
-                    && clean.SourceDataVersion == raw.DataVersion
-                    && !(raw.DataChangeTime >= changedSinceLocal && clean.CleanTime < raw.DataChangeTime)
-                select raw.HotelID).LongCountAsync(cancellationToken);
-            var failed = await (
-                from raw in _dbContext.OTAHotelInfoRaws
-                join failure in _dbContext.HotelCleaningFailures
-                    on new { SourceType = (byte)HotelDataType.Platform, DataId = (long)raw.HotelID }
-                    equals new { failure.SourceType, failure.DataId }
-                where failure.CleanVersion == cleanVersion
-                    && failure.RegionBoundaryVersion == regionBoundaryVersion
-                select failure.Id).LongCountAsync(cancellationToken);
-            return new HotelCleaningProgress(total, cleaned, failed);
+            Value = (byte)type
+        });
+        command.Parameters.Add(new SqlParameter("@cleanVersion", System.Data.SqlDbType.Int)
+        {
+            Value = cleanVersion
+        });
+        command.Parameters.Add(new SqlParameter("@regionBoundaryVersion", System.Data.SqlDbType.Int)
+        {
+            Value = regionBoundaryVersion
+        });
+        command.Parameters.Add(new SqlParameter("@changedSince", System.Data.SqlDbType.DateTime2)
+        {
+            Value = changedSince.LocalDateTime
+        });
+
+        await using var reader = await command.ExecuteReaderAsync(
+            System.Data.CommandBehavior.SequentialAccess,
+            cancellationToken);
+
+        var pending = 0L;
+        var progressInterval = Math.Max(1, pendingIdBatchSize);
+        while (await reader.ReadAsync(cancellationToken))
+        {
+            var dataId = reader.GetInt32(0);
+            await enqueuePendingId(dataId, cancellationToken);
+            pending++;
+            if (pending % progressInterval == 0)
+            {
+                var estimatedCleaned = Math.Max(0, sourceTotal - pending);
+                reportScanProgress(new HotelCleaningScanProgress(
+                    sourceTotal,
+                    Math.Min(sourceTotal, estimatedCleaned + pending),
+                    estimatedCleaned,
+                    0,
+                    pending));
+            }
         }
 
-        var supplierTotal = await _dbContext.SupHotelInfoRaws.LongCountAsync(cancellationToken);
-        var supplierCleaned = await (
-            from raw in _dbContext.SupHotelInfoRaws
-            join clean in _dbContext.SupHotelInfos on raw.SupHotelId equals clean.SupHotelId
-            where clean.CleanVersion == cleanVersion
-                && clean.RegionFenceVersion == regionBoundaryVersion
-                && clean.SourceDataVersion == raw.DataVersion
-                && !(raw.DataChangeTime >= changedSinceLocal && clean.CleanTime < raw.DataChangeTime)
-            select raw.SupHotelId).LongCountAsync(cancellationToken);
-        var supplierFailed = await (
-            from raw in _dbContext.SupHotelInfoRaws
-            join failure in _dbContext.HotelCleaningFailures
-                on new { SourceType = (byte)HotelDataType.Supplier, DataId = (long)raw.SupHotelId }
-                equals new { failure.SourceType, failure.DataId }
-            where failure.CleanVersion == cleanVersion
-                && failure.RegionBoundaryVersion == regionBoundaryVersion
-            select failure.Id).LongCountAsync(cancellationToken);
-        return new HotelCleaningProgress(supplierTotal, supplierCleaned, supplierFailed);
+        await reader.NextResultAsync(cancellationToken);
+        await reader.ReadAsync(cancellationToken);
+        var failed = reader.GetInt64(0);
+        var total = Math.Max(sourceTotal, failed + pending);
+        var cleaned = Math.Max(0, total - failed - pending);
+        reportScanProgress(new HotelCleaningScanProgress(
+            total,
+            total,
+            cleaned,
+            failed,
+            pending));
+
+        return new HotelCleaningWorkSet(total, cleaned, failed);
     }
 
-    public async Task<IReadOnlyList<RawHotelData>> GetHotelsToCleanAsync(
-        HotelDataType type,
-        DateTimeOffset changedSince,
-        int cleanVersion,
-        int regionBoundaryVersion,
-        int batchSize,
+    static async Task<long> GetEstimatedRowCountAsync(
+        SqlConnection connection,
+        string tableName,
         CancellationToken cancellationToken)
     {
+        await using var command = connection.CreateCommand();
+        command.CommandTimeout = 30;
+        command.CommandText = """
+            SELECT COALESCE(SUM(row_count), 0)
+            FROM sys.dm_db_partition_stats
+            WHERE object_id = OBJECT_ID(@tableName)
+              AND index_id IN (0, 1);
+            """;
+        command.Parameters.Add(new SqlParameter("@tableName", System.Data.SqlDbType.NVarChar, 256) { Value = tableName });
+        var value = await command.ExecuteScalarAsync(cancellationToken);
+        return Convert.ToInt64(value, CultureInfo.InvariantCulture);
+    }
+
+    static async Task<(bool CleanSnapshot, bool FailureSnapshot)> GetCleaningIndexStateAsync(
+        SqlConnection connection,
+        string cleanTable,
+        string cleanIndexName,
+        CancellationToken cancellationToken)
+    {
+        await using var command = connection.CreateCommand();
+        command.CommandTimeout = 30;
+        command.CommandText = """
+            SELECT
+                CONVERT(bit, CASE WHEN EXISTS
+                (
+                    SELECT 1
+                    FROM sys.indexes
+                    WHERE object_id = OBJECT_ID(@cleanTable)
+                      AND name = @cleanIndexName
+                ) THEN 1 ELSE 0 END),
+                CONVERT(bit, CASE WHEN EXISTS
+                (
+                    SELECT 1
+                    FROM sys.indexes
+                    WHERE object_id = OBJECT_ID(N'dbo.HotelCleaningFailure')
+                      AND name = N'IX_HotelCleaningFailure_CleaningSnapshot'
+                ) THEN 1 ELSE 0 END);
+            """;
+        command.Parameters.Add(new SqlParameter("@cleanTable", System.Data.SqlDbType.NVarChar, 256)
+        {
+            Value = cleanTable
+        });
+        command.Parameters.Add(new SqlParameter("@cleanIndexName", System.Data.SqlDbType.NVarChar, 128)
+        {
+            Value = cleanIndexName
+        });
+        await using var reader = await command.ExecuteReaderAsync(cancellationToken);
+        await reader.ReadAsync(cancellationToken);
+        return (reader.GetBoolean(0), reader.GetBoolean(1));
+    }
+
+    public async Task<IReadOnlyList<RawHotelData>> GetHotelsByIdsAsync(
+        HotelDataType type,
+        IReadOnlyCollection<int> dataIds,
+        CancellationToken cancellationToken)
+    {
+        if (dataIds.Count == 0)
+        {
+            return [];
+        }
+
+        var idsJson = JsonSerializer.Serialize(dataIds, JsonOptions);
+        var idsParameter = new SqlParameter("@ids", System.Data.SqlDbType.NVarChar, -1) { Value = idsJson };
+        var readOptions = new DbContextOptionsBuilder<RoomMappingDbContext>()
+            .UseSqlServer(_connectionString, sql => sql.CommandTimeout(300))
+            .Options;
+        await using var readContext = new RoomMappingDbContext(readOptions);
         if (type == HotelDataType.Platform)
         {
-            var sessionSkippedIds = _sessionSkippedPlatformIds.ToArray();
-            var rows = await (
-                from raw in _dbContext.OTAHotelInfoRaws.AsNoTracking()
-                join clean in _dbContext.OTAHotelInfos.AsNoTracking() on raw.HotelID equals clean.HotelID into cleanRows
-                from clean in cleanRows.DefaultIfEmpty()
-                where !sessionSkippedIds.Contains(raw.HotelID)
-                    && !_dbContext.HotelCleaningFailures.Any(f => f.SourceType == (byte)HotelDataType.Platform && f.DataId == raw.HotelID)
-                    && (clean == null
-                        || clean.CleanVersion != cleanVersion
-                        || clean.RegionFenceVersion != regionBoundaryVersion
-                        || clean.SourceDataVersion != raw.DataVersion
-                        || raw.DataChangeTime >= changedSince.LocalDateTime && clean.CleanTime < raw.DataChangeTime)
-                orderby raw.DataChangeTime, raw.HotelID
-                select raw)
-                .Take(batchSize)
+            var rows = await readContext.OTAHotelInfoRaws
+                .FromSqlRaw("""
+                    SELECT raw.*
+                    FROM OPENJSON(@ids) WITH (HotelID int '$') AS requested
+                    INNER LOOP JOIN dbo.OTAHotelInfoRaw AS raw WITH (FORCESEEK)
+                        ON raw.HotelID = requested.HotelID
+                    ORDER BY raw.HotelID
+                    OPTION (FORCE ORDER, LOOP JOIN, MAXDOP 1, RECOMPILE)
+                    """, idsParameter)
+                .AsNoTracking()
                 .ToListAsync(cancellationToken);
             return rows.Select(MapRaw).ToArray();
         }
 
-        var sessionSkippedSupplierIds = _sessionSkippedSupplierIds.ToArray();
-        var supplierRows = await (
-            from raw in _dbContext.SupHotelInfoRaws.AsNoTracking()
-            join clean in _dbContext.SupHotelInfos.AsNoTracking() on raw.SupHotelId equals clean.SupHotelId into cleanRows
-            from clean in cleanRows.DefaultIfEmpty()
-            where !sessionSkippedSupplierIds.Contains(raw.SupHotelId)
-                && !_dbContext.HotelCleaningFailures.Any(f => f.SourceType == (byte)HotelDataType.Supplier && f.DataId == raw.SupHotelId)
-                && (clean == null
-                    || clean.CleanVersion != cleanVersion
-                    || clean.RegionFenceVersion != regionBoundaryVersion
-                    || clean.SourceDataVersion != raw.DataVersion
-                    || raw.DataChangeTime >= changedSince.LocalDateTime && clean.CleanTime < raw.DataChangeTime)
-            orderby raw.DataChangeTime, raw.SupHotelId
-            select raw)
-            .Take(batchSize)
+        var supplierRows = await readContext.SupHotelInfoRaws
+            .FromSqlRaw("""
+                SELECT raw.*
+                FROM OPENJSON(@ids) WITH (SupHotelId int '$') AS requested
+                INNER LOOP JOIN dbo.SupHotelInfoRaw AS raw WITH (FORCESEEK)
+                    ON raw.SupHotelId = requested.SupHotelId
+                ORDER BY raw.SupHotelId
+                OPTION (FORCE ORDER, LOOP JOIN, MAXDOP 1, RECOMPILE)
+                """, idsParameter)
+            .AsNoTracking()
             .ToListAsync(cancellationToken);
         return supplierRows.Select(MapRaw).ToArray();
     }
@@ -366,7 +521,7 @@ public sealed class RoomMappingHotelRepository :
             SET XACT_ABORT ON;
             BEGIN TRANSACTION;
             BEGIN TRY
-                MERGE dbo.OTAHotelInfo WITH (HOLDLOCK) AS target
+                MERGE dbo.OTAHotelInfo WITH (HOLDLOCK, ROWLOCK) AS target
                 USING
                 (
                     SELECT *
@@ -498,14 +653,16 @@ public sealed class RoomMappingHotelRepository :
                     source.RegionResolveStatus, source.RegionFenceVersion, source.CleanStatus,
                     source.CleanError, source.DataQualityStatus, source.DataQualityFlags,
                     source.DataQualityDetailsJson
-                );
+                )
+                OPTION (LOOP JOIN, MAXDOP 1, RECOMPILE);
 
                 DELETE phone
-                FROM dbo.OTAHotelPhone AS phone
+                FROM dbo.OTAHotelPhone AS phone WITH (ROWLOCK)
                 INNER JOIN OPENJSON(@payload)
-                    WITH (HotelID int '$.hotelId') AS hotel ON hotel.HotelID = phone.HotelID;
+                    WITH (HotelID int '$.hotelId') AS hotel ON hotel.HotelID = phone.HotelID
+                OPTION (LOOP JOIN, MAXDOP 1, RECOMPILE);
 
-                INSERT dbo.OTAHotelPhone
+                INSERT dbo.OTAHotelPhone WITH (ROWLOCK)
                 (
                     HotelID, Ordinal, SourcePhone, NormalizedPhone, CountryIsoCode,
                     NationalNumber, CountryCallingCode, NumberType, AreaCode, Extension,
@@ -570,6 +727,10 @@ public sealed class RoomMappingHotelRepository :
                 reMatchState = entity.ReMatchState,
                 hotelName = entity.HotelName,
                 hotelNameEn = entity.HotelNameEn,
+                countryCode = entity.CountryCode,
+                countryName = entity.CountryName,
+                cityCode = entity.CityCode,
+                cityName = entity.CityName,
                 tel = entity.Tel,
                 fax = entity.Fax,
                 address = entity.Address,
@@ -630,7 +791,7 @@ public sealed class RoomMappingHotelRepository :
             SET XACT_ABORT ON;
             BEGIN TRANSACTION;
             BEGIN TRY
-                MERGE dbo.SupHotelInfo WITH (HOLDLOCK) AS target
+                MERGE dbo.SupHotelInfo WITH (HOLDLOCK, ROWLOCK) AS target
                 USING
                 (
                     SELECT *
@@ -647,6 +808,10 @@ public sealed class RoomMappingHotelRepository :
                         ReMatchState int '$.reMatchState',
                         HotelName nvarchar(200) '$.hotelName',
                         HotelNameEn nvarchar(200) '$.hotelNameEn',
+                        CountryCode nvarchar(50) '$.countryCode',
+                        CountryName nvarchar(50) '$.countryName',
+                        CityCode nvarchar(50) '$.cityCode',
+                        CityName nvarchar(100) '$.cityName',
                         Tel nvarchar(100) '$.tel',
                         Fax nvarchar(100) '$.fax',
                         Address nvarchar(500) '$.address',
@@ -686,6 +851,10 @@ public sealed class RoomMappingHotelRepository :
                     target.ReMatchState = source.ReMatchState,
                     target.HotelName = source.HotelName,
                     target.HotelNameEn = source.HotelNameEn,
+                    target.CountryCode = source.CountryCode,
+                    target.CountryName = source.CountryName,
+                    target.CityCode = source.CityCode,
+                    target.CityName = source.CityName,
                     target.Tel = source.Tel,
                     target.Fax = source.Fax,
                     target.Address = source.Address,
@@ -734,6 +903,7 @@ public sealed class RoomMappingHotelRepository :
                 (
                     SupHotelId, SupId, SHotelCode, MTHotelCode, State, SSaleTopLevel,
                     IsHandMatch, ReMatchState, HotelName, HotelNameEn, Tel, Fax, Address,
+                    CountryCode, CountryName, CityCode, CityName,
                     PostCode, Email, StarLevel, CoordType, Longitude, Latitude,
                     RegionLevel1Code, RegionLevel1Name, RegionLevel2Code, RegionLevel2Name,
                     RegionLevel3Code, RegionLevel3Name, RegionResolveStatus, RegionFenceVersion,
@@ -746,6 +916,7 @@ public sealed class RoomMappingHotelRepository :
                     source.SupHotelId, source.SupId, source.SHotelCode, source.MTHotelCode,
                     source.State, source.SSaleTopLevel, source.IsHandMatch, source.ReMatchState,
                     source.HotelName, source.HotelNameEn, source.Tel, source.Fax, source.Address,
+                    source.CountryCode, source.CountryName, source.CityCode, source.CityName,
                     source.PostCode, source.Email, source.StarLevel, source.CoordType,
                     source.Longitude, source.Latitude, source.RegionLevel1Code, source.RegionLevel1Name,
                     source.RegionLevel2Code, source.RegionLevel2Name, source.RegionLevel3Code,
@@ -756,15 +927,17 @@ public sealed class RoomMappingHotelRepository :
                     source.DataQualityFlags, source.DataQualityDetailsJson,
                     CASE WHEN source.IsMatchable = 1 THEN @pending ELSE @dataProblem END,
                     @now, @now
-                );
+                )
+                OPTION (LOOP JOIN, MAXDOP 1, RECOMPILE);
 
                 DELETE phone
-                FROM dbo.SupHotelPhone AS phone
+                FROM dbo.SupHotelPhone AS phone WITH (ROWLOCK)
                 INNER JOIN OPENJSON(@payload)
                     WITH (SupHotelId int '$.supHotelId') AS hotel
-                    ON hotel.SupHotelId = phone.SupHotelId;
+                    ON hotel.SupHotelId = phone.SupHotelId
+                OPTION (LOOP JOIN, MAXDOP 1, RECOMPILE);
 
-                INSERT dbo.SupHotelPhone
+                INSERT dbo.SupHotelPhone WITH (ROWLOCK)
                 (
                     SupHotelId, Ordinal, Raw, E164, NationalNumber, CountryCallingCode,
                     RegionCode, NumberType, AreaCode, Extension, IsValid, Error,
@@ -929,6 +1102,729 @@ public sealed class RoomMappingHotelRepository :
         _dbContext.ChangeTracker.Clear();
     }
 
+    public async Task LoadPendingSupplierHotelIdsAsync(
+        Func<int, CancellationToken, ValueTask> enqueueId,
+        CancellationToken cancellationToken)
+    {
+        await using var connection = new SqlConnection(_connectionString);
+        await connection.OpenAsync(cancellationToken);
+        await using var command = connection.CreateCommand();
+        command.CommandTimeout = 900;
+        command.CommandText = """
+            SELECT hotel.SupHotelId
+            FROM dbo.SupHotelInfo AS hotel WITH (READPAST)
+            WHERE hotel.State = 1
+              AND hotel.MTHotelCode = ''
+            ORDER BY hotel.SupHotelId
+            OPTION (MAXDOP 1, RECOMPILE);
+            """;
+
+        await using var reader = await command.ExecuteReaderAsync(
+            System.Data.CommandBehavior.SequentialAccess,
+            cancellationToken);
+        while (await reader.ReadAsync(cancellationToken))
+        {
+            await enqueueId(reader.GetInt32(0), cancellationToken);
+        }
+    }
+
+    public async Task<HotelMatchingWorkItem> LoadMatchingWorkItemAsync(
+        int supHotelId,
+        int recallRadiusMeters,
+        int maxCandidates,
+        CancellationToken cancellationToken)
+    {
+        var pending = await _dbContext.SupHotelInfos
+            .AsNoTracking()
+            .SingleAsync(
+                hotel => hotel.SupHotelId == supHotelId,
+                cancellationToken);
+
+        var otaRows = new List<OTAHotelInfo>();
+        var nearbySupplierRows = new List<SupHotelInfoClean>();
+        if (pending.Longitude.HasValue && pending.Latitude.HasValue)
+        {
+            var recall = HotelRecallPolicy.Resolve(
+                pending.RegionLevel1Code,
+                pending.CountryCode,
+                recallRadiusMeters,
+                maxCandidates);
+            otaRows = await LoadNearbyOtaHotelsAsync(
+                pending.Latitude.Value,
+                pending.Longitude.Value,
+                recall.RadiusMeters,
+                recall.MaxCandidates,
+                cancellationToken);
+
+            nearbySupplierRows = await LoadNearbySupplierHotelsAsync(
+                supHotelId,
+                pending.Latitude.Value,
+                pending.Longitude.Value,
+                recall.RadiusMeters,
+                recall.MaxCandidates,
+                cancellationToken);
+        }
+
+        var mtHotelCodes = otaRows
+            .Select(hotel => hotel.MTHotelCode)
+            .Where(code => !string.IsNullOrWhiteSpace(code))
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToArray();
+        var linkedSupplierRows = mtHotelCodes.Length == 0
+            ? []
+            : await _dbContext.SupHotelInfos
+                .AsNoTracking()
+                .Where(hotel => hotel.State == 1 && mtHotelCodes.Contains(hotel.MTHotelCode))
+                .ToListAsync(cancellationToken);
+
+        await LoadAndAttachMatchingPhonesAsync(
+            otaRows,
+            [pending, .. nearbySupplierRows, .. linkedSupplierRows],
+            cancellationToken);
+
+        return new HotelMatchingWorkItem(
+            pending.SupHotelId,
+            MapFact(pending),
+            otaRows.Select(MapFact).ToArray(),
+            nearbySupplierRows.Select(MapFact).ToArray(),
+            linkedSupplierRows.Select(MapFact).ToArray());
+    }
+
+    Task<List<OTAHotelInfo>> LoadNearbyOtaHotelsAsync(
+        decimal latitude,
+        decimal longitude,
+        int recallRadiusMeters,
+        int? maxCandidates,
+        CancellationToken cancellationToken)
+    {
+        var candidateLimit = maxCandidates.HasValue
+            ? "TOP (@maxCandidates) "
+            : string.Empty;
+        var commandText = """
+            DECLARE @origin geography = geography::Point(@latitude, @longitude, 4326);
+
+            SELECT /*CANDIDATE_LIMIT*/ota.*
+            FROM dbo.OTAHotelInfo AS ota WITH (INDEX(SIX_OTAHotelInfo_GeoPoint))
+            WHERE ota.CleanStatus = @cleanStatus
+              AND ota.DataQualityStatus = @dataQualityStatus
+              AND ota.Estate = @onlineEstate
+              AND ota.MTHotelCode <> ''
+              AND ota.GeoPoint IS NOT NULL
+              AND ota.GeoPoint.STDistance(@origin) <= @recallRadiusMeters
+            ORDER BY ota.GeoPoint.STDistance(@origin), ota.HotelID
+            OPTION (RECOMPILE, MAXDOP 1);
+            """.Replace(
+                "/*CANDIDATE_LIMIT*/",
+                candidateLimit,
+                StringComparison.Ordinal);
+        return _dbContext.OTAHotelInfos
+            .FromSqlRaw(
+                commandText,
+                new SqlParameter("@latitude", System.Data.SqlDbType.Float)
+                {
+                    Value = Convert.ToDouble(latitude, CultureInfo.InvariantCulture)
+                },
+                new SqlParameter("@longitude", System.Data.SqlDbType.Float)
+                {
+                    Value = Convert.ToDouble(longitude, CultureInfo.InvariantCulture)
+                },
+                new SqlParameter("@recallRadiusMeters", System.Data.SqlDbType.Int)
+                {
+                    Value = recallRadiusMeters
+                },
+                new SqlParameter("@maxCandidates", System.Data.SqlDbType.Int)
+                {
+                    Value = maxCandidates ?? int.MaxValue
+                },
+                new SqlParameter("@cleanStatus", System.Data.SqlDbType.TinyInt)
+                {
+                    Value = (byte)HotelCleanStatus.Ready
+                },
+                new SqlParameter("@dataQualityStatus", System.Data.SqlDbType.TinyInt)
+                {
+                    Value = (byte)HotelDataQualityStatus.Valid
+                },
+                new SqlParameter("@onlineEstate", System.Data.SqlDbType.Int)
+                {
+                    Value = 1
+                })
+            .AsNoTracking()
+            .ToListAsync(cancellationToken);
+    }
+
+    Task<List<SupHotelInfoClean>> LoadNearbySupplierHotelsAsync(
+        int pendingSupHotelId,
+        decimal latitude,
+        decimal longitude,
+        int recallRadiusMeters,
+        int? maxCandidates,
+        CancellationToken cancellationToken)
+    {
+        var candidateLimit = maxCandidates.HasValue
+            ? "TOP (@maxCandidates) "
+            : string.Empty;
+        var commandText = """
+            DECLARE @origin geography = geography::Point(@latitude, @longitude, 4326);
+
+            SELECT /*CANDIDATE_LIMIT*/supplier.*
+            FROM dbo.SupHotelInfo AS supplier WITH (INDEX(SIX_SupHotelInfo_GeoPoint))
+            WHERE supplier.State = 1
+              AND supplier.SupHotelId <> @pendingSupHotelId
+              AND supplier.GeoPoint IS NOT NULL
+              AND supplier.GeoPoint.STDistance(@origin) <= @recallRadiusMeters
+            ORDER BY supplier.GeoPoint.STDistance(@origin), supplier.SupHotelId
+            OPTION (RECOMPILE, MAXDOP 1);
+            """.Replace(
+                "/*CANDIDATE_LIMIT*/",
+                candidateLimit,
+                StringComparison.Ordinal);
+        return _dbContext.SupHotelInfos
+            .FromSqlRaw(
+                commandText,
+                new SqlParameter("@pendingSupHotelId", System.Data.SqlDbType.Int)
+                {
+                    Value = pendingSupHotelId
+                },
+                new SqlParameter("@latitude", System.Data.SqlDbType.Float)
+                {
+                    Value = Convert.ToDouble(latitude, CultureInfo.InvariantCulture)
+                },
+                new SqlParameter("@longitude", System.Data.SqlDbType.Float)
+                {
+                    Value = Convert.ToDouble(longitude, CultureInfo.InvariantCulture)
+                },
+                new SqlParameter("@recallRadiusMeters", System.Data.SqlDbType.Int)
+                {
+                    Value = recallRadiusMeters
+                },
+                new SqlParameter("@maxCandidates", System.Data.SqlDbType.Int)
+                {
+                    Value = maxCandidates ?? int.MaxValue
+                })
+            .AsNoTracking()
+            .ToListAsync(cancellationToken);
+    }
+
+    async Task LoadAndAttachMatchingPhonesAsync(
+        IReadOnlyCollection<OTAHotelInfo> otaRows,
+        IReadOnlyCollection<SupHotelInfoClean> supplierRows,
+        CancellationToken cancellationToken)
+    {
+        var otaIds = otaRows
+            .Select(hotel => hotel.HotelID)
+            .Distinct()
+            .ToArray();
+        var otaPhones = await LoadOtaMatchingPhonesAsync(otaIds, cancellationToken);
+        var otaPhonesByHotel = otaPhones.ToLookup(phone => phone.HotelID);
+        foreach (var hotel in otaRows)
+        {
+            hotel.Phones = otaPhonesByHotel[hotel.HotelID].ToArray();
+        }
+
+        var distinctSupplierRows = supplierRows
+            .GroupBy(hotel => hotel.SupHotelId)
+            .Select(group => group.First())
+            .ToArray();
+        var supplierIds = distinctSupplierRows
+            .Select(hotel => hotel.SupHotelId)
+            .ToArray();
+        var supplierPhones = await LoadSupplierMatchingPhonesAsync(
+            supplierIds,
+            cancellationToken);
+        var supplierPhonesByHotel = supplierPhones.ToLookup(phone => phone.SupHotelId);
+        foreach (var hotel in distinctSupplierRows)
+        {
+            hotel.Phones = supplierPhonesByHotel[hotel.SupHotelId].ToArray();
+        }
+    }
+
+    async Task<List<OTAHotelPhone>> LoadOtaMatchingPhonesAsync(
+        IReadOnlyCollection<int> hotelIds,
+        CancellationToken cancellationToken)
+    {
+        if (hotelIds.Count == 0)
+        {
+            return [];
+        }
+
+        await using var connection = new SqlConnection(_connectionString);
+        await connection.OpenAsync(cancellationToken);
+        await using var command = connection.CreateCommand();
+        command.CommandTimeout = 300;
+        command.CommandText = """
+            SET NOCOUNT ON;
+
+            SELECT
+                phone.HotelID,
+                phone.Ordinal,
+                phone.NormalizedPhone
+            FROM OPENJSON(@hotelIds)
+                WITH (HotelID int '$') AS requested
+            INNER LOOP JOIN dbo.OTAHotelPhone AS phone WITH (FORCESEEK)
+                ON phone.HotelID = requested.HotelID
+            WHERE phone.IsValid = 1
+              AND phone.NormalizedPhone IS NOT NULL
+            OPTION (FORCE ORDER, RECOMPILE);
+            """;
+        command.Parameters.Add(new SqlParameter(
+            "@hotelIds",
+            System.Data.SqlDbType.NVarChar,
+            -1)
+        {
+            Value = JsonSerializer.Serialize(hotelIds, JsonOptions)
+        });
+
+        var phones = new List<OTAHotelPhone>();
+        await using var reader = await command.ExecuteReaderAsync(
+            System.Data.CommandBehavior.SequentialAccess,
+            cancellationToken);
+        while (await reader.ReadAsync(cancellationToken))
+        {
+            phones.Add(new OTAHotelPhone
+            {
+                HotelID = reader.GetInt32(0),
+                Ordinal = reader.GetInt16(1),
+                NormalizedPhone = reader.GetString(2),
+                IsValid = true
+            });
+        }
+        return phones;
+    }
+
+    async Task<List<SupHotelPhone>> LoadSupplierMatchingPhonesAsync(
+        IReadOnlyCollection<int> supHotelIds,
+        CancellationToken cancellationToken)
+    {
+        if (supHotelIds.Count == 0)
+        {
+            return [];
+        }
+
+        await using var connection = new SqlConnection(_connectionString);
+        await connection.OpenAsync(cancellationToken);
+        await using var command = connection.CreateCommand();
+        command.CommandTimeout = 300;
+        command.CommandText = """
+            SET NOCOUNT ON;
+
+            SELECT
+                phone.SupHotelId,
+                phone.Ordinal,
+                phone.E164
+            FROM OPENJSON(@supHotelIds)
+                WITH (SupHotelId int '$') AS requested
+            INNER LOOP JOIN dbo.SupHotelPhone AS phone WITH (FORCESEEK)
+                ON phone.SupHotelId = requested.SupHotelId
+            WHERE phone.IsValid = 1
+              AND phone.E164 IS NOT NULL
+            OPTION (FORCE ORDER, RECOMPILE);
+            """;
+        command.Parameters.Add(new SqlParameter(
+            "@supHotelIds",
+            System.Data.SqlDbType.NVarChar,
+            -1)
+        {
+            Value = JsonSerializer.Serialize(supHotelIds, JsonOptions)
+        });
+
+        var phones = new List<SupHotelPhone>();
+        await using var reader = await command.ExecuteReaderAsync(
+            System.Data.CommandBehavior.SequentialAccess,
+            cancellationToken);
+        while (await reader.ReadAsync(cancellationToken))
+        {
+            phones.Add(new SupHotelPhone
+            {
+                SupHotelId = reader.GetInt32(0),
+                Ordinal = reader.GetInt16(1),
+                E164 = reader.GetString(2),
+                IsValid = true
+            });
+        }
+        return phones;
+    }
+
+    public async Task SaveMatchEvaluationsAsync(
+        IReadOnlyCollection<HotelMatchEvaluation> evaluations,
+        int matchingVersion,
+        CancellationToken cancellationToken)
+    {
+        if (evaluations.Count == 0)
+        {
+            return;
+        }
+
+        var evaluationRows = evaluations.Select(evaluation => new
+        {
+            supHotelId = evaluation.SupHotelId,
+            supId = evaluation.SupId,
+            supHotelCode = evaluation.SupHotelCode,
+            matchCount = evaluation.Matches.Count,
+            matchingVersion,
+            mtHotelCodesJson = JsonSerializer.Serialize(
+                evaluation.Matches.Select(match => match.MTHotelCode),
+                JsonOptions),
+            candidatesJson = JsonSerializer.Serialize(evaluation.Matches, JsonOptions)
+        }).ToArray();
+        var matchRows = evaluations.Select(evaluation =>
+            !string.IsNullOrEmpty(evaluation.ResolvedMTHotelCode)
+                ? CreateMatchResultRow(
+                    evaluation.SupHotelId,
+                    evaluation.Matches[0],
+                    matchingVersion)
+                : CreateUnmatchedResultRow(evaluation, matchingVersion))
+            .ToArray();
+        var evaluationsParameter = new SqlParameter("@evaluations", System.Data.SqlDbType.NVarChar, -1)
+        {
+            Value = JsonSerializer.Serialize(evaluationRows, JsonOptions)
+        };
+        var matchesParameter = new SqlParameter("@matches", System.Data.SqlDbType.NVarChar, -1)
+        {
+            Value = JsonSerializer.Serialize(matchRows, JsonOptions)
+        };
+        var nowParameter = new SqlParameter("@now", System.Data.SqlDbType.DateTime2)
+        {
+            Value = DateTime.Now
+        };
+        var matchingVersionParameter = new SqlParameter(
+            "@matchingVersion",
+            System.Data.SqlDbType.Int)
+        {
+            Value = matchingVersion
+        };
+
+        await using var connection = new SqlConnection(_connectionString);
+        await connection.OpenAsync(cancellationToken);
+        if (!_hotelMatchResultHasLegacyMatchingVersion.HasValue)
+        {
+            await using var schemaCommand = connection.CreateCommand();
+            schemaCommand.CommandText = """
+                SELECT CONVERT(bit, CASE
+                    WHEN COL_LENGTH(N'dbo.HotelMatchResult', N'MatchingVersion') IS NULL THEN 0
+                    ELSE 1
+                END);
+                """;
+            _hotelMatchResultHasLegacyMatchingVersion =
+                (bool)(await schemaCommand.ExecuteScalarAsync(cancellationToken)
+                    ?? throw new InvalidOperationException(
+                        "Unable to inspect dbo.HotelMatchResult schema."));
+            if (_hotelMatchResultHasLegacyMatchingVersion.Value)
+            {
+                _logger.LogWarning(
+                    "dbo.HotelMatchResult still contains legacy MatchingVersion. " +
+                    "Writes will remain compatible, but HotelMatchResult.sql should be applied.");
+            }
+        }
+
+        await using var command = connection.CreateCommand();
+        command.CommandTimeout = 300;
+        var commandText = """
+            SET NOCOUNT ON;
+            SET XACT_ABORT ON;
+            BEGIN TRANSACTION;
+            BEGIN TRY
+                DELETE older
+                FROM dbo.HotelMatchResult AS older WITH (ROWLOCK)
+                INNER JOIN OPENJSON(@evaluations)
+                    WITH (SupHotelId int '$.supHotelId') AS evaluation
+                    ON evaluation.SupHotelId = older.SupHotelId
+                WHERE EXISTS
+                (
+                    SELECT 1
+                    FROM dbo.HotelMatchResult AS newer
+                    WHERE newer.SupHotelId = older.SupHotelId
+                      AND newer.Id > older.Id
+                );
+
+                MERGE dbo.HotelMatchResult WITH (HOLDLOCK, ROWLOCK) AS target
+                USING
+                (
+                    SELECT *
+                    FROM OPENJSON(@matches)
+                    WITH
+                    (
+                        SupHotelId int '$.supHotelId',
+                        MTHotelCode varchar(100) '$.mtHotelCode',
+                        /*LEGACY_MATCHING_VERSION_SOURCE*/
+                        NameEvidenceSourceType tinyint '$.nameEvidenceSourceType',
+                        NameEvidenceHotelId int '$.nameEvidenceHotelId',
+                        NameMatchKind tinyint '$.nameMatchKind',
+                        NamePendingValue nvarchar(300) '$.namePendingValue',
+                        NameEvidenceValue nvarchar(300) '$.nameEvidenceValue',
+                        CoordinateEvidenceSourceType tinyint '$.coordinateEvidenceSourceType',
+                        CoordinateEvidenceHotelId int '$.coordinateEvidenceHotelId',
+                        DistanceMeters decimal(12,3) '$.distanceMeters',
+                        StarEvidenceSourceType tinyint '$.starEvidenceSourceType',
+                        StarEvidenceHotelId int '$.starEvidenceHotelId',
+                        StarPendingValue varchar(20) '$.starPendingValue',
+                        StarEvidenceValue varchar(20) '$.starEvidenceValue',
+                        AddressEvidenceSourceType tinyint '$.addressEvidenceSourceType',
+                        AddressEvidenceHotelId int '$.addressEvidenceHotelId',
+                        AddressPendingValue nvarchar(500) '$.addressPendingValue',
+                        AddressEvidenceValue nvarchar(500) '$.addressEvidenceValue',
+                        PhoneEvidenceSourceType tinyint '$.phoneEvidenceSourceType',
+                        PhoneEvidenceHotelId int '$.phoneEvidenceHotelId',
+                        PhonePendingValue varchar(32) '$.phonePendingValue',
+                        PhoneEvidenceValue varchar(32) '$.phoneEvidenceValue',
+                        OtaFactCount int '$.otaFactCount',
+                        SupplierFactCount int '$.supplierFactCount',
+                        EvidenceJson nvarchar(max) '$.evidenceJson'
+                    )
+                ) AS source
+                    ON source.SupHotelId = target.SupHotelId
+                WHEN MATCHED THEN UPDATE SET
+                    target.MTHotelCode = source.MTHotelCode,
+                    target.NameEvidenceSourceType = source.NameEvidenceSourceType,
+                    target.NameEvidenceHotelId = source.NameEvidenceHotelId,
+                    target.NameMatchKind = source.NameMatchKind,
+                    target.NamePendingValue = source.NamePendingValue,
+                    target.NameEvidenceValue = source.NameEvidenceValue,
+                    target.CoordinateEvidenceSourceType = source.CoordinateEvidenceSourceType,
+                    target.CoordinateEvidenceHotelId = source.CoordinateEvidenceHotelId,
+                    target.DistanceMeters = source.DistanceMeters,
+                    target.StarEvidenceSourceType = source.StarEvidenceSourceType,
+                    target.StarEvidenceHotelId = source.StarEvidenceHotelId,
+                    target.StarPendingValue = source.StarPendingValue,
+                    target.StarEvidenceValue = source.StarEvidenceValue,
+                    target.AddressEvidenceSourceType = source.AddressEvidenceSourceType,
+                    target.AddressEvidenceHotelId = source.AddressEvidenceHotelId,
+                    target.AddressPendingValue = source.AddressPendingValue,
+                    target.AddressEvidenceValue = source.AddressEvidenceValue,
+                    target.PhoneEvidenceSourceType = source.PhoneEvidenceSourceType,
+                    target.PhoneEvidenceHotelId = source.PhoneEvidenceHotelId,
+                    target.PhonePendingValue = source.PhonePendingValue,
+                    target.PhoneEvidenceValue = source.PhoneEvidenceValue,
+                    target.OtaFactCount = source.OtaFactCount,
+                    target.SupplierFactCount = source.SupplierFactCount,
+                    /*LEGACY_MATCHING_VERSION_UPDATE*/
+                    target.EvidenceJson = source.EvidenceJson,
+                    target.UpdateTime = @now
+                WHEN NOT MATCHED THEN INSERT
+                (
+                    SupHotelId, MTHotelCode,
+                    /*LEGACY_MATCHING_VERSION_INSERT_COLUMN*/
+                    NameEvidenceSourceType, NameEvidenceHotelId, NameMatchKind,
+                    NamePendingValue, NameEvidenceValue,
+                    CoordinateEvidenceSourceType, CoordinateEvidenceHotelId, DistanceMeters,
+                    StarEvidenceSourceType, StarEvidenceHotelId, StarPendingValue, StarEvidenceValue,
+                    AddressEvidenceSourceType, AddressEvidenceHotelId,
+                    AddressPendingValue, AddressEvidenceValue,
+                    PhoneEvidenceSourceType, PhoneEvidenceHotelId,
+                    PhonePendingValue, PhoneEvidenceValue,
+                    OtaFactCount, SupplierFactCount, EvidenceJson,
+                    CreateTime, UpdateTime
+                )
+                VALUES
+                (
+                    source.SupHotelId, source.MTHotelCode,
+                    /*LEGACY_MATCHING_VERSION_INSERT_VALUE*/
+                    source.NameEvidenceSourceType, source.NameEvidenceHotelId, source.NameMatchKind,
+                    source.NamePendingValue, source.NameEvidenceValue,
+                    source.CoordinateEvidenceSourceType, source.CoordinateEvidenceHotelId,
+                    source.DistanceMeters,
+                    source.StarEvidenceSourceType, source.StarEvidenceHotelId,
+                    source.StarPendingValue, source.StarEvidenceValue,
+                    source.AddressEvidenceSourceType, source.AddressEvidenceHotelId,
+                    source.AddressPendingValue, source.AddressEvidenceValue,
+                    source.PhoneEvidenceSourceType, source.PhoneEvidenceHotelId,
+                    source.PhonePendingValue, source.PhoneEvidenceValue,
+                    source.OtaFactCount, source.SupplierFactCount, source.EvidenceJson,
+                    @now, @now
+                )
+                OPTION (LOOP JOIN, MAXDOP 1, RECOMPILE);
+
+                MERGE dbo.HotelMatchConflict WITH (HOLDLOCK, ROWLOCK) AS target
+                USING
+                (
+                    SELECT *
+                    FROM OPENJSON(@evaluations)
+                    WITH
+                    (
+                        SupHotelId int '$.supHotelId',
+                        SupId int '$.supId',
+                        SupHotelCode nvarchar(50) '$.supHotelCode',
+                        MatchCount int '$.matchCount',
+                        MatchingVersion int '$.matchingVersion',
+                        MTHotelCodesJson nvarchar(max) '$.mtHotelCodesJson',
+                        CandidatesJson nvarchar(max) '$.candidatesJson'
+                    )
+                ) AS source
+                    ON source.SupHotelId = target.SupHotelId
+                WHEN MATCHED THEN UPDATE SET
+                    target.SupId = source.SupId,
+                    target.SupHotelCode = source.SupHotelCode,
+                    target.MatchingVersion = source.MatchingVersion,
+                    target.CandidateCount = CASE
+                        WHEN source.MatchCount > 1 THEN source.MatchCount
+                        ELSE target.CandidateCount
+                    END,
+                    target.MTHotelCodesJson = CASE
+                        WHEN source.MatchCount > 1 THEN source.MTHotelCodesJson
+                        ELSE target.MTHotelCodesJson
+                    END,
+                    target.CandidatesJson = CASE
+                        WHEN source.MatchCount > 1 THEN source.CandidatesJson
+                        ELSE target.CandidatesJson
+                    END,
+                    target.IsActive = CASE
+                        WHEN source.MatchCount > 1 THEN 1
+                        ELSE 0
+                    END,
+                    target.LastConflictTime = CASE
+                        WHEN source.MatchCount > 1 THEN @now
+                        ELSE target.LastConflictTime
+                    END,
+                    target.ResolvedTime = CASE
+                        WHEN source.MatchCount > 1 THEN NULL
+                        WHEN target.IsActive = 1 THEN @now
+                        ELSE target.ResolvedTime
+                    END,
+                    target.UpdateTime = @now
+                WHEN NOT MATCHED AND source.MatchCount > 1 THEN INSERT
+                (
+                    SupHotelId, SupId, SupHotelCode, MatchingVersion,
+                    CandidateCount, MTHotelCodesJson, CandidatesJson,
+                    IsActive, FirstConflictTime, LastConflictTime,
+                    CreateTime, UpdateTime
+                )
+                VALUES
+                (
+                    source.SupHotelId, source.SupId, source.SupHotelCode,
+                    source.MatchingVersion, source.MatchCount,
+                    source.MTHotelCodesJson, source.CandidatesJson,
+                    1, @now, @now, @now, @now
+                )
+                OPTION (LOOP JOIN, MAXDOP 1, RECOMPILE);
+
+                UPDATE target WITH (ROWLOCK)
+                SET
+                    target.LastMatchTime = @now,
+                    target.NextMatchTime = NULL,
+                    target.MatchAttemptCount = target.MatchAttemptCount + 1,
+                    target.MatchError = NULL,
+                    target.MatchStatus = CASE
+                        WHEN source.MatchCount = 0 THEN 2
+                        WHEN source.MatchCount = 1 THEN 4
+                        ELSE 3
+                    END,
+                    target.UpdateTime = @now
+                FROM dbo.SupHotelInfo AS target
+                INNER JOIN OPENJSON(@evaluations)
+                    WITH
+                    (
+                        SupHotelId int '$.supHotelId',
+                        MatchCount int '$.matchCount'
+                    ) AS source
+                    ON source.SupHotelId = target.SupHotelId
+                OPTION (LOOP JOIN, MAXDOP 1, RECOMPILE);
+
+                COMMIT TRANSACTION;
+            END TRY
+            BEGIN CATCH
+                IF @@TRANCOUNT > 0 ROLLBACK TRANSACTION;
+                THROW;
+            END CATCH;
+            """;
+        command.CommandText = _hotelMatchResultHasLegacyMatchingVersion.Value
+            ? commandText
+                .Replace(
+                    "/*LEGACY_MATCHING_VERSION_SOURCE*/",
+                    "MatchingVersion int '$.matchingVersion',",
+                    StringComparison.Ordinal)
+                .Replace(
+                    "/*LEGACY_MATCHING_VERSION_UPDATE*/",
+                    "target.MatchingVersion = source.MatchingVersion,",
+                    StringComparison.Ordinal)
+                .Replace(
+                    "/*LEGACY_MATCHING_VERSION_INSERT_COLUMN*/",
+                    "MatchingVersion,",
+                    StringComparison.Ordinal)
+                .Replace(
+                    "/*LEGACY_MATCHING_VERSION_INSERT_VALUE*/",
+                    "source.MatchingVersion,",
+                    StringComparison.Ordinal)
+            : commandText
+                .Replace("/*LEGACY_MATCHING_VERSION_SOURCE*/", string.Empty, StringComparison.Ordinal)
+                .Replace("/*LEGACY_MATCHING_VERSION_UPDATE*/", string.Empty, StringComparison.Ordinal)
+                .Replace("/*LEGACY_MATCHING_VERSION_INSERT_COLUMN*/", string.Empty, StringComparison.Ordinal)
+                .Replace("/*LEGACY_MATCHING_VERSION_INSERT_VALUE*/", string.Empty, StringComparison.Ordinal);
+        command.Parameters.AddRange(
+            [evaluationsParameter, matchesParameter, nowParameter, matchingVersionParameter]);
+        await command.ExecuteNonQueryAsync(cancellationToken);
+    }
+
+    static HotelMatchResultWriteRow CreateUnmatchedResultRow(
+        HotelMatchEvaluation evaluation,
+        int matchingVersion)
+        => new(
+            evaluation.SupHotelId,
+            string.Empty,
+            matchingVersion,
+            0,
+            0,
+            0,
+            null,
+            null,
+            0,
+            0,
+            0,
+            null,
+            null,
+            null,
+            null,
+            null,
+            null,
+            null,
+            null,
+            null,
+            null,
+            null,
+            null,
+            0,
+            0,
+            JsonSerializer.Serialize(
+                new
+                {
+                    status = evaluation.Matches.Count == 0 ? "noMatch" : "conflict",
+                    candidateCount = evaluation.Matches.Count,
+                    mtHotelCodes = evaluation.Matches
+                        .Select(match => match.MTHotelCode)
+                        .ToArray()
+                },
+                JsonOptions));
+
+    static HotelMatchResultWriteRow CreateMatchResultRow(
+        int supHotelId,
+        HotelMatchedCandidate match,
+        int matchingVersion)
+        => new(
+            supHotelId,
+            match.MTHotelCode,
+            matchingVersion,
+            (byte)match.NameEvidence.Source,
+            match.NameEvidence.HotelId,
+            (byte)match.NameMatchKind,
+            match.NameEvidence.PendingValue,
+            match.NameEvidence.EvidenceValue,
+            (byte)match.CoordinateEvidence.Source,
+            match.CoordinateEvidence.HotelId,
+            match.CoordinateEvidence.DistanceMeters ?? 0,
+            match.StarEvidence is null ? null : (byte)match.StarEvidence.Source,
+            match.StarEvidence?.HotelId,
+            match.StarEvidence?.PendingValue,
+            match.StarEvidence?.EvidenceValue,
+            match.AddressEvidence is null ? null : (byte)match.AddressEvidence.Source,
+            match.AddressEvidence?.HotelId,
+            match.AddressEvidence?.PendingValue,
+            match.AddressEvidence?.EvidenceValue,
+            match.PhoneEvidence is null ? null : (byte)match.PhoneEvidence.Source,
+            match.PhoneEvidence?.HotelId,
+            match.PhoneEvidence?.PendingValue,
+            match.PhoneEvidence?.EvidenceValue,
+            match.OtaFactCount,
+            match.SupplierFactCount,
+            JsonSerializer.Serialize(match, JsonOptions));
+
     public async Task<IReadOnlyList<HotelMatchWorkItem>> ClaimUnmatchedSupplierHotelsAsync(
         int matchingVersion,
         int batchSize,
@@ -976,19 +1872,63 @@ public sealed class RoomMappingHotelRepository :
     {
         var longitude = supplier.Hotel.Longitude ?? throw new InvalidOperationException("Supplier longitude is missing.");
         var latitude = supplier.Hotel.Latitude ?? throw new InvalidOperationException("Supplier latitude is missing.");
+        var recall = HotelRecallPolicy.Resolve(
+            supplier.Hotel.RegionLevel1Code,
+            supplier.Hotel.CountryCode,
+            radiusMeters,
+            maxCandidates);
+        var candidateLimit = recall.MaxCandidates.HasValue
+            ? "TOP (@maxCandidates) "
+            : string.Empty;
+        var commandText = """
+            DECLARE @origin geography = geography::Point(@latitude, @longitude, 4326);
+
+            SELECT /*CANDIDATE_LIMIT*/o.*
+            FROM dbo.OTAHotelInfo AS o
+            WHERE o.CleanStatus = @cleanStatus
+              AND o.DataQualityStatus = @dataQualityStatus
+              AND o.Estate = @onlineEstate
+              AND o.GeoPoint IS NOT NULL
+              AND o.GeoPoint.STDistance(@origin) <= @radiusMeters
+            ORDER BY o.GeoPoint.STDistance(@origin)
+            """.Replace(
+                "/*CANDIDATE_LIMIT*/",
+                candidateLimit,
+                StringComparison.Ordinal);
         var rows = await _dbContext.OTAHotelInfos
-            .FromSqlInterpolated($$"""
-                SELECT TOP ({{maxCandidates}}) o.*
-                FROM dbo.OTAHotelInfo AS o
-                WHERE o.CleanStatus = {{(byte)HotelCleanStatus.Ready}}
-                  AND o.DataQualityStatus = {{(byte)HotelDataQualityStatus.Valid}}
-                  AND o.GeoPoint IS NOT NULL
-                  AND o.GeoPoint.STDistance(geography::Point({{latitude}}, {{longitude}}, 4326)) <= {{radiusMeters}}
-                ORDER BY o.GeoPoint.STDistance(geography::Point({{latitude}}, {{longitude}}, 4326))
-                """)
-            .Include(x => x.Phones)
+            .FromSqlRaw(
+                commandText,
+                new SqlParameter("@latitude", System.Data.SqlDbType.Float)
+                {
+                    Value = Convert.ToDouble(latitude, CultureInfo.InvariantCulture)
+                },
+                new SqlParameter("@longitude", System.Data.SqlDbType.Float)
+                {
+                    Value = Convert.ToDouble(longitude, CultureInfo.InvariantCulture)
+                },
+                new SqlParameter("@radiusMeters", System.Data.SqlDbType.Int)
+                {
+                    Value = recall.RadiusMeters
+                },
+                new SqlParameter("@maxCandidates", System.Data.SqlDbType.Int)
+                {
+                    Value = recall.MaxCandidates ?? int.MaxValue
+                },
+                new SqlParameter("@cleanStatus", System.Data.SqlDbType.TinyInt)
+                {
+                    Value = (byte)HotelCleanStatus.Ready
+                },
+                new SqlParameter("@dataQualityStatus", System.Data.SqlDbType.TinyInt)
+                {
+                    Value = (byte)HotelDataQualityStatus.Valid
+                },
+                new SqlParameter("@onlineEstate", System.Data.SqlDbType.Int)
+                {
+                    Value = 1
+                })
             .AsNoTracking()
             .ToListAsync(cancellationToken);
+        await LoadAndAttachMatchingPhonesAsync(rows, [], cancellationToken);
         return rows.Select(MapCleaned).ToArray();
     }
 
@@ -1000,19 +1940,58 @@ public sealed class RoomMappingHotelRepository :
     {
         var longitude = ota.Longitude ?? throw new InvalidOperationException("OTA longitude is missing.");
         var latitude = ota.Latitude ?? throw new InvalidOperationException("OTA latitude is missing.");
+        var recall = HotelRecallPolicy.Resolve(
+            ota.RegionLevel1Code,
+            ota.CountryCode,
+            radiusMeters,
+            maxCandidates);
+        var candidateLimit = recall.MaxCandidates.HasValue
+            ? "TOP (@maxCandidates) "
+            : string.Empty;
+        var commandText = """
+            DECLARE @origin geography = geography::Point(@latitude, @longitude, 4326);
+
+            SELECT /*CANDIDATE_LIMIT*/s.*
+            FROM dbo.SupHotelInfo AS s
+            WHERE s.CleanStatus = @cleanStatus
+              AND s.DataQualityStatus = @dataQualityStatus
+              AND s.GeoPoint IS NOT NULL
+              AND s.GeoPoint.STDistance(@origin) <= @radiusMeters
+            ORDER BY s.GeoPoint.STDistance(@origin)
+            """.Replace(
+                "/*CANDIDATE_LIMIT*/",
+                candidateLimit,
+                StringComparison.Ordinal);
         var rows = await _dbContext.SupHotelInfos
-            .FromSqlInterpolated($$"""
-                SELECT TOP ({{maxCandidates}}) s.*
-                FROM dbo.SupHotelInfo AS s
-                WHERE s.CleanStatus = {{(byte)HotelCleanStatus.Ready}}
-                  AND s.DataQualityStatus = {{(byte)HotelDataQualityStatus.Valid}}
-                  AND s.GeoPoint IS NOT NULL
-                  AND s.GeoPoint.STDistance(geography::Point({{latitude}}, {{longitude}}, 4326)) <= {{radiusMeters}}
-                ORDER BY s.GeoPoint.STDistance(geography::Point({{latitude}}, {{longitude}}, 4326))
-                """)
-            .Include(x => x.Phones)
+            .FromSqlRaw(
+                commandText,
+                new SqlParameter("@latitude", System.Data.SqlDbType.Float)
+                {
+                    Value = Convert.ToDouble(latitude, CultureInfo.InvariantCulture)
+                },
+                new SqlParameter("@longitude", System.Data.SqlDbType.Float)
+                {
+                    Value = Convert.ToDouble(longitude, CultureInfo.InvariantCulture)
+                },
+                new SqlParameter("@radiusMeters", System.Data.SqlDbType.Int)
+                {
+                    Value = recall.RadiusMeters
+                },
+                new SqlParameter("@maxCandidates", System.Data.SqlDbType.Int)
+                {
+                    Value = recall.MaxCandidates ?? int.MaxValue
+                },
+                new SqlParameter("@cleanStatus", System.Data.SqlDbType.TinyInt)
+                {
+                    Value = (byte)HotelCleanStatus.Ready
+                },
+                new SqlParameter("@dataQualityStatus", System.Data.SqlDbType.TinyInt)
+                {
+                    Value = (byte)HotelDataQualityStatus.Valid
+                })
             .AsNoTracking()
             .ToListAsync(cancellationToken);
+        await LoadAndAttachMatchingPhonesAsync([], rows, cancellationToken);
         return rows.Select(MapCleaned).ToArray();
     }
 
@@ -1083,7 +2062,9 @@ public sealed class RoomMappingHotelRepository :
     {
         var row = await _dbContext.OTAHotelInfos.AsNoTracking()
             .Include(x => x.Phones)
-            .SingleOrDefaultAsync(x => x.MTHotelCode == mtHotelCode, cancellationToken);
+            .SingleOrDefaultAsync(
+                x => x.MTHotelCode == mtHotelCode && x.Estate == 1,
+                cancellationToken);
         return row is null ? null : MapCleaned(row);
     }
 
@@ -1310,6 +2291,10 @@ public sealed class RoomMappingHotelRepository :
         entity.ReMatchState = raw.ReMatchState;
         entity.HotelName = raw.HotelName;
         entity.HotelNameEn = raw.HotelNameEn;
+        entity.CountryCode = raw.CountryCode;
+        entity.CountryName = raw.CountryName;
+        entity.CityCode = raw.CityCode;
+        entity.CityName = raw.CityName;
         entity.Tel = raw.Telephone;
         entity.Fax = raw.Fax;
         entity.Address = raw.Address;
@@ -1360,6 +2345,46 @@ public sealed class RoomMappingHotelRepository :
     static HotelMatchWorkItem MapWorkItem(SupHotelInfoClean row)
         => new(MapCleaned(row), row.SourceDataVersion, FormatHash(row.NormalizedDataHash) ?? string.Empty, row.CleanVersion);
 
+    static HotelMatchFact MapFact(OTAHotelInfo row)
+        => new(
+            HotelMatchFactSource.Ota,
+            row.HotelID,
+            null,
+            row.MTHotelCode,
+            row.MTHotelCode,
+            row.HotelName,
+            row.HotelEnName,
+            row.Longitude,
+            row.Latitude,
+            row.StarLevel,
+            row.Address,
+            row.Phones
+                .Where(phone => phone.IsValid && phone.NormalizedPhone != null)
+                .OrderBy(phone => phone.Ordinal)
+                .Select(phone => phone.NormalizedPhone!)
+                .Distinct(StringComparer.Ordinal)
+                .ToArray());
+
+    static HotelMatchFact MapFact(SupHotelInfoClean row)
+        => new(
+            HotelMatchFactSource.Supplier,
+            row.SupHotelId,
+            row.SupId,
+            row.SHotelCode,
+            string.IsNullOrWhiteSpace(row.MTHotelCode) ? null : row.MTHotelCode,
+            row.HotelName,
+            row.HotelNameEn,
+            row.Longitude,
+            row.Latitude,
+            row.StarLevel,
+            row.Address,
+            row.Phones
+                .Where(phone => phone.IsValid && phone.E164 != null)
+                .OrderBy(phone => phone.Ordinal)
+                .Select(phone => phone.E164!)
+                .Distinct(StringComparer.Ordinal)
+                .ToArray());
+
     static CleanedHotel MapCleaned(OTAHotelInfo row)
         => new(
             HotelDataType.Platform,
@@ -1401,6 +2426,10 @@ public sealed class RoomMappingHotelRepository :
             row.HotelName ?? string.Empty,
             row.SupId,
             string.IsNullOrWhiteSpace(row.MTHotelCode) ? null : row.MTHotelCode,
+            countryCode: row.CountryCode,
+            countryName: row.CountryName,
+            cityCode: row.CityCode,
+            cityName: row.CityName,
             hotelNameEn: row.HotelNameEn,
             address: row.Address,
             postCode: row.PostCode,

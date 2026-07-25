@@ -16,6 +16,10 @@ public sealed class SupHotelInfoClean : IHasEntityConfiguration<SupHotelInfoClea
     public int? ReMatchState { get; set; }
     public string? HotelName { get; set; }
     public string? HotelNameEn { get; set; }
+    public string? CountryCode { get; set; }
+    public string? CountryName { get; set; }
+    public string? CityCode { get; set; }
+    public string? CityName { get; set; }
     public string? Tel { get; set; }
     public ICollection<SupHotelPhone> Phones { get; set; } = new List<SupHotelPhone>();
     public string? Fax { get; set; }
@@ -65,6 +69,10 @@ public sealed class SupHotelInfoClean : IHasEntityConfiguration<SupHotelInfoClea
         builder.Property(x => x.MTHotelCode).HasMaxLength(100).IsUnicode(false).UseCollation(collation).IsRequired();
         builder.Property(x => x.HotelName).HasMaxLength(200).UseCollation(collation);
         builder.Property(x => x.HotelNameEn).HasMaxLength(200).UseCollation(collation);
+        builder.Property(x => x.CountryCode).HasMaxLength(50).UseCollation(collation);
+        builder.Property(x => x.CountryName).HasMaxLength(50).UseCollation(collation);
+        builder.Property(x => x.CityCode).HasMaxLength(50).UseCollation(collation);
+        builder.Property(x => x.CityName).HasMaxLength(100).UseCollation(collation);
         builder.Property(x => x.Tel).HasMaxLength(100).UseCollation(collation);
         builder.Property(x => x.Fax).HasMaxLength(100).UseCollation(collation);
         builder.Property(x => x.Address).HasMaxLength(500).UseCollation(collation);
@@ -89,5 +97,8 @@ public sealed class SupHotelInfoClean : IHasEntityConfiguration<SupHotelInfoClea
         builder.HasIndex(x => new { x.SupId, x.SHotelCode, x.MTHotelCode })
             .HasDatabaseName("IX_SupHotelInfo_Mapping");
         builder.HasIndex(x => x.MTHotelCode).HasDatabaseName("IX_SupHotelInfo_MTHotelCode");
+        builder.HasIndex(x => new { x.CleanVersion, x.RegionFenceVersion, x.SupHotelId })
+            .IncludeProperties(x => new { x.SourceDataVersion, x.CleanTime })
+            .HasDatabaseName("IX_SupHotelInfo_CleaningSnapshot");
     }
 }

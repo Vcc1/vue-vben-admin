@@ -88,7 +88,7 @@ IF NOT EXISTS
       AND name = N'IX_OTAHotelInfo_Clean'
 )
     CREATE INDEX IX_OTAHotelInfo_Clean
-        ON dbo.OTAHotelInfo(CleanStatus, DataQualityStatus, CleanVersion) ON [CACHE];
+        ON dbo.OTAHotelInfo(Estate, CleanStatus, DataQualityStatus, CleanVersion) ON [CACHE];
 GO
 
 IF NOT EXISTS

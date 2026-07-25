@@ -5,6 +5,16 @@ codex_home="${CODEX_HOME:-${HOME}/.codex}"
 mkdir -p "${codex_home}"
 chmod 0700 "${codex_home}"
 
+if [[ "$(id -u)" == "0" ]]; then
+    if [[ "${ENABLE_SSHD:-true}" == "true" ]]; then
+        mkdir -p /run/sshd /var/lib/codex/ssh-hostkeys
+        if [[ ! -s /var/lib/codex/ssh-hostkeys/ssh_host_ed25519_key ]]; then
+            ssh-keygen -q -t ed25519 -N '' -f /var/lib/codex/ssh-hostkeys/ssh_host_ed25519_key
+        fi
+        /usr/sbin/sshd
+    fi
+fi
+
 toml_escape() {
     local value="$1"
     value="${value//\\/\\\\}"
@@ -50,6 +60,12 @@ if [[ -n "${api_key}" ]]; then
         'require("fs").writeFileSync(process.env.AUTH_JSON_PATH, JSON.stringify({OPENAI_API_KEY: process.env.OPENAI_API_KEY}, null, 2) + "\n")'
     chmod 0600 "${codex_home}/auth.json"
     unset OPENAI_API_KEY
+fi
+
+if [[ "$(id -u)" == "0" ]]; then
+    chown -R codex:codex "${codex_home}" /workspace /runs
+    exec runuser -u codex -- env HOME=/home/codex CODEX_HOME=/home/codex/.codex \
+        DOTNET_CLI_HOME=/home/codex NUGET_PACKAGES=/home/codex/.nuget/packages "$@"
 fi
 
 exec "$@"

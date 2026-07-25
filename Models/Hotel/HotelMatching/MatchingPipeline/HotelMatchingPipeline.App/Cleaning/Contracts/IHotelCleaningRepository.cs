@@ -4,19 +4,19 @@ namespace HotelMatchingPipeline.App.Contracts;
 
 public interface IHotelCleaningRepository
 {
-    Task<HotelCleaningProgress> GetCleaningProgressAsync(
+    Task<HotelCleaningWorkSet> LoadCleaningWorkSetAsync(
         HotelDataType type,
         DateTimeOffset changedSince,
         int cleanVersion,
         int regionBoundaryVersion,
+        int pendingIdBatchSize,
+        Action<HotelCleaningScanProgress> reportScanProgress,
+        Func<int, CancellationToken, ValueTask> enqueuePendingId,
         CancellationToken cancellationToken);
 
-    Task<IReadOnlyList<RawHotelData>> GetHotelsToCleanAsync(
+    Task<IReadOnlyList<RawHotelData>> GetHotelsByIdsAsync(
         HotelDataType type,
-        DateTimeOffset changedSince,
-        int cleanVersion,
-        int regionBoundaryVersion,
-        int batchSize,
+        IReadOnlyCollection<int> dataIds,
         CancellationToken cancellationToken);
 
     Task<int> SaveCleanedHotelsAsync(
@@ -27,6 +27,21 @@ public interface IHotelCleaningRepository
         IReadOnlyCollection<HotelCleaningFailureRecord> failures,
         CancellationToken cancellationToken);
 }
+
+public sealed record HotelCleaningWorkSet(
+    long Total,
+    long Cleaned,
+    long Failed)
+{
+    public HotelCleaningProgress Progress => new(Total, Cleaned, Failed);
+}
+
+public sealed record HotelCleaningScanProgress(
+    long Total,
+    long Scanned,
+    long Cleaned,
+    long Failed,
+    long Pending);
 
 public sealed record HotelCleaningProgress(long Total, long Cleaned, long Failed)
 {

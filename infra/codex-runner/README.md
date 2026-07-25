@@ -26,6 +26,27 @@
 当前 Portainer Stack 也会读取同目录下的 `新建 文本文档.env`。测试环境可以直接在该文件中
 配置 Git、第三方 Codex 地址和临时 Key，然后推送后重新部署；生产环境不要提交真实长期 Key。
 
+Stack 会在 `codex` 容器内启动 OpenSSH Server，并映射宿主机 `2222` 到容器 `22`。Codex App
+直接连接 `codex@192.168.1.130:2222`，不再经过宿主机 SSH，也不需要宿主机 wrapper。
+
+部署前，在 Docker 宿主机准备登录公钥：
+
+```bash
+sudo mkdir -p /opt/mengtu-codex/ssh
+sudo cp /path/to/client-id-ed25519.pub /opt/mengtu-codex/ssh/authorized_keys
+sudo chmod 755 /opt/mengtu-codex/ssh
+sudo chmod 644 /opt/mengtu-codex/ssh/authorized_keys
+```
+
+Portainer 中保持 `GIT_SSH_PATH=/opt/mengtu-codex/ssh`。部署后先测试：
+
+```bash
+ssh -i ~/.ssh/id_ed25519 -p 2222 codex@192.168.1.130 'codex --version'
+```
+
+Codex App 的主机填 `codex@192.168.1.130`，端口填 `2222`，身份文件选择对应私钥。容器内
+Git、curl 和 Codex 子进程默认通过 `192.168.1.43:7890` 代理访问外网，局域网地址不走代理。
+
 该 Compose 文件位于 `infra/codex-runner`，所以 build context 使用 `../..` 回到 Portainer
 检出的 Git 仓库根目录，再从根目录读取 `infra/codex-runner/Dockerfile`。
 

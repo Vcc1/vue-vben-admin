@@ -30,4 +30,11 @@ public enum RegionResolveStatus
 public interface IHotelRegionResolver
 {
     RegionResolution Resolve(decimal longitude, decimal latitude, CancellationToken cancellationToken = default);
+
+    RegionResolution Resolve(
+        decimal longitude,
+        decimal latitude,
+        string? preferredCountryCode,
+        CancellationToken cancellationToken = default)
+        => Resolve(longitude, latitude, cancellationToken);
 }

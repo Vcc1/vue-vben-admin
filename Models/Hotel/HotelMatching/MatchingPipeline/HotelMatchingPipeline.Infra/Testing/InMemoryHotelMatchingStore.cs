@@ -15,35 +15,51 @@ public sealed class InMemoryHotelMatchingStore : IHotelCleaningRepository, IHote
 
     public void AddRaw(RawHotelData raw) => _raw.Add(raw);
 
-    public Task<HotelCleaningProgress> GetCleaningProgressAsync(
+    public async Task<HotelCleaningWorkSet> LoadCleaningWorkSetAsync(
         HotelDataType type,
         DateTimeOffset changedSince,
         int cleanVersion,
         int regionBoundaryVersion,
+        int pendingIdBatchSize,
+        Action<HotelCleaningScanProgress> reportScanProgress,
+        Func<int, CancellationToken, ValueTask> enqueuePendingId,
         CancellationToken cancellationToken)
     {
         var rawRows = _raw.Where(x => x.Type == type).ToArray();
+        var pendingIndexes = rawRows
+            .Select((raw, index) => (raw, dataId: index + 1))
+            .Where(x => !_cleaned.TryGetValue(Key(x.raw.Type, x.raw.SupplierId, x.raw.HotelCode), out var value)
+                || value.CleanVersion != cleanVersion
+                || value.RegionBoundaryVersion != regionBoundaryVersion
+                || value.SourceDataHash != (x.raw.SourceDataHash ?? HotelDataHasher.HashRaw(x.raw)))
+            .Select(x => x.dataId)
+            .ToArray();
         var cleaned = rawRows.LongCount(x => _cleaned.TryGetValue(Key(x.Type, x.SupplierId, x.HotelCode), out var value)
             && value.CleanVersion == cleanVersion
             && value.RegionBoundaryVersion == regionBoundaryVersion
             && value.SourceDataHash == (x.SourceDataHash ?? HotelDataHasher.HashRaw(x)));
-        return Task.FromResult(new HotelCleaningProgress(rawRows.LongLength, cleaned, 0));
+        reportScanProgress(new HotelCleaningScanProgress(rawRows.LongLength, 0, cleaned, 0, pendingIndexes.LongLength));
+        var scanned = 0L;
+        foreach (var pendingIndex in pendingIndexes)
+        {
+            await enqueuePendingId(pendingIndex, cancellationToken);
+            scanned++;
+        }
+
+        reportScanProgress(new HotelCleaningScanProgress(rawRows.LongLength, rawRows.LongLength, cleaned, 0, pendingIndexes.LongLength));
+
+        return new HotelCleaningWorkSet(rawRows.LongLength, cleaned, 0);
     }
 
-    public Task<IReadOnlyList<RawHotelData>> GetHotelsToCleanAsync(
+    public Task<IReadOnlyList<RawHotelData>> GetHotelsByIdsAsync(
         HotelDataType type,
-        DateTimeOffset changedSince,
-        int cleanVersion,
-        int regionBoundaryVersion,
-        int batchSize,
+        IReadOnlyCollection<int> dataIds,
         CancellationToken cancellationToken)
     {
-        var result = _raw.Where(x => x.Type == type)
-            .Where(x => !_cleaned.TryGetValue(Key(x.Type, x.SupplierId, x.HotelCode), out var value)
-                || value.CleanVersion != cleanVersion
-                || value.RegionBoundaryVersion != regionBoundaryVersion
-                || value.SourceDataHash != (x.SourceDataHash ?? HotelDataHasher.HashRaw(x)))
-            .Take(batchSize)
+        var rawRows = _raw.Where(x => x.Type == type).ToArray();
+        var result = dataIds
+            .Where(dataId => dataId > 0 && dataId <= rawRows.Length)
+            .Select(dataId => rawRows[dataId - 1])
             .ToArray();
         return Task.FromResult<IReadOnlyList<RawHotelData>>(result);
     }
@@ -104,12 +120,19 @@ public sealed class InMemoryHotelMatchingStore : IHotelCleaningRepository, IHote
         int maxCandidates,
         CancellationToken cancellationToken)
     {
+        var recall = HotelRecallPolicy.Resolve(
+            supplier.Hotel.RegionLevel1Code,
+            supplier.Hotel.CountryCode,
+            radiusMeters,
+            maxCandidates);
         var result = _cleaned.Values
-            .Where(x => x.Raw.Type == HotelDataType.Platform && x.IsMatchable)
+            .Where(x => x.Raw.Type == HotelDataType.Platform
+                && x.Raw.Estate == 1
+                && x.IsMatchable)
             .Select(x => (x.Cleaned, DistanceMeters(supplier.Hotel, x.Cleaned)))
-            .Where(x => !double.IsNaN(x.Item2) && x.Item2 <= radiusMeters)
+            .Where(x => !double.IsNaN(x.Item2) && x.Item2 <= recall.RadiusMeters)
             .OrderBy(x => x.Item2)
-            .Take(maxCandidates)
+            .Take(recall.MaxCandidates ?? int.MaxValue)
             .Select(x => x.Cleaned)
             .ToArray();
         return Task.FromResult<IReadOnlyList<CleanedHotel>>(result);
@@ -121,12 +144,17 @@ public sealed class InMemoryHotelMatchingStore : IHotelCleaningRepository, IHote
         int maxCandidates,
         CancellationToken cancellationToken)
     {
+        var recall = HotelRecallPolicy.Resolve(
+            ota.RegionLevel1Code,
+            ota.CountryCode,
+            radiusMeters,
+            maxCandidates);
         var result = _cleaned.Values
             .Where(x => x.Raw.Type == HotelDataType.Supplier && x.IsMatchable)
             .Select(x => (x.Cleaned, DistanceMeters(ota, x.Cleaned)))
-            .Where(x => !double.IsNaN(x.Item2) && x.Item2 <= radiusMeters)
+            .Where(x => !double.IsNaN(x.Item2) && x.Item2 <= recall.RadiusMeters)
             .OrderBy(x => x.Item2)
-            .Take(maxCandidates)
+            .Take(recall.MaxCandidates ?? int.MaxValue)
             .Select(x => x.Cleaned)
             .ToArray();
         return Task.FromResult<IReadOnlyList<CleanedHotel>>(result);
@@ -180,6 +208,7 @@ public sealed class InMemoryHotelMatchingStore : IHotelCleaningRepository, IHote
 
     public Task<CleanedHotel?> GetOtaHotelAsync(string mtHotelCode, CancellationToken cancellationToken)
         => Task.FromResult(_cleaned.Values.FirstOrDefault(x => x.Raw.Type == HotelDataType.Platform
+            && x.Raw.Estate == 1
             && string.Equals(x.Cleaned.HotelCode, mtHotelCode, StringComparison.OrdinalIgnoreCase))?.Cleaned);
 
     public Task<bool> TryCreateAsync(HotelMatchDeliveryCommand command, CancellationToken cancellationToken)

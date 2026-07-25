@@ -571,6 +571,7 @@ public interface IPrometheusQueryClient
 {
     Task<int> GetOnlineCountAsync(string targetKey, MonitorTargetType targetType, int offlineSeconds, CancellationToken cancellationToken = default);
     Task<IReadOnlyList<TargetInstanceDto>> GetInstancesAsync(string targetKey, MonitorTargetType targetType, CancellationToken cancellationToken = default);
+    Task<IReadOnlyList<TargetInstanceDto>> GetRecentInstancesAsync(string targetKey, MonitorTargetType targetType, CancellationToken cancellationToken = default);
     Task<IReadOnlyList<PrometheusMetricSample>> QueryInstantAsync(string promql, CancellationToken cancellationToken = default);
 }
 

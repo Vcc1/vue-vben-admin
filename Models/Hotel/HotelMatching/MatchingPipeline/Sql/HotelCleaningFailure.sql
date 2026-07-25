@@ -29,6 +29,25 @@ BEGIN
         INCLUDE (SourceType, DataId, HotelCode, ExceptionType, FailureCount)
         ON [CACHE];
 END;
+
+IF NOT EXISTS
+(
+    SELECT 1
+    FROM sys.indexes
+    WHERE object_id = OBJECT_ID(N'dbo.HotelCleaningFailure')
+      AND name = N'IX_HotelCleaningFailure_CleaningSnapshot'
+)
+BEGIN
+    CREATE INDEX IX_HotelCleaningFailure_CleaningSnapshot
+        ON dbo.HotelCleaningFailure
+        (
+            SourceType,
+            CleanVersion,
+            RegionBoundaryVersion,
+            DataId
+        )
+        ON [CACHE];
+END;
 GO
 
 -- Run this after fixing failures. Cleared source rows are retried by the next cleaning pass.

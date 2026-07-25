@@ -36,5 +36,13 @@ public sealed class HotelCleaningFailure : IHasEntityConfiguration<HotelCleaning
         builder.HasIndex(x => new { x.SourceType, x.DataId })
             .IsUnique()
             .HasDatabaseName("UX_HotelCleaningFailure_SourceType_DataId");
+        builder.HasIndex(x => new
+            {
+                x.SourceType,
+                x.CleanVersion,
+                x.RegionBoundaryVersion,
+                x.DataId
+            })
+            .HasDatabaseName("IX_HotelCleaningFailure_CleaningSnapshot");
     }
 }

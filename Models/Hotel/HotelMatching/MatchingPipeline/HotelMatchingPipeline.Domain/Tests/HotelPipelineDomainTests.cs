@@ -6,6 +6,30 @@ namespace HotelMatchingPipeline.Domain.Tests;
 
 public sealed class HotelPipelineDomainTests
 {
+    [Theory]
+    [InlineData("CN", null, 3000, 200, 3000, 200)]
+    [InlineData(null, "CHN", 3000, 200, 3000, 200)]
+    [InlineData("US", null, 3000, 200, 300, null)]
+    [InlineData(null, "DEU", 3000, 200, 300, null)]
+    [InlineData(null, null, 3000, 200, 3000, 200)]
+    public void Recall_policy_uses_a_small_unbounded_search_outside_china(
+        string? regionLevel1Code,
+        string? countryCode,
+        int configuredRadius,
+        int configuredMaxCandidates,
+        int expectedRadius,
+        int? expectedMaxCandidates)
+    {
+        var result = HotelRecallPolicy.Resolve(
+            regionLevel1Code,
+            countryCode,
+            configuredRadius,
+            configuredMaxCandidates);
+
+        Assert.Equal(expectedRadius, result.RadiusMeters);
+        Assert.Equal(expectedMaxCandidates, result.MaxCandidates);
+    }
+
     [Fact]
     public void Cleaner_creates_valid_snapshot_for_consistent_data()
     {
@@ -56,6 +80,99 @@ public sealed class HotelPipelineDomainTests
         Assert.False(result.IsMatchable);
         Assert.Equal(HotelDataQualityStatus.Problem, result.Quality.Status);
         Assert.True(result.Quality.Flags.HasFlag(HotelDataQualityFlags.CoordinateTypeUnknown));
+    }
+
+    [Fact]
+    public void Cleaner_swaps_coordinates_when_only_swapped_order_matches_raw_country()
+    {
+        var cleaner = new HotelCleaner(new CoordinateOrderRegionResolver());
+        var raw = new RawHotelData(HotelDataType.Supplier, "SUP-SWAPPED")
+        {
+            SupplierId = 51,
+            HotelName = "Coastal Hotel",
+            CountryCode = "al",
+            GpsType = (int)HotelCoordinateType.Wgs84,
+            Longitude = 20.0125372m,
+            Latitude = 39.8466451m
+        };
+
+        var result = cleaner.Clean(raw, 1);
+
+        Assert.Equal(39.8466451m, result.Cleaned.Longitude);
+        Assert.Equal(20.0125372m, result.Cleaned.Latitude);
+        Assert.Equal("ALB", result.Cleaned.RegionLevel1Code);
+        Assert.Equal("swapped_to_match_country", result.Quality.Details["coordinate_order"]);
+        Assert.False(result.Quality.Flags.HasFlag(HotelDataQualityFlags.CoordinateInvalid));
+    }
+
+    [Fact]
+    public void Cleaner_keeps_original_coordinates_when_swapped_order_does_not_match_raw_country()
+    {
+        var cleaner = new HotelCleaner(new CoordinateOrderRegionResolver());
+        var raw = new RawHotelData(HotelDataType.Supplier, "SUP-NOT-SWAPPED")
+        {
+            SupplierId = 51,
+            HotelName = "Coastal Hotel",
+            CountryCode = "US",
+            GpsType = (int)HotelCoordinateType.Wgs84,
+            Longitude = 20.0125372m,
+            Latitude = 39.8466451m
+        };
+
+        var result = cleaner.Clean(raw, 1);
+
+        Assert.Equal(20.0125372m, result.Cleaned.Longitude);
+        Assert.Equal(39.8466451m, result.Cleaned.Latitude);
+        Assert.Equal("GRC", result.Cleaned.RegionLevel1Code);
+        Assert.DoesNotContain("coordinate_order", result.Quality.Details);
+    }
+
+    [Fact]
+    public void Cleaner_can_recover_an_invalid_original_latitude_by_swapping_coordinates()
+    {
+        var cleaner = new HotelCleaner(new CoordinateOrderRegionResolver());
+        var raw = new RawHotelData(HotelDataType.Supplier, "SUP-INVALID-ORDER")
+        {
+            SupplierId = 51,
+            HotelName = "Shanghai Hotel",
+            CountryCode = "CN",
+            GpsType = (int)HotelCoordinateType.Wgs84,
+            Longitude = 31.2304m,
+            Latitude = 121.4737m
+        };
+
+        var result = cleaner.Clean(raw, 1);
+
+        Assert.Equal(121.4737m, result.Cleaned.Longitude);
+        Assert.Equal(31.2304m, result.Cleaned.Latitude);
+        Assert.Equal("CHN", result.Cleaned.RegionLevel1Code);
+        Assert.False(result.Quality.Flags.HasFlag(HotelDataQualityFlags.CoordinateInvalid));
+    }
+
+    [Theory]
+    [InlineData("12")]
+    [InlineData("123")]
+    [InlineData("A1")]
+    [InlineData("ALB1")]
+    public void Cleaner_does_not_swap_coordinates_for_provider_specific_country_codes(string countryCode)
+    {
+        var cleaner = new HotelCleaner(new CoordinateOrderRegionResolver());
+        var raw = new RawHotelData(HotelDataType.Supplier, "SUP-PROVIDER-COUNTRY")
+        {
+            SupplierId = 51,
+            HotelName = "Provider Hotel",
+            CountryCode = countryCode,
+            GpsType = (int)HotelCoordinateType.Wgs84,
+            Longitude = 20.0125372m,
+            Latitude = 39.8466451m
+        };
+
+        var result = cleaner.Clean(raw, 1);
+
+        Assert.Equal(20.0125372m, result.Cleaned.Longitude);
+        Assert.Equal(39.8466451m, result.Cleaned.Latitude);
+        Assert.Equal("GRC", result.Cleaned.RegionLevel1Code);
+        Assert.DoesNotContain("coordinate_order", result.Quality.Details);
     }
 
     [Fact]
@@ -176,6 +293,10 @@ public sealed class HotelPipelineDomainTests
         Assert.Equal("AD", CountryCodeNormalizer.ToAlpha2("AND"));
         Assert.True(CountryCodeNormalizer.AreEquivalent("AD", "AND"));
         Assert.True(CountryCodeNormalizer.AreEquivalent("CHN", "CN"));
+        Assert.True(CountryCodeNormalizer.AreEquivalentIsoCodes("al", "ALB"));
+        Assert.True(CountryCodeNormalizer.AreEquivalentIsoCodes("chn", "CN"));
+        Assert.False(CountryCodeNormalizer.AreEquivalentIsoCodes("123", "ALB"));
+        Assert.False(CountryCodeNormalizer.AreEquivalentIsoCodes("A1", "AL"));
     }
 
     [Fact]
@@ -226,6 +347,27 @@ public sealed class HotelPipelineDomainTests
         Assert.Equal("+12125550100", phone.E164);
         Assert.Equal("1", phone.CountryCallingCode);
         Assert.True(result.Quality.Flags.HasFlag(HotelDataQualityFlags.PhoneCountryConflict));
+    }
+
+    [Fact]
+    public void Cleaner_passes_the_database_country_code_to_the_region_resolver()
+    {
+        var resolver = new PreferredCountryRegionResolver();
+        var cleaner = new HotelCleaner(resolver);
+        var raw = new RawHotelData(HotelDataType.Supplier, "SUP-PREFERRED-COUNTRY")
+        {
+            SupplierId = 51,
+            HotelName = "Border Hotel",
+            CountryCode = "CHN",
+            GpsType = (int)HotelCoordinateType.Wgs84,
+            Longitude = 121.4737m,
+            Latitude = 31.2304m
+        };
+
+        var result = cleaner.Clean(raw, 1);
+
+        Assert.Equal("CHN", resolver.PreferredCountryCode);
+        Assert.Equal("CHN", result.Cleaned.RegionLevel1Code);
     }
 
     [Fact]
@@ -337,5 +479,46 @@ public sealed class HotelPipelineDomainTests
     {
         public RegionResolution Resolve(decimal longitude, decimal latitude, CancellationToken cancellationToken = default)
             => new("CHN", "China", "ADM1-SH", "Shanghai", "ADM2-SH", "Shanghai", RegionResolveStatus.Resolved, 4);
+    }
+
+    sealed class CoordinateOrderRegionResolver : IHotelRegionResolver
+    {
+        public RegionResolution Resolve(decimal longitude, decimal latitude, CancellationToken cancellationToken = default)
+        {
+            if (longitude == 20.0125372m && latitude == 39.8466451m)
+            {
+                return new("GRC", "Greece", null, null, null, null, RegionResolveStatus.Resolved, 4);
+            }
+
+            if (longitude == 39.8466451m && latitude == 20.0125372m)
+            {
+                return new("ALB", "Albania", null, null, null, null, RegionResolveStatus.Resolved, 4);
+            }
+
+            if (longitude == 121.4737m && latitude == 31.2304m)
+            {
+                return new("CHN", "China", null, null, null, null, RegionResolveStatus.Resolved, 4);
+            }
+
+            return RegionResolution.NotFound(4);
+        }
+    }
+
+    sealed class PreferredCountryRegionResolver : IHotelRegionResolver
+    {
+        public string? PreferredCountryCode { get; private set; }
+
+        public RegionResolution Resolve(decimal longitude, decimal latitude, CancellationToken cancellationToken = default)
+            => throw new InvalidOperationException("The preferred-country overload must be used.");
+
+        public RegionResolution Resolve(
+            decimal longitude,
+            decimal latitude,
+            string? preferredCountryCode,
+            CancellationToken cancellationToken = default)
+        {
+            PreferredCountryCode = preferredCountryCode;
+            return new(preferredCountryCode, "Database Country", null, null, null, null, RegionResolveStatus.Resolved, 4);
+        }
     }
 }
