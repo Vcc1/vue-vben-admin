@@ -28,7 +28,7 @@ public sealed class HotelFactMatchEvaluatorTests
             HotelMatchFactSource.Supplier,
             20,
             mtHotelCode: "MT-10",
-            hotelName: "A",
+            hotelName: "A Hotel",
             longitude: 122m,
             latitude: 32m,
             starLevel: 5,

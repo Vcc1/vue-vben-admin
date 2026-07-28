@@ -20,38 +20,6 @@ public sealed class HotelNameMatcher
             return HotelNameMatchResult.Matched(kind, left, right);
         }
 
-        var normalizedIgnoreWords = NormalizeIgnoreWords(options.IgnoreWords);
-
-        var leftIgnore = RemoveIgnoreWords(left.NormalizedSource, normalizedIgnoreWords);
-        if (leftIgnore.RemovedWords.Count > 0)
-        {
-            var leftAfterIgnore = BuildWordView(leftIgnore.NameWithoutIgnoreWords, options.CjkDictionary);
-            if (TryMatchWords(leftAfterIgnore, right, out _))
-            {
-                return HotelNameMatchResult.Matched(
-                    HotelNameMatchKind.OneSideSameWordsAfterIgnoreWordsRemoved,
-                    left,
-                    right,
-                    HotelNameIgnoredSide.Left,
-                    leftIgnore.RemovedWords);
-            }
-        }
-
-        var rightIgnore = RemoveIgnoreWords(right.NormalizedSource, normalizedIgnoreWords);
-        if (rightIgnore.RemovedWords.Count > 0)
-        {
-            var rightAfterIgnore = BuildWordView(rightIgnore.NameWithoutIgnoreWords, options.CjkDictionary);
-            if (TryMatchWords(left, rightAfterIgnore, out _))
-            {
-                return HotelNameMatchResult.Matched(
-                    HotelNameMatchKind.OneSideSameWordsAfterIgnoreWordsRemoved,
-                    left,
-                    right,
-                    HotelNameIgnoredSide.Right,
-                    rightIgnore.RemovedWords);
-            }
-        }
-
         return HotelNameMatchResult.NotMatched(left, right);
     }
 
@@ -64,14 +32,13 @@ public sealed class HotelNameMatcher
     {
         if (string.IsNullOrWhiteSpace(hotelName))
         {
-            return new HotelNameWordView(string.Empty, [], string.Empty, [], string.Empty);
+            return new HotelNameWordView(string.Empty, [], string.Empty, []);
         }
 
         var normalized = hotelName.Normalize(NormalizationForm.FormD);
         var words = new List<string>();
         var boundaries = new List<HotelNameWordBoundary>();
         var compactName = new StringBuilder(normalized.Length);
-        var normalizedSource = new StringBuilder(normalized.Length);
         var currentWord = new StringBuilder();
         var separatorHasWhitespace = false;
         var separatorHasSymbol = false;
@@ -102,7 +69,6 @@ public sealed class HotelNameMatcher
                 }
 
                 var run = normalized[start..(index + 1)].ToLowerInvariant();
-                normalizedSource.Append(run);
                 foreach (var token in TokenizeCjkRun(run, dictionary))
                 {
                     if (words.Count > 0)
@@ -119,7 +85,6 @@ public sealed class HotelNameMatcher
                 continue;
             }
 
-            normalizedSource.Append(c);
             if (IsWordChar(c))
             {
                 if (currentWord.Length == 0 && words.Count > 0)
@@ -154,8 +119,7 @@ public sealed class HotelNameMatcher
             cleanedName,
             words,
             compactName.ToString().Normalize(NormalizationForm.FormC),
-            boundaries,
-            normalizedSource.ToString().Normalize(NormalizationForm.FormC));
+            boundaries);
     }
 
     static IReadOnlyList<string> TokenizeCjkRun(string run, IReadOnlyList<string> dictionary)
@@ -284,35 +248,6 @@ public sealed class HotelNameMatcher
         return counts.Count == 0;
     }
 
-    private static IReadOnlyList<string> NormalizeIgnoreWords(IReadOnlyCollection<string> ignoreWords)
-        => ignoreWords
-            .Select(Normalize)
-            .Where(word => word.Length > 0)
-            .Distinct(StringComparer.Ordinal)
-            .OrderByDescending(word => word.Length)
-            .ToArray();
-
-    private static (string NameWithoutIgnoreWords, IReadOnlyList<string> RemovedWords) RemoveIgnoreWords(
-        string cleanedName,
-        IReadOnlyList<string> ignoreWords)
-    {
-        var name = cleanedName;
-        var removedWords = new List<string>();
-
-        foreach (var ignoreWord in ignoreWords)
-        {
-            name = RemoveIgnoreWord(name, ignoreWord, out var removed);
-            if (!removed)
-            {
-                continue;
-            }
-
-            removedWords.Add(ignoreWord);
-        }
-
-        return (name, removedWords);
-    }
-
     private static bool IsWordChar(char c)
         => char.IsLetterOrDigit(c) || IsCjk(c);
 
@@ -342,38 +277,4 @@ public sealed class HotelNameMatcher
         currentWord.Clear();
     }
 
-    private static string RemoveIgnoreWord(string name, string ignoreWord, out bool removed)
-    {
-        removed = false;
-        var searchStart = 0;
-        var requireAsciiWordBoundary = ignoreWord.All(c => IsAsciiLetterOrDigit(c) || c == ' ');
-
-        while (searchStart <= name.Length - ignoreWord.Length)
-        {
-            var index = name.IndexOf(ignoreWord, searchStart, StringComparison.Ordinal);
-            if (index < 0)
-            {
-                break;
-            }
-
-            var endIndex = index + ignoreWord.Length;
-            var startsInsideAsciiWord = index > 0 && IsAsciiLetterOrDigit(name[index - 1]);
-            var endsInsideAsciiWord = endIndex < name.Length && IsAsciiLetterOrDigit(name[endIndex]);
-
-            if (requireAsciiWordBoundary && (startsInsideAsciiWord || endsInsideAsciiWord))
-            {
-                searchStart = endIndex;
-                continue;
-            }
-
-            name = name.Remove(index, ignoreWord.Length).Insert(index, " ");
-            removed = true;
-            searchStart = index + 1;
-        }
-
-        return name;
-    }
-
-    private static bool IsAsciiLetterOrDigit(char c)
-        => c is >= 'a' and <= 'z' or >= 'A' and <= 'Z' or >= '0' and <= '9';
 }

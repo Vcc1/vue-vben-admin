@@ -447,7 +447,7 @@ public sealed class HotelPipelineDomainTests
             CjkDictionary = ["上海", "希尔顿"]
         };
 
-        var result = matcher.Match("上海希尔顿酒店", "希尔顿上海", options);
+        var result = matcher.Match("上海希尔顿", "希尔顿上海", options);
 
         Assert.True(result.IsMatch);
     }
