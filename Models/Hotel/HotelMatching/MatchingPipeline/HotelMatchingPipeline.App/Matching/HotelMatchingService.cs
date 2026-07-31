@@ -1,5 +1,6 @@
 using System.Security.Cryptography;
 using System.Text;
+using System.Collections.Concurrent;
 using System.Diagnostics;
 using HotelMatchingPipeline.App.Configuration;
 using HotelMatchingPipeline.App.Contracts;
@@ -61,7 +62,7 @@ public sealed class HotelMatchingService
         var capacity = Math.Clamp(options.QueueCapacity, 1, HotelMatchingOptions.MaxQueueCapacity);
         var writeBatchSize = Math.Clamp(options.WriteBatchSize, 1, capacity);
         var informationParallelism = Math.Clamp(options.InformationParallelism, 1, 64);
-        var idQueue = CreateChannel<int>(capacity, singleReader: false, singleWriter: true);
+        var idQueue = CreateUnboundedChannel<int>(singleReader: false, singleWriter: true);
         var workQueue = CreateChannel<HotelMatchingWorkItem>(
             capacity,
             singleReader: true,
@@ -73,7 +74,9 @@ public sealed class HotelMatchingService
         var processed = 0;
         var matchedCandidates = 0;
         var stopwatch = Stopwatch.StartNew();
+        var activeInformationLoads = new ConcurrentDictionary<int, long>();
         _metrics.StartRound(
+            idQueueCapacity: -1,
             capacity,
             options.RecallRadiusMeters,
             options.MatchDistanceMeters,
@@ -82,6 +85,17 @@ public sealed class HotelMatchingService
             informationParallelism);
         using var pipelineCancellation = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
         var pipelineToken = pipelineCancellation.Token;
+        using var progressCancellation = CancellationTokenSource.CreateLinkedTokenSource(pipelineToken);
+
+        _logger.LogInformation(
+            "Hotel matching pipeline started. IdQueueCapacity=Unbounded, WorkResultQueueCapacity={QueueCapacity}, WriteBatchSize={WriteBatchSize}, InformationParallelism={InformationParallelism}, RecallRadiusMeters={RecallRadiusMeters}, MaxCandidates={MaxCandidates}, MatchDistanceMeters={MatchDistanceMeters}, InformationRetryDelayMilliseconds={InformationRetryDelayMilliseconds}",
+            capacity,
+            writeBatchSize,
+            informationParallelism,
+            options.RecallRadiusMeters,
+            options.MaxCandidates,
+            options.MatchDistanceMeters,
+            options.InformationRetryDelayMilliseconds);
 
         var idTask = LoadIdsAsync(
             idQueue.Writer,
@@ -92,6 +106,7 @@ public sealed class HotelMatchingService
             idQueue.Reader,
             workQueue.Writer,
             () => QueueCount(workQueue.Reader),
+            activeInformationLoads,
             options,
             informationParallelism,
             pipelineCancellation,
@@ -110,6 +125,18 @@ public sealed class HotelMatchingService
             count => matchedCandidates += count,
             pipelineCancellation,
             pipelineToken);
+        var progressTask = LogProgressAsync(
+            () => processed,
+            () => matchedCandidates,
+            () => QueueCount(idQueue.Reader),
+            () => QueueCount(workQueue.Reader),
+            () => QueueCount(resultQueue.Reader),
+            capacity,
+            activeInformationLoads,
+            options.InformationSlowLogThresholdMilliseconds,
+            options.ProgressLogIntervalMilliseconds,
+            stopwatch,
+            progressCancellation.Token);
 
         try
         {
@@ -120,6 +147,11 @@ public sealed class HotelMatchingService
         {
             _metrics.FailRound(stopwatch.Elapsed.TotalMilliseconds);
             throw;
+        }
+        finally
+        {
+            progressCancellation.Cancel();
+            await progressTask;
         }
         _logger.LogInformation(
             "Hotel matching pipeline completed. Processed={Processed}, MatchedCandidates={MatchedCandidates}, QueueCapacity={QueueCapacity}, InformationParallelism={InformationParallelism}, MatchDistanceMeters={MatchDistanceMeters}",
@@ -171,6 +203,7 @@ public sealed class HotelMatchingService
         ChannelReader<int> reader,
         ChannelWriter<HotelMatchingWorkItem> writer,
         Func<int> workQueueCount,
+        ConcurrentDictionary<int, long> activeInformationLoads,
         HotelMatchingOptions options,
         int parallelism,
         CancellationTokenSource pipelineCancellation,
@@ -183,6 +216,7 @@ public sealed class HotelMatchingService
                     reader,
                     writer,
                     workQueueCount,
+                    activeInformationLoads,
                     options,
                     cancellationToken))
                 .ToArray();
@@ -201,6 +235,7 @@ public sealed class HotelMatchingService
         ChannelReader<int> reader,
         ChannelWriter<HotelMatchingWorkItem> writer,
         Func<int> workQueueCount,
+        ConcurrentDictionary<int, long> activeInformationLoads,
         HotelMatchingOptions options,
         CancellationToken cancellationToken)
     {
@@ -212,20 +247,35 @@ public sealed class HotelMatchingService
                 1,
                 options.InformationRetryDelayMilliseconds);
             var retry = 0;
+            var retryingThisHotel = false;
             HotelMatchingWorkItem workItem;
             while (true)
             {
                 var stopwatch = Stopwatch.StartNew();
                 try
                 {
-                    workItem = await LoadMatchingWorkItemInScopeAsync(
-                        supHotelId,
-                        options.RecallRadiusMeters,
-                        options.MaxCandidates,
-                        cancellationToken);
+                    _metrics.RecordInformationLoadStarted();
+                    activeInformationLoads[supHotelId] = Stopwatch.GetTimestamp();
+                    try
+                    {
+                        workItem = await LoadMatchingWorkItemInScopeAsync(
+                            supHotelId,
+                            options.RecallRadiusMeters,
+                            options.MaxCandidates,
+                            cancellationToken);
+                    }
+                    finally
+                    {
+                        activeInformationLoads.TryRemove(supHotelId, out _);
+                        _metrics.RecordInformationLoadCompleted();
+                    }
                     _metrics.RecordInformation(
                         stopwatch.Elapsed.TotalMilliseconds,
                         loaded: true);
+                    if (retryingThisHotel)
+                    {
+                        _metrics.RecordInformationRetryCompleted();
+                    }
                     break;
                 }
                 catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
@@ -238,8 +288,10 @@ public sealed class HotelMatchingService
                     _metrics.RecordInformationRetry(
                         supHotelId,
                         stopwatch.Elapsed.TotalMilliseconds,
-                        retryDelay);
-                    _logger.LogWarning(
+                        retryDelay,
+                        startedRetrying: !retryingThisHotel);
+                    retryingThisHotel = true;
+                    _logger.LogError(
                         ex,
                         "Hotel matching information load failed and will retry indefinitely. SupHotelId={SupHotelId}, Retry={Retry}, RetryDelayMilliseconds={RetryDelayMilliseconds}",
                         supHotelId,
@@ -396,6 +448,77 @@ public sealed class HotelMatchingService
         addMatchedCandidates(candidateCount);
     }
 
+    async Task LogProgressAsync(
+        Func<int> processed,
+        Func<int> matchedCandidates,
+        Func<int> idQueueCount,
+        Func<int> workQueueCount,
+        Func<int> resultQueueCount,
+        int queueCapacity,
+        ConcurrentDictionary<int, long> activeInformationLoads,
+        int informationSlowLogThresholdMilliseconds,
+        int intervalMilliseconds,
+        Stopwatch stopwatch,
+        CancellationToken cancellationToken)
+    {
+        var interval = TimeSpan.FromMilliseconds(Math.Max(1_000, intervalMilliseconds));
+        try
+        {
+            while (true)
+            {
+                if (!await DelayOrCanceledAsync(interval, cancellationToken))
+                {
+                    return;
+                }
+                var slowThreshold = TimeSpan.FromMilliseconds(
+                    Math.Max(1_000, informationSlowLogThresholdMilliseconds));
+                var activeSnapshot = SnapshotActiveInformationLoads(
+                    activeInformationLoads,
+                    slowThreshold);
+                _metrics.RecordInformationActiveSnapshot(
+                    activeSnapshot.ActiveCount,
+                    activeSnapshot.SlowCount,
+                    activeSnapshot.SlowestSupHotelId,
+                    activeSnapshot.SlowestElapsedMilliseconds);
+                var snapshot = _metrics.Snapshot();
+                _logger.LogInformation(
+                    "Hotel matching progress. Processed={Processed}, MatchedCandidates={MatchedCandidates}, IdQueueCurrent={IdQueueCurrent}, WorkQueueCurrent={WorkQueueCurrent}, ResultQueueCurrent={ResultQueueCurrent}, QueueCapacity={QueueCapacity}, InformationCompleted={InformationCompleted}, InformationActive={InformationActive}, InformationSlowCount={InformationSlowCount}, InformationSlowestSupHotelId={InformationSlowestSupHotelId}, InformationSlowestElapsedMs={InformationSlowestElapsedMs}, InformationRetrying={InformationRetrying}, InformationRetryCount={InformationRetryCount}, InformationRetrySupHotelId={InformationRetrySupHotelId}, MatcherCompleted={MatcherCompleted}, WriterCompleted={WriterCompleted}, WriteLastBatchDurationMs={WriteLastBatchDurationMs}, ElapsedSeconds={ElapsedSeconds}",
+                    processed(),
+                    matchedCandidates(),
+                    idQueueCount(),
+                    workQueueCount(),
+                    resultQueueCount(),
+                    queueCapacity,
+                    snapshot.InformationCompleted,
+                    snapshot.InformationActive,
+                    snapshot.InformationSlowCount,
+                    snapshot.InformationSlowestSupHotelId,
+                    snapshot.InformationSlowestElapsedMilliseconds,
+                    snapshot.InformationRetrying,
+                    snapshot.InformationRetryCount,
+                    snapshot.InformationRetrySupHotelId,
+                    snapshot.MatcherCompleted,
+                    snapshot.WriterCompleted,
+                    snapshot.WriteLastBatchDurationMilliseconds,
+                    (long)stopwatch.Elapsed.TotalSeconds);
+                if (activeSnapshot.SlowCount > 0)
+                {
+                    _logger.LogWarning(
+                        "Hotel matching information load is still running. Active={InformationActive}, SlowCount={InformationSlowCount}, SlowestSupHotelId={InformationSlowestSupHotelId}, SlowestElapsedMs={InformationSlowestElapsedMs}, SlowThresholdMs={InformationSlowThresholdMs}, ActiveSupHotelIds={InformationActiveSupHotelIds}",
+                        activeSnapshot.ActiveCount,
+                        activeSnapshot.SlowCount,
+                        activeSnapshot.SlowestSupHotelId,
+                        activeSnapshot.SlowestElapsedMilliseconds,
+                        (long)slowThreshold.TotalMilliseconds,
+                        string.Join(",", activeSnapshot.ActiveSupHotelIds));
+                }
+            }
+        }
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+        {
+        }
+    }
+
     static Channel<T> CreateChannel<T>(
         int capacity,
         bool singleReader,
@@ -408,8 +531,87 @@ public sealed class HotelMatchingService
             AllowSynchronousContinuations = false
         });
 
+    static Channel<T> CreateUnboundedChannel<T>(
+        bool singleReader,
+        bool singleWriter)
+        => Channel.CreateUnbounded<T>(new UnboundedChannelOptions
+        {
+            SingleReader = singleReader,
+            SingleWriter = singleWriter,
+            AllowSynchronousContinuations = false
+        });
+
     static int QueueCount<T>(ChannelReader<T> reader)
         => reader.CanCount ? reader.Count : 0;
+
+    static async Task<bool> DelayOrCanceledAsync(
+        TimeSpan delay,
+        CancellationToken cancellationToken)
+    {
+        if (!cancellationToken.CanBeCanceled)
+        {
+            await Task.Delay(delay);
+            return true;
+        }
+        if (cancellationToken.IsCancellationRequested)
+        {
+            return false;
+        }
+
+        var cancellationCompletion =
+            new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
+        using var registration = cancellationToken.UnsafeRegister(
+            static state => ((TaskCompletionSource<bool>)state!).TrySetResult(true),
+            cancellationCompletion);
+        var delayTask = Task.Delay(delay);
+        return await Task.WhenAny(delayTask, cancellationCompletion.Task) == delayTask;
+    }
+
+    static ActiveInformationLoadSnapshot SnapshotActiveInformationLoads(
+        ConcurrentDictionary<int, long> activeInformationLoads,
+        TimeSpan slowThreshold)
+    {
+        var now = Stopwatch.GetTimestamp();
+        var slowThresholdMilliseconds = (long)Math.Max(1, slowThreshold.TotalMilliseconds);
+        var activeCount = 0;
+        var slowCount = 0;
+        var slowestSupHotelId = 0;
+        long slowestElapsedMilliseconds = 0;
+        var activeSupHotelIds = new List<int>();
+
+        foreach (var pair in activeInformationLoads)
+        {
+            activeCount++;
+            activeSupHotelIds.Add(pair.Key);
+            var elapsedMilliseconds = Stopwatch.GetElapsedTime(pair.Value, now).TotalMilliseconds;
+            var elapsed = (long)elapsedMilliseconds;
+            if (elapsed > slowestElapsedMilliseconds)
+            {
+                slowestElapsedMilliseconds = elapsed;
+                slowestSupHotelId = pair.Key;
+            }
+
+            if (elapsed >= slowThresholdMilliseconds)
+            {
+                slowCount++;
+            }
+        }
+
+        activeSupHotelIds.Sort();
+        return new ActiveInformationLoadSnapshot(
+            activeCount,
+            slowCount,
+            slowestSupHotelId,
+            slowestElapsedMilliseconds,
+            activeSupHotelIds);
+    }
+
+    sealed record ActiveInformationLoadSnapshot(
+        int ActiveCount,
+        int SlowCount,
+        int SlowestSupHotelId,
+        long SlowestElapsedMilliseconds,
+        IReadOnlyList<int> ActiveSupHotelIds);
 
     public async Task<HotelManualReviewResult> ConfirmAsync(
         HotelManualReviewRequest request,

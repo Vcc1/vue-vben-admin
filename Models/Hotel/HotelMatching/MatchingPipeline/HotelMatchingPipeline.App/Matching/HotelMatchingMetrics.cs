@@ -3,6 +3,19 @@ using VBase.AppMetrics;
 
 namespace HotelMatchingPipeline.App;
 
+public readonly record struct HotelMatchingProgressSnapshot(
+    long InformationCompleted,
+    long InformationActive,
+    long InformationSlowCount,
+    long InformationSlowestSupHotelId,
+    long InformationSlowestElapsedMilliseconds,
+    long InformationRetrying,
+    long InformationRetryCount,
+    long InformationRetrySupHotelId,
+    long MatcherCompleted,
+    long WriterCompleted,
+    long WriteLastBatchDurationMilliseconds);
+
 public sealed class HotelMatchingMetrics
 {
     public const string ScopeName = HotelCleaningMetrics.ScopeName;
@@ -21,8 +34,13 @@ public sealed class HotelMatchingMetrics
     long _idsRecalled;
     long _informationCompleted;
     long _informationFailed;
+    long _informationActive;
+    long _informationSlowCount;
+    long _informationSlowestSupHotelId;
+    long _informationSlowestElapsedMilliseconds;
     long _informationParallelism;
     long _informationLastDurationMilliseconds;
+    long _informationLastFailedSupHotelId;
     long _informationLastRetryDelayMilliseconds;
     long _informationMissing;
     long _informationRetryCount;
@@ -81,6 +99,18 @@ public sealed class HotelMatchingMetrics
             "hotel_matching_information_completed",
             () => Read(ref _informationCompleted));
         meter.CreateObservableGauge(
+            "hotel_matching_information_active",
+            () => Read(ref _informationActive));
+        meter.CreateObservableGauge(
+            "hotel_matching_information_slow_count",
+            () => Read(ref _informationSlowCount));
+        meter.CreateObservableGauge(
+            "hotel_matching_information_slowest_sup_hotel_id",
+            () => Read(ref _informationSlowestSupHotelId));
+        meter.CreateObservableGauge(
+            "hotel_matching_information_slowest_elapsed_ms",
+            () => Read(ref _informationSlowestElapsedMilliseconds));
+        meter.CreateObservableGauge(
             "hotel_matching_information_succeeded",
             () => Read(ref _informationSucceeded));
         meter.CreateObservableGauge(
@@ -104,6 +134,9 @@ public sealed class HotelMatchingMetrics
         meter.CreateObservableGauge(
             "hotel_matching_information_retry_sup_hotel_id",
             () => Read(ref _informationRetrySupHotelId));
+        meter.CreateObservableGauge(
+            "hotel_matching_information_last_failed_sup_hotel_id",
+            () => Read(ref _informationLastFailedSupHotelId));
         meter.CreateObservableGauge(
             "hotel_matching_information_last_retry_delay_ms",
             () => Read(ref _informationLastRetryDelayMilliseconds));
@@ -158,6 +191,7 @@ public sealed class HotelMatchingMetrics
     }
 
     public void StartRound(
+        int idQueueCapacity,
         int queueCapacity,
         int recallRadiusMeters,
         int matchDistanceMeters,
@@ -172,10 +206,15 @@ public sealed class HotelMatchingMetrics
         Reset(ref _idsRecalled);
         Reset(ref _idFailed);
         Reset(ref _informationCompleted);
+        Reset(ref _informationActive);
+        Reset(ref _informationSlowCount);
+        Reset(ref _informationSlowestSupHotelId);
+        Reset(ref _informationSlowestElapsedMilliseconds);
         Reset(ref _informationSucceeded);
         Reset(ref _informationMissing);
         Reset(ref _informationFailed);
         Reset(ref _informationLastDurationMilliseconds);
+        Reset(ref _informationLastFailedSupHotelId);
         Reset(ref _informationLastRetryDelayMilliseconds);
         Reset(ref _informationRetryCount);
         Reset(ref _informationRetrySupHotelId);
@@ -193,7 +232,7 @@ public sealed class HotelMatchingMetrics
         Reset(ref _writerFailed);
         Reset(ref _writeLastBatchSize);
         Reset(ref _writeLastBatchDurationMilliseconds);
-        Interlocked.Exchange(ref _idQueueCapacity, queueCapacity);
+        Interlocked.Exchange(ref _idQueueCapacity, idQueueCapacity);
         Interlocked.Exchange(ref _workQueueCapacity, queueCapacity);
         Interlocked.Exchange(ref _resultQueueCapacity, queueCapacity);
         Interlocked.Exchange(ref _recallRadiusMeters, recallRadiusMeters);
@@ -250,8 +289,6 @@ public sealed class HotelMatchingMetrics
 
     public void RecordInformation(double elapsedMilliseconds, bool loaded)
     {
-        Reset(ref _informationRetrying);
-        Reset(ref _informationRetrySupHotelId);
         Interlocked.Increment(ref _informationCompleted);
         Interlocked.Exchange(ref _informationLastDurationMilliseconds, (long)elapsedMilliseconds);
         AddNode(_nodeCompletedTotal, "information", 1);
@@ -268,19 +305,66 @@ public sealed class HotelMatchingMetrics
         RecordNodeDuration("information", elapsedMilliseconds, loaded ? "succeeded" : "missing");
     }
 
+    public void RecordInformationLoadStarted()
+        => Interlocked.Increment(ref _informationActive);
+
+    public void RecordInformationLoadCompleted()
+        => DecrementNonNegative(ref _informationActive);
+
+    public void RecordInformationActiveSnapshot(
+        long active,
+        long slowCount,
+        int slowestSupHotelId,
+        long slowestElapsedMilliseconds)
+    {
+        Interlocked.Exchange(ref _informationActive, Math.Max(0, active));
+        Interlocked.Exchange(ref _informationSlowCount, Math.Max(0, slowCount));
+        Interlocked.Exchange(ref _informationSlowestSupHotelId, slowestSupHotelId);
+        Interlocked.Exchange(
+            ref _informationSlowestElapsedMilliseconds,
+            Math.Max(0, slowestElapsedMilliseconds));
+    }
+
     public void RecordInformationRetry(
         int supHotelId,
         double elapsedMilliseconds,
-        int delayMilliseconds)
+        int delayMilliseconds,
+        bool startedRetrying)
     {
         Interlocked.Increment(ref _informationFailed);
         Interlocked.Increment(ref _informationRetryCount);
-        Interlocked.Exchange(ref _informationRetrying, 1);
+        if (startedRetrying)
+        {
+            Interlocked.Increment(ref _informationRetrying);
+        }
         Interlocked.Exchange(ref _informationRetrySupHotelId, supHotelId);
+        Interlocked.Exchange(ref _informationLastFailedSupHotelId, supHotelId);
         Interlocked.Exchange(ref _informationLastRetryDelayMilliseconds, delayMilliseconds);
         Interlocked.Exchange(ref _informationLastDurationMilliseconds, (long)elapsedMilliseconds);
         AddNode(_nodeFailedTotal, "information", 1);
         RecordNodeDuration("information", elapsedMilliseconds, "retry");
+    }
+
+    public void RecordInformationRetryCompleted()
+    {
+        while (true)
+        {
+            var current = Interlocked.Read(ref _informationRetrying);
+            if (current <= 0)
+            {
+                Reset(ref _informationRetrySupHotelId);
+                return;
+            }
+
+            if (Interlocked.CompareExchange(ref _informationRetrying, current - 1, current) == current)
+            {
+                if (current == 1)
+                {
+                    Reset(ref _informationRetrySupHotelId);
+                }
+                return;
+            }
+        }
     }
 
     public void EnqueueResult()
@@ -406,4 +490,18 @@ public sealed class HotelMatchingMetrics
 
     static KeyValuePair<string, object?> Tag(string key, string value)
         => new(key, value);
+
+    public HotelMatchingProgressSnapshot Snapshot()
+        => new(
+            Read(ref _informationCompleted),
+            Read(ref _informationActive),
+            Read(ref _informationSlowCount),
+            Read(ref _informationSlowestSupHotelId),
+            Read(ref _informationSlowestElapsedMilliseconds),
+            Read(ref _informationRetrying),
+            Read(ref _informationRetryCount),
+            Read(ref _informationRetrySupHotelId),
+            Read(ref _matcherCompleted),
+            Read(ref _writerCompleted),
+            Read(ref _writeLastBatchDurationMilliseconds));
 }

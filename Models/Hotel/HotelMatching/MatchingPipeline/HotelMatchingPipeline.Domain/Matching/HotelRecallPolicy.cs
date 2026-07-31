@@ -6,7 +6,12 @@ public readonly record struct HotelRecallParameters(
 
 public static class HotelRecallPolicy
 {
-    public const int NonChinaRadiusMeters = 300;
+    public const int NonChinaRadiusMeters = 100;
+
+    public static bool IsMatchingEnabled(string? regionLevel1Code)
+        => !string.IsNullOrWhiteSpace(regionLevel1Code)
+            && !IsGreaterChinaCode(
+                CountryCodeNormalizer.ToAlpha2(regionLevel1Code));
 
     public static HotelRecallParameters Resolve(
         string? regionLevel1Code,
@@ -14,11 +19,13 @@ public static class HotelRecallPolicy
         int configuredRadiusMeters,
         int configuredMaxCandidates)
     {
-        var normalizedCountryCode =
-            CountryCodeNormalizer.ToAlpha2(regionLevel1Code)
-            ?? CountryCodeNormalizer.ToAlpha2(countryCode);
-        return normalizedCountryCode is null or "CN"
+        _ = countryCode;
+        var normalizedRegionLevel1Code = CountryCodeNormalizer.ToAlpha2(regionLevel1Code);
+        return IsGreaterChinaCode(normalizedRegionLevel1Code)
             ? new(configuredRadiusMeters, configuredMaxCandidates)
             : new(NonChinaRadiusMeters, null);
     }
+
+    static bool IsGreaterChinaCode(string? normalizedCountryCode)
+        => normalizedCountryCode is "CN" or "TW" or "HK" or "MO";
 }

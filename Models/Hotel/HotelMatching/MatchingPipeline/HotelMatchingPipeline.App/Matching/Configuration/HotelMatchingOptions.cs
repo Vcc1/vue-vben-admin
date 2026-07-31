@@ -25,6 +25,12 @@ public sealed class HotelMatchingOptions
     [Range(1, 300_000)]
     public int InformationRetryDelayMilliseconds { get; set; } = 2_000;
 
+    [Range(1_000, 300_000)]
+    public int InformationSlowLogThresholdMilliseconds { get; set; } = 30_000;
+
+    [Range(1_000, 300_000)]
+    public int ProgressLogIntervalMilliseconds { get; set; } = 10_000;
+
     [Range(1, 64)]
     public int InformationParallelism { get; set; } = 8;
 

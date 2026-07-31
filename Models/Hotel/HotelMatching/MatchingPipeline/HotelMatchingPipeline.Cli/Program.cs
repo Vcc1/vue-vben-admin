@@ -24,17 +24,36 @@ var command = args
     .FirstOrDefault(static arg => !arg.StartsWith("-", StringComparison.Ordinal))
     ?.Trim()
     .ToLowerInvariant() ?? "run-all";
+var commandArguments = args
+    .Where(static arg => !arg.StartsWith("-", StringComparison.Ordinal))
+    .Skip(1)
+    .ToArray();
 if (command == "help" || args.Any(static arg => arg is "--help" or "-h"))
 {
-    Console.WriteLine("Usage: HotelMatchingPipeline.Cli run-all | clean-once | match-loop");
+    Console.WriteLine("Usage: HotelMatchingPipeline.Cli run-all | clean-once | match-loop | match-debug <SupHotelId>");
     return;
 }
 
-if (command is not "run-all" and not "clean-once" and not "match-loop")
+if (command is not "run-all" and not "clean-once" and not "match-loop" and not "match-debug")
 {
     Console.Error.WriteLine($"Unknown command: {command}");
     Environment.ExitCode = 2;
     return;
+}
+
+int? debugSupHotelId = null;
+if (command == "match-debug")
+{
+    if (commandArguments.Length == 0
+        || !int.TryParse(commandArguments[0], out var parsedSupHotelId)
+        || parsedSupHotelId <= 0)
+    {
+        Console.Error.WriteLine("Usage: HotelMatchingPipeline.Cli match-debug <SupHotelId>");
+        Environment.ExitCode = 2;
+        return;
+    }
+
+    debugSupHotelId = parsedSupHotelId;
 }
 
 var host = Serve.Run(new RunOptions
@@ -109,7 +128,7 @@ var host = Serve.Run(new RunOptions
         }
     }
 
-    services.AddSingleton(new HotelMatchingPipelineCliOptions(command));
+    services.AddSingleton(new HotelMatchingPipelineCliOptions(command, debugSupHotelId));
     services.AddHostedService<HotelMatchingPipelineWorker>();
 });
 

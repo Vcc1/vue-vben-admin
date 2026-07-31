@@ -98,6 +98,9 @@ public sealed class InMemoryHotelMatchingStore : IHotelCleaningRepository, IHote
         var result = _cleaned.Values
             .Where(x => x.Raw.Type == HotelDataType.Supplier && x.IsMatchable)
             .Where(x => string.IsNullOrWhiteSpace(x.Cleaned.MtHotelCode))
+            .Where(x => !string.IsNullOrWhiteSpace(x.Cleaned.RegionLevel1Code))
+            .Where(x => HotelRecallPolicy.IsMatchingEnabled(
+                x.Cleaned.RegionLevel1Code))
             .Where(x => _matchStatuses.GetValueOrDefault(Key(x.Raw.Type, x.Raw.SupplierId, x.Raw.HotelCode), HotelMatchStatus.Pending) == HotelMatchStatus.Pending)
             .Take(batchSize)
             .Select(x => new HotelMatchWorkItem(
@@ -120,6 +123,12 @@ public sealed class InMemoryHotelMatchingStore : IHotelCleaningRepository, IHote
         int maxCandidates,
         CancellationToken cancellationToken)
     {
+        if (!HotelRecallPolicy.IsMatchingEnabled(
+                supplier.Hotel.RegionLevel1Code))
+        {
+            return Task.FromResult<IReadOnlyList<CleanedHotel>>([]);
+        }
+
         var recall = HotelRecallPolicy.Resolve(
             supplier.Hotel.RegionLevel1Code,
             supplier.Hotel.CountryCode,
@@ -129,6 +138,8 @@ public sealed class InMemoryHotelMatchingStore : IHotelCleaningRepository, IHote
             .Where(x => x.Raw.Type == HotelDataType.Platform
                 && x.Raw.Estate == 1
                 && x.IsMatchable)
+            .Where(x => HotelRecallPolicy.IsMatchingEnabled(
+                x.Cleaned.RegionLevel1Code))
             .Select(x => (x.Cleaned, DistanceMeters(supplier.Hotel, x.Cleaned)))
             .Where(x => !double.IsNaN(x.Item2) && x.Item2 <= recall.RadiusMeters)
             .OrderBy(x => x.Item2)
@@ -144,6 +155,11 @@ public sealed class InMemoryHotelMatchingStore : IHotelCleaningRepository, IHote
         int maxCandidates,
         CancellationToken cancellationToken)
     {
+        if (!HotelRecallPolicy.IsMatchingEnabled(ota.RegionLevel1Code))
+        {
+            return Task.FromResult<IReadOnlyList<CleanedHotel>>([]);
+        }
+
         var recall = HotelRecallPolicy.Resolve(
             ota.RegionLevel1Code,
             ota.CountryCode,
@@ -151,6 +167,8 @@ public sealed class InMemoryHotelMatchingStore : IHotelCleaningRepository, IHote
             maxCandidates);
         var result = _cleaned.Values
             .Where(x => x.Raw.Type == HotelDataType.Supplier && x.IsMatchable)
+            .Where(x => HotelRecallPolicy.IsMatchingEnabled(
+                x.Cleaned.RegionLevel1Code))
             .Select(x => (x.Cleaned, DistanceMeters(ota, x.Cleaned)))
             .Where(x => !double.IsNaN(x.Item2) && x.Item2 <= recall.RadiusMeters)
             .OrderBy(x => x.Item2)

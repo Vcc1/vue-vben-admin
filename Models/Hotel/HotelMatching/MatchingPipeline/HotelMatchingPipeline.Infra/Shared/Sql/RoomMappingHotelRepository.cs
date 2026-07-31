@@ -1,4 +1,5 @@
 using System.Globalization;
+using System.Diagnostics;
 using System.Text.Encodings.Web;
 using System.Text.Json;
 using System.Text.Json.Serialization;
@@ -22,6 +23,8 @@ public sealed class RoomMappingHotelRepository :
     const byte DeliverySending = 1;
     const byte DeliveryDelivered = 2;
     const byte DeliveryFailed = 3;
+    const int PendingSupplierHotelIdPageSize = 1_000;
+    const int MatchingInformationStageSlowLogMilliseconds = 30_000;
     static readonly DateTime SqlDateTimeMinimum = new(1753, 1, 1);
     static readonly DateTime SqlDateTimeMaximum = new(9999, 12, 31, 23, 59, 59, 997);
 
@@ -1111,20 +1114,54 @@ public sealed class RoomMappingHotelRepository :
         await using var command = connection.CreateCommand();
         command.CommandTimeout = 900;
         command.CommandText = """
-            SELECT hotel.SupHotelId
-            FROM dbo.SupHotelInfo AS hotel WITH (READPAST)
+            SELECT TOP (@pageSize) hotel.SupHotelId
+            FROM dbo.SupHotelInfo AS hotel WITH (NOLOCK)
             WHERE hotel.State = 1
               AND hotel.MTHotelCode = ''
+              AND hotel.SupHotelId > @lastSupHotelId
+              AND ISNULL(LTRIM(RTRIM(hotel.RegionLevel1Code)), '') <> ''
+              AND UPPER(LTRIM(RTRIM(hotel.RegionLevel1Code)))
+                  NOT IN ('CN', 'CHN', 'TW', 'TWN', 'HK', 'HKG', 'MO', 'MAC')
             ORDER BY hotel.SupHotelId
             OPTION (MAXDOP 1, RECOMPILE);
             """;
+        var pageSizeParameter = command.Parameters.Add(
+            new SqlParameter("@pageSize", System.Data.SqlDbType.Int)
+            {
+                Value = PendingSupplierHotelIdPageSize
+            });
+        var lastSupHotelIdParameter = command.Parameters.Add(
+            new SqlParameter("@lastSupHotelId", System.Data.SqlDbType.Int)
+            {
+                Value = 0
+            });
 
-        await using var reader = await command.ExecuteReaderAsync(
-            System.Data.CommandBehavior.SequentialAccess,
-            cancellationToken);
-        while (await reader.ReadAsync(cancellationToken))
+        var lastSupHotelId = 0;
+        while (true)
         {
-            await enqueueId(reader.GetInt32(0), cancellationToken);
+            pageSizeParameter.Value = PendingSupplierHotelIdPageSize;
+            lastSupHotelIdParameter.Value = lastSupHotelId;
+            var ids = new List<int>(PendingSupplierHotelIdPageSize);
+            await using (var reader = await command.ExecuteReaderAsync(
+                System.Data.CommandBehavior.SequentialAccess,
+                cancellationToken))
+            {
+                while (await reader.ReadAsync(cancellationToken))
+                {
+                    ids.Add(reader.GetInt32(0));
+                }
+            }
+
+            if (ids.Count == 0)
+            {
+                return;
+            }
+
+            foreach (var id in ids)
+            {
+                lastSupHotelId = id;
+                await enqueueId(id, cancellationToken);
+            }
         }
     }
 
@@ -1134,11 +1171,28 @@ public sealed class RoomMappingHotelRepository :
         int maxCandidates,
         CancellationToken cancellationToken)
     {
-        var pending = await _dbContext.SupHotelInfos
-            .AsNoTracking()
-            .SingleAsync(
-                hotel => hotel.SupHotelId == supHotelId,
-                cancellationToken);
+        var pending = await RunMatchingInformationStageAsync(
+            supHotelId,
+            "pending_supplier",
+            token => _dbContext.SupHotelInfos
+                .AsNoTracking()
+                .SingleAsync(
+                    hotel => hotel.SupHotelId == supHotelId,
+                    token),
+            cancellationToken);
+        if (!HotelRecallPolicy.IsMatchingEnabled(pending.RegionLevel1Code))
+        {
+            _logger.LogInformation(
+                "Hotel matching skipped because RegionLevel1Code is missing or disabled. SupHotelId={SupHotelId}, RegionLevel1Code={RegionLevel1Code}",
+                supHotelId,
+                pending.RegionLevel1Code);
+            return new HotelMatchingWorkItem(
+                pending.SupHotelId,
+                MapFact(pending),
+                [],
+                [],
+                []);
+        }
 
         var otaRows = new List<OTAHotelInfo>();
         var nearbySupplierRows = new List<SupHotelInfoClean>();
@@ -1149,19 +1203,29 @@ public sealed class RoomMappingHotelRepository :
                 pending.CountryCode,
                 recallRadiusMeters,
                 maxCandidates);
-            otaRows = await LoadNearbyOtaHotelsAsync(
-                pending.Latitude.Value,
-                pending.Longitude.Value,
-                recall.RadiusMeters,
-                recall.MaxCandidates,
+            otaRows = await RunMatchingInformationStageAsync(
+                supHotelId,
+                recall.MaxCandidates.HasValue ? "nearby_ota_by_distance" : "nearby_ota_by_grid",
+                token => LoadNearbyOtaHotelsAsync(
+                    pending.Latitude.Value,
+                    pending.Longitude.Value,
+                    recall.RadiusMeters,
+                    recall.MaxCandidates,
+                    token),
                 cancellationToken);
 
-            nearbySupplierRows = await LoadNearbySupplierHotelsAsync(
+            nearbySupplierRows = await RunMatchingInformationStageAsync(
                 supHotelId,
-                pending.Latitude.Value,
-                pending.Longitude.Value,
-                recall.RadiusMeters,
-                recall.MaxCandidates,
+                recall.MaxCandidates.HasValue
+                    ? "nearby_supplier_by_distance"
+                    : "nearby_supplier_by_grid",
+                token => LoadNearbySupplierHotelsAsync(
+                    supHotelId,
+                    pending.Latitude.Value,
+                    pending.Longitude.Value,
+                    recall.RadiusMeters,
+                    recall.MaxCandidates,
+                    token),
                 cancellationToken);
         }
 
@@ -1172,14 +1236,27 @@ public sealed class RoomMappingHotelRepository :
             .ToArray();
         var linkedSupplierRows = mtHotelCodes.Length == 0
             ? []
-            : await _dbContext.SupHotelInfos
-                .AsNoTracking()
-                .Where(hotel => hotel.State == 1 && mtHotelCodes.Contains(hotel.MTHotelCode))
-                .ToListAsync(cancellationToken);
+            : await RunMatchingInformationStageAsync(
+                supHotelId,
+                "linked_supplier",
+                token => LoadLinkedSupplierHotelsAsync(
+                    mtHotelCodes,
+                    token),
+                cancellationToken);
+        linkedSupplierRows.RemoveAll(hotel =>
+            !HotelRecallPolicy.IsMatchingEnabled(hotel.RegionLevel1Code));
 
-        await LoadAndAttachMatchingPhonesAsync(
-            otaRows,
-            [pending, .. nearbySupplierRows, .. linkedSupplierRows],
+        await RunMatchingInformationStageAsync(
+            supHotelId,
+            "matching_phones",
+            async token =>
+            {
+                await LoadAndAttachMatchingPhonesAsync(
+                    otaRows,
+                    [pending, .. nearbySupplierRows, .. linkedSupplierRows],
+                    token);
+                return true;
+            },
             cancellationToken);
 
         return new HotelMatchingWorkItem(
@@ -1190,21 +1267,151 @@ public sealed class RoomMappingHotelRepository :
             linkedSupplierRows.Select(MapFact).ToArray());
     }
 
-    Task<List<OTAHotelInfo>> LoadNearbyOtaHotelsAsync(
+    async Task<T> RunMatchingInformationStageAsync<T>(
+        int supHotelId,
+        string stage,
+        Func<CancellationToken, Task<T>> action,
+        CancellationToken cancellationToken)
+    {
+        var stopwatch = Stopwatch.StartNew();
+        using var slowLogCancellation =
+            CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+        var slowLogTask = LogMatchingInformationStageWhileRunningAsync(
+            supHotelId,
+            stage,
+            stopwatch,
+            slowLogCancellation.Token);
+        try
+        {
+            var result = await action(cancellationToken);
+            if (stopwatch.ElapsedMilliseconds >= MatchingInformationStageSlowLogMilliseconds)
+            {
+                _logger.LogWarning(
+                    "Hotel matching information stage completed slowly. SupHotelId={SupHotelId}, Stage={Stage}, ElapsedMs={ElapsedMs}",
+                    supHotelId,
+                    stage,
+                    stopwatch.ElapsedMilliseconds);
+            }
+            return result;
+        }
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+        {
+            throw;
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(
+                ex,
+                "Hotel matching information stage failed. SupHotelId={SupHotelId}, Stage={Stage}, ElapsedMs={ElapsedMs}",
+                supHotelId,
+                stage,
+                stopwatch.ElapsedMilliseconds);
+            throw;
+        }
+        finally
+        {
+            slowLogCancellation.Cancel();
+            await slowLogTask;
+        }
+    }
+
+    async Task LogMatchingInformationStageWhileRunningAsync(
+        int supHotelId,
+        string stage,
+        Stopwatch stopwatch,
+        CancellationToken cancellationToken)
+    {
+        try
+        {
+            while (true)
+            {
+                if (!await DelayOrCanceledAsync(
+                        TimeSpan.FromMilliseconds(MatchingInformationStageSlowLogMilliseconds),
+                        cancellationToken))
+                {
+                    return;
+                }
+                _logger.LogWarning(
+                    "Hotel matching information stage is still running. SupHotelId={SupHotelId}, Stage={Stage}, ElapsedMs={ElapsedMs}",
+                    supHotelId,
+                    stage,
+                    stopwatch.ElapsedMilliseconds);
+            }
+        }
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+        {
+        }
+    }
+
+    async Task<List<OTAHotelInfo>> LoadNearbyOtaHotelsAsync(
         decimal latitude,
         decimal longitude,
         int recallRadiusMeters,
         int? maxCandidates,
         CancellationToken cancellationToken)
     {
-        var candidateLimit = maxCandidates.HasValue
-            ? "TOP (@maxCandidates) "
-            : string.Empty;
+        var rows = maxCandidates.HasValue
+            ? await LoadNearbyOtaHotelsByDistanceAsync(
+                latitude,
+                longitude,
+                recallRadiusMeters,
+                maxCandidates.Value,
+                cancellationToken)
+            : await LoadNearbyOtaHotelsByGridAsync(
+                latitude,
+                longitude,
+                recallRadiusMeters,
+                cancellationToken);
+        rows.RemoveAll(hotel =>
+            !HotelRecallPolicy.IsMatchingEnabled(hotel.RegionLevel1Code));
+        SortByDistance(
+            rows,
+            latitude,
+            longitude,
+            hotel => hotel.Latitude,
+            hotel => hotel.Longitude,
+            hotel => hotel.HotelID);
+        return rows;
+    }
+
+    async Task<List<OTAHotelInfo>> LoadNearbyOtaHotelsByDistanceAsync(
+        decimal latitude,
+        decimal longitude,
+        int recallRadiusMeters,
+        int maxCandidates,
+        CancellationToken cancellationToken)
+    {
         var commandText = """
             DECLARE @origin geography = geography::Point(@latitude, @longitude, 4326);
 
-            SELECT /*CANDIDATE_LIMIT*/ota.*
-            FROM dbo.OTAHotelInfo AS ota WITH (INDEX(SIX_OTAHotelInfo_GeoPoint))
+            SELECT TOP (@maxCandidates)
+                ota.HotelID,
+                ota.MTHotelCode,
+                ota.HotelName,
+                ota.HotelEnName,
+                ota.Longitude,
+                ota.Latitude,
+                ota.StarLevel,
+                ota.Address,
+                ota.RegionLevel1Code,
+                ota.CountryCode,
+                ota.CountryName,
+                ota.CityCode,
+                ota.CityName,
+                ota.PostCode,
+                ota.Tel,
+                ota.Fax,
+                ota.Email,
+                ota.CoordType,
+                ota.RegionLevel1Name,
+                ota.RegionLevel2Code,
+                ota.RegionLevel2Name,
+                ota.RegionLevel3Code,
+                ota.RegionLevel3Name,
+                ota.RegionResolveStatus,
+                ota.DataQualityStatus,
+                ota.DataQualityFlags
+            FROM dbo.OTAHotelInfo AS ota WITH (NOLOCK, INDEX(SIX_OTAHotelInfo_GeoPoint))
             WHERE ota.CleanStatus = @cleanStatus
               AND ota.DataQualityStatus = @dataQualityStatus
               AND ota.Estate = @onlineEstate
@@ -1213,13 +1420,10 @@ public sealed class RoomMappingHotelRepository :
               AND ota.GeoPoint.STDistance(@origin) <= @recallRadiusMeters
             ORDER BY ota.GeoPoint.STDistance(@origin), ota.HotelID
             OPTION (RECOMPILE, MAXDOP 1);
-            """.Replace(
-                "/*CANDIDATE_LIMIT*/",
-                candidateLimit,
-                StringComparison.Ordinal);
-        return _dbContext.OTAHotelInfos
-            .FromSqlRaw(
-                commandText,
+            """;
+        return await QueryOtaRecallRowsAsync(
+            commandText,
+            [
                 new SqlParameter("@latitude", System.Data.SqlDbType.Float)
                 {
                     Value = Convert.ToDouble(latitude, CultureInfo.InvariantCulture)
@@ -1234,7 +1438,7 @@ public sealed class RoomMappingHotelRepository :
                 },
                 new SqlParameter("@maxCandidates", System.Data.SqlDbType.Int)
                 {
-                    Value = maxCandidates ?? int.MaxValue
+                    Value = maxCandidates
                 },
                 new SqlParameter("@cleanStatus", System.Data.SqlDbType.TinyInt)
                 {
@@ -1247,12 +1451,86 @@ public sealed class RoomMappingHotelRepository :
                 new SqlParameter("@onlineEstate", System.Data.SqlDbType.Int)
                 {
                     Value = 1
-                })
-            .AsNoTracking()
-            .ToListAsync(cancellationToken);
+                }
+            ],
+            cancellationToken);
     }
 
-    Task<List<SupHotelInfoClean>> LoadNearbySupplierHotelsAsync(
+    async Task<List<OTAHotelInfo>> LoadNearbyOtaHotelsByGridAsync(
+        decimal latitude,
+        decimal longitude,
+        int recallRadiusMeters,
+        CancellationToken cancellationToken)
+    {
+        var parameters = new List<object>
+        {
+            new SqlParameter("@cleanStatus", System.Data.SqlDbType.TinyInt)
+            {
+                Value = (byte)HotelCleanStatus.Ready
+            },
+            new SqlParameter("@dataQualityStatus", System.Data.SqlDbType.TinyInt)
+            {
+                Value = (byte)HotelDataQualityStatus.Valid
+            },
+            new SqlParameter("@onlineEstate", System.Data.SqlDbType.Int)
+            {
+                Value = 1
+            }
+        };
+        var gridPredicate = AddRecallGridParameters(
+            "ota.RecallGridId",
+            latitude,
+            longitude,
+            recallRadiusMeters,
+            parameters);
+        var commandText = """
+            SELECT
+                ota.HotelID,
+                ota.MTHotelCode,
+                ota.HotelName,
+                ota.HotelEnName,
+                ota.Longitude,
+                ota.Latitude,
+                ota.StarLevel,
+                ota.Address,
+                ota.RegionLevel1Code,
+                ota.CountryCode,
+                ota.CountryName,
+                ota.CityCode,
+                ota.CityName,
+                ota.PostCode,
+                ota.Tel,
+                ota.Fax,
+                ota.Email,
+                ota.CoordType,
+                ota.RegionLevel1Name,
+                ota.RegionLevel2Code,
+                ota.RegionLevel2Name,
+                ota.RegionLevel3Code,
+                ota.RegionLevel3Name,
+                ota.RegionResolveStatus,
+                ota.DataQualityStatus,
+                ota.DataQualityFlags
+            FROM dbo.OTAHotelInfo AS ota WITH (NOLOCK, INDEX(IX_OTAHotelInfo_RecallGridId))
+            WHERE ota.CleanStatus = @cleanStatus
+              AND ota.DataQualityStatus = @dataQualityStatus
+              AND ota.Estate = @onlineEstate
+              AND ota.MTHotelCode <> ''
+              AND (
+                  /*GRID_PREDICATE*/
+              )
+            OPTION (RECOMPILE, MAXDOP 1);
+            """.Replace(
+                "/*GRID_PREDICATE*/",
+                gridPredicate,
+                StringComparison.Ordinal);
+        return await QueryOtaRecallRowsAsync(
+            commandText,
+            parameters,
+            cancellationToken);
+    }
+
+    async Task<List<SupHotelInfoClean>> LoadNearbySupplierHotelsAsync(
         int pendingSupHotelId,
         decimal latitude,
         decimal longitude,
@@ -1260,27 +1538,84 @@ public sealed class RoomMappingHotelRepository :
         int? maxCandidates,
         CancellationToken cancellationToken)
     {
-        var candidateLimit = maxCandidates.HasValue
-            ? "TOP (@maxCandidates) "
-            : string.Empty;
+        var rows = maxCandidates.HasValue
+            ? await LoadNearbySupplierHotelsByDistanceAsync(
+                pendingSupHotelId,
+                latitude,
+                longitude,
+                recallRadiusMeters,
+                maxCandidates.Value,
+                cancellationToken)
+            : await LoadNearbySupplierHotelsByGridAsync(
+                pendingSupHotelId,
+                latitude,
+                longitude,
+                recallRadiusMeters,
+                cancellationToken);
+        rows.RemoveAll(hotel =>
+            !HotelRecallPolicy.IsMatchingEnabled(hotel.RegionLevel1Code));
+        SortByDistance(
+            rows,
+            latitude,
+            longitude,
+            hotel => hotel.Latitude,
+            hotel => hotel.Longitude,
+            hotel => hotel.SupHotelId);
+        return rows;
+    }
+
+    async Task<List<SupHotelInfoClean>> LoadNearbySupplierHotelsByDistanceAsync(
+        int pendingSupHotelId,
+        decimal latitude,
+        decimal longitude,
+        int recallRadiusMeters,
+        int maxCandidates,
+        CancellationToken cancellationToken)
+    {
         var commandText = """
             DECLARE @origin geography = geography::Point(@latitude, @longitude, 4326);
 
-            SELECT /*CANDIDATE_LIMIT*/supplier.*
-            FROM dbo.SupHotelInfo AS supplier WITH (INDEX(SIX_SupHotelInfo_GeoPoint))
+            SELECT TOP (@maxCandidates)
+                supplier.SupHotelId,
+                supplier.SupId,
+                supplier.SHotelCode,
+                supplier.MTHotelCode,
+                supplier.HotelName,
+                supplier.HotelNameEn,
+                supplier.Longitude,
+                supplier.Latitude,
+                supplier.StarLevel,
+                supplier.Address,
+                supplier.RegionLevel1Code,
+                supplier.State,
+                supplier.CountryCode,
+                supplier.CountryName,
+                supplier.CityCode,
+                supplier.CityName,
+                supplier.PostCode,
+                supplier.Tel,
+                supplier.Fax,
+                supplier.Email,
+                supplier.CoordType,
+                supplier.RegionLevel1Name,
+                supplier.RegionLevel2Code,
+                supplier.RegionLevel2Name,
+                supplier.RegionLevel3Code,
+                supplier.RegionLevel3Name,
+                supplier.RegionResolveStatus,
+                supplier.DataQualityStatus,
+                supplier.DataQualityFlags
+            FROM dbo.SupHotelInfo AS supplier WITH (NOLOCK, INDEX(SIX_SupHotelInfo_GeoPoint))
             WHERE supplier.State = 1
               AND supplier.SupHotelId <> @pendingSupHotelId
               AND supplier.GeoPoint IS NOT NULL
               AND supplier.GeoPoint.STDistance(@origin) <= @recallRadiusMeters
             ORDER BY supplier.GeoPoint.STDistance(@origin), supplier.SupHotelId
             OPTION (RECOMPILE, MAXDOP 1);
-            """.Replace(
-                "/*CANDIDATE_LIMIT*/",
-                candidateLimit,
-                StringComparison.Ordinal);
-        return _dbContext.SupHotelInfos
-            .FromSqlRaw(
-                commandText,
+            """;
+        return await QuerySupplierRecallRowsAsync(
+            commandText,
+            [
                 new SqlParameter("@pendingSupHotelId", System.Data.SqlDbType.Int)
                 {
                     Value = pendingSupHotelId
@@ -1299,10 +1634,147 @@ public sealed class RoomMappingHotelRepository :
                 },
                 new SqlParameter("@maxCandidates", System.Data.SqlDbType.Int)
                 {
-                    Value = maxCandidates ?? int.MaxValue
-                })
-            .AsNoTracking()
-            .ToListAsync(cancellationToken);
+                    Value = maxCandidates
+                }
+            ],
+            cancellationToken);
+    }
+
+    async Task<List<SupHotelInfoClean>> LoadNearbySupplierHotelsByGridAsync(
+        int pendingSupHotelId,
+        decimal latitude,
+        decimal longitude,
+        int recallRadiusMeters,
+        CancellationToken cancellationToken)
+    {
+        var parameters = new List<object>
+        {
+            new SqlParameter("@pendingSupHotelId", System.Data.SqlDbType.Int)
+            {
+                Value = pendingSupHotelId
+            }
+        };
+        var gridPredicate = AddRecallGridParameters(
+            "supplier.RecallGridId",
+            latitude,
+            longitude,
+            recallRadiusMeters,
+            parameters);
+        var commandText = """
+            SELECT
+                supplier.SupHotelId,
+                supplier.SupId,
+                supplier.SHotelCode,
+                supplier.MTHotelCode,
+                supplier.HotelName,
+                supplier.HotelNameEn,
+                supplier.Longitude,
+                supplier.Latitude,
+                supplier.StarLevel,
+                supplier.Address,
+                supplier.RegionLevel1Code,
+                supplier.State,
+                supplier.CountryCode,
+                supplier.CountryName,
+                supplier.CityCode,
+                supplier.CityName,
+                supplier.PostCode,
+                supplier.Tel,
+                supplier.Fax,
+                supplier.Email,
+                supplier.CoordType,
+                supplier.RegionLevel1Name,
+                supplier.RegionLevel2Code,
+                supplier.RegionLevel2Name,
+                supplier.RegionLevel3Code,
+                supplier.RegionLevel3Name,
+                supplier.RegionResolveStatus,
+                supplier.DataQualityStatus,
+                supplier.DataQualityFlags
+            FROM dbo.SupHotelInfo AS supplier WITH (NOLOCK, INDEX(IX_SupHotelInfo_RecallGridId))
+            WHERE supplier.State = 1
+              AND supplier.SupHotelId <> @pendingSupHotelId
+              AND (
+                  /*GRID_PREDICATE*/
+              )
+            OPTION (RECOMPILE, MAXDOP 1);
+            """.Replace(
+                "/*GRID_PREDICATE*/",
+                gridPredicate,
+                StringComparison.Ordinal);
+        return await QuerySupplierRecallRowsAsync(
+            commandText,
+            parameters,
+            cancellationToken);
+    }
+
+    async Task<List<SupHotelInfoClean>> LoadLinkedSupplierHotelsAsync(
+        IReadOnlyCollection<string> mtHotelCodes,
+        CancellationToken cancellationToken)
+    {
+        await using var connection = new SqlConnection(_connectionString);
+        await connection.OpenAsync(cancellationToken);
+        await using var command = connection.CreateCommand();
+        command.CommandTimeout = 300;
+        command.CommandText = """
+            SET NOCOUNT ON;
+
+            SELECT
+                hotel.SupHotelId,
+                hotel.SupId,
+                hotel.SHotelCode,
+                hotel.MTHotelCode,
+                hotel.HotelName,
+                hotel.HotelNameEn,
+                hotel.Longitude,
+                hotel.Latitude,
+                hotel.StarLevel,
+                hotel.Address,
+                hotel.RegionLevel1Code
+            FROM OPENJSON(@mtHotelCodes)
+                WITH (MTHotelCode varchar(100) '$') AS requested
+            INNER LOOP JOIN dbo.SupHotelInfo AS hotel WITH (NOLOCK)
+                ON hotel.MTHotelCode = requested.MTHotelCode
+            WHERE hotel.State = 1
+              AND
+              (
+                  hotel.RegionLevel1Code IS NULL
+                  OR UPPER(LTRIM(RTRIM(hotel.RegionLevel1Code)))
+                      NOT IN ('CN', 'CHN', 'TW', 'TWN', 'HK', 'HKG', 'MO', 'MAC')
+              )
+            OPTION (FORCE ORDER, MAXDOP 1);
+            """;
+        command.Parameters.Add(new SqlParameter(
+            "@mtHotelCodes",
+            System.Data.SqlDbType.NVarChar,
+            -1)
+        {
+            Value = JsonSerializer.Serialize(mtHotelCodes, JsonOptions)
+        });
+
+        var hotels = new List<SupHotelInfoClean>();
+        await using var reader = await command.ExecuteReaderAsync(
+            System.Data.CommandBehavior.SequentialAccess,
+            cancellationToken);
+        while (await reader.ReadAsync(cancellationToken))
+        {
+            hotels.Add(new SupHotelInfoClean
+            {
+                SupHotelId = reader.GetInt32(0),
+                SupId = reader.GetInt32(1),
+                SHotelCode = reader.GetString(2),
+                MTHotelCode = reader.GetString(3),
+                HotelName = reader.IsDBNull(4) ? null : reader.GetString(4),
+                HotelNameEn = reader.IsDBNull(5) ? null : reader.GetString(5),
+                Longitude = reader.IsDBNull(6) ? null : reader.GetDecimal(6),
+                Latitude = reader.IsDBNull(7) ? null : reader.GetDecimal(7),
+                StarLevel = reader.IsDBNull(8) ? null : reader.GetDecimal(8),
+                Address = reader.IsDBNull(9) ? null : reader.GetString(9),
+                RegionLevel1Code = reader.IsDBNull(10) ? null : reader.GetString(10),
+                State = 1
+            });
+        }
+        return hotels;
     }
 
     async Task LoadAndAttachMatchingPhonesAsync(
@@ -1831,6 +2303,10 @@ public sealed class RoomMappingHotelRepository :
         CancellationToken cancellationToken)
     {
         var activeDeliveryStates = new[] { DeliveryPending, DeliverySending, DeliveryDelivered };
+        var matchingDisabledCountryCodes = new[]
+        {
+            "CN", "CHN", "TW", "TWN", "HK", "HKG", "MO", "MAC"
+        };
         var now = DateTime.Now;
         var rows = await _dbContext.SupHotelInfos.AsTracking()
             .Include(x => x.Phones)
@@ -1839,6 +2315,8 @@ public sealed class RoomMappingHotelRepository :
                 && x.Longitude.HasValue
                 && x.Latitude.HasValue
                 && string.IsNullOrEmpty(x.MTHotelCode)
+                && !matchingDisabledCountryCodes.Contains(
+                    (x.RegionLevel1Code ?? string.Empty).Trim())
                 && !_dbContext.HotelMatchDeliveries.Any(delivery =>
                     delivery.SupId == x.SupId
                     && delivery.SHotelCode == x.SHotelCode
@@ -1870,6 +2348,12 @@ public sealed class RoomMappingHotelRepository :
         int maxCandidates,
         CancellationToken cancellationToken)
     {
+        if (!HotelRecallPolicy.IsMatchingEnabled(
+                supplier.Hotel.RegionLevel1Code))
+        {
+            return [];
+        }
+
         var longitude = supplier.Hotel.Longitude ?? throw new InvalidOperationException("Supplier longitude is missing.");
         var latitude = supplier.Hotel.Latitude ?? throw new InvalidOperationException("Supplier latitude is missing.");
         var recall = HotelRecallPolicy.Resolve(
@@ -1877,27 +2361,123 @@ public sealed class RoomMappingHotelRepository :
             supplier.Hotel.CountryCode,
             radiusMeters,
             maxCandidates);
-        var candidateLimit = recall.MaxCandidates.HasValue
-            ? "TOP (@maxCandidates) "
-            : string.Empty;
-        var commandText = """
+        var rows = recall.MaxCandidates.HasValue
+            ? await RecallOtaCandidatesByDistanceAsync(
+                latitude,
+                longitude,
+                recall.RadiusMeters,
+                recall.MaxCandidates.Value,
+                cancellationToken)
+            : await RecallOtaCandidatesByGridAsync(
+                latitude,
+                longitude,
+                recall.RadiusMeters,
+                cancellationToken);
+        rows.RemoveAll(hotel =>
+            !HotelRecallPolicy.IsMatchingEnabled(hotel.RegionLevel1Code));
+        SortByDistance(
+            rows,
+            latitude,
+            longitude,
+            hotel => hotel.Latitude,
+            hotel => hotel.Longitude,
+            hotel => hotel.HotelID);
+        await LoadAndAttachMatchingPhonesAsync(rows, [], cancellationToken);
+        return rows.Select(MapCleaned).ToArray();
+    }
+
+    public async Task<IReadOnlyList<CleanedHotel>> RecallSupplierCandidatesAsync(
+        CleanedHotel ota,
+        int radiusMeters,
+        int maxCandidates,
+        CancellationToken cancellationToken)
+    {
+        if (!HotelRecallPolicy.IsMatchingEnabled(ota.RegionLevel1Code))
+        {
+            return [];
+        }
+
+        var longitude = ota.Longitude ?? throw new InvalidOperationException("OTA longitude is missing.");
+        var latitude = ota.Latitude ?? throw new InvalidOperationException("OTA latitude is missing.");
+        var recall = HotelRecallPolicy.Resolve(
+            ota.RegionLevel1Code,
+            ota.CountryCode,
+            radiusMeters,
+            maxCandidates);
+        var rows = recall.MaxCandidates.HasValue
+            ? await RecallSupplierCandidatesByDistanceAsync(
+                latitude,
+                longitude,
+                recall.RadiusMeters,
+                recall.MaxCandidates.Value,
+                cancellationToken)
+            : await RecallSupplierCandidatesByGridAsync(
+                latitude,
+                longitude,
+                recall.RadiusMeters,
+                cancellationToken);
+        rows.RemoveAll(hotel =>
+            !HotelRecallPolicy.IsMatchingEnabled(hotel.RegionLevel1Code));
+        SortByDistance(
+            rows,
+            latitude,
+            longitude,
+            hotel => hotel.Latitude,
+            hotel => hotel.Longitude,
+            hotel => hotel.SupHotelId);
+        await LoadAndAttachMatchingPhonesAsync([], rows, cancellationToken);
+        return rows.Select(MapCleaned).ToArray();
+    }
+
+    async Task<List<OTAHotelInfo>> RecallOtaCandidatesByDistanceAsync(
+        decimal latitude,
+        decimal longitude,
+        int radiusMeters,
+        int maxCandidates,
+        CancellationToken cancellationToken)
+    {
+        const string commandText = """
             DECLARE @origin geography = geography::Point(@latitude, @longitude, 4326);
 
-            SELECT /*CANDIDATE_LIMIT*/o.*
-            FROM dbo.OTAHotelInfo AS o
+            SELECT TOP (@maxCandidates)
+                o.HotelID,
+                o.MTHotelCode,
+                o.HotelName,
+                o.HotelEnName,
+                o.Longitude,
+                o.Latitude,
+                o.StarLevel,
+                o.Address,
+                o.RegionLevel1Code,
+                o.CountryCode,
+                o.CountryName,
+                o.CityCode,
+                o.CityName,
+                o.PostCode,
+                o.Tel,
+                o.Fax,
+                o.Email,
+                o.CoordType,
+                o.RegionLevel1Name,
+                o.RegionLevel2Code,
+                o.RegionLevel2Name,
+                o.RegionLevel3Code,
+                o.RegionLevel3Name,
+                o.RegionResolveStatus,
+                o.DataQualityStatus,
+                o.DataQualityFlags
+            FROM dbo.OTAHotelInfo AS o WITH (NOLOCK, INDEX(SIX_OTAHotelInfo_GeoPoint))
             WHERE o.CleanStatus = @cleanStatus
               AND o.DataQualityStatus = @dataQualityStatus
               AND o.Estate = @onlineEstate
               AND o.GeoPoint IS NOT NULL
               AND o.GeoPoint.STDistance(@origin) <= @radiusMeters
-            ORDER BY o.GeoPoint.STDistance(@origin)
-            """.Replace(
-                "/*CANDIDATE_LIMIT*/",
-                candidateLimit,
-                StringComparison.Ordinal);
-        var rows = await _dbContext.OTAHotelInfos
-            .FromSqlRaw(
-                commandText,
+            ORDER BY o.GeoPoint.STDistance(@origin), o.HotelID
+            OPTION (RECOMPILE, MAXDOP 1);
+            """;
+        return await QueryOtaRecallRowsAsync(
+            commandText,
+            [
                 new SqlParameter("@latitude", System.Data.SqlDbType.Float)
                 {
                     Value = Convert.ToDouble(latitude, CultureInfo.InvariantCulture)
@@ -1908,11 +2488,11 @@ public sealed class RoomMappingHotelRepository :
                 },
                 new SqlParameter("@radiusMeters", System.Data.SqlDbType.Int)
                 {
-                    Value = recall.RadiusMeters
+                    Value = radiusMeters
                 },
                 new SqlParameter("@maxCandidates", System.Data.SqlDbType.Int)
                 {
-                    Value = recall.MaxCandidates ?? int.MaxValue
+                    Value = maxCandidates
                 },
                 new SqlParameter("@cleanStatus", System.Data.SqlDbType.TinyInt)
                 {
@@ -1925,46 +2505,136 @@ public sealed class RoomMappingHotelRepository :
                 new SqlParameter("@onlineEstate", System.Data.SqlDbType.Int)
                 {
                     Value = 1
-                })
-            .AsNoTracking()
-            .ToListAsync(cancellationToken);
-        await LoadAndAttachMatchingPhonesAsync(rows, [], cancellationToken);
-        return rows.Select(MapCleaned).ToArray();
+                }
+            ],
+            cancellationToken);
     }
 
-    public async Task<IReadOnlyList<CleanedHotel>> RecallSupplierCandidatesAsync(
-        CleanedHotel ota,
+    async Task<List<OTAHotelInfo>> RecallOtaCandidatesByGridAsync(
+        decimal latitude,
+        decimal longitude,
+        int radiusMeters,
+        CancellationToken cancellationToken)
+    {
+        var parameters = new List<object>
+        {
+            new SqlParameter("@cleanStatus", System.Data.SqlDbType.TinyInt)
+            {
+                Value = (byte)HotelCleanStatus.Ready
+            },
+            new SqlParameter("@dataQualityStatus", System.Data.SqlDbType.TinyInt)
+            {
+                Value = (byte)HotelDataQualityStatus.Valid
+            },
+            new SqlParameter("@onlineEstate", System.Data.SqlDbType.Int)
+            {
+                Value = 1
+            }
+        };
+        var gridPredicate = AddRecallGridParameters(
+            "o.RecallGridId",
+            latitude,
+            longitude,
+            radiusMeters,
+            parameters);
+        var commandText = """
+            SELECT
+                o.HotelID,
+                o.MTHotelCode,
+                o.HotelName,
+                o.HotelEnName,
+                o.Longitude,
+                o.Latitude,
+                o.StarLevel,
+                o.Address,
+                o.RegionLevel1Code,
+                o.CountryCode,
+                o.CountryName,
+                o.CityCode,
+                o.CityName,
+                o.PostCode,
+                o.Tel,
+                o.Fax,
+                o.Email,
+                o.CoordType,
+                o.RegionLevel1Name,
+                o.RegionLevel2Code,
+                o.RegionLevel2Name,
+                o.RegionLevel3Code,
+                o.RegionLevel3Name,
+                o.RegionResolveStatus,
+                o.DataQualityStatus,
+                o.DataQualityFlags
+            FROM dbo.OTAHotelInfo AS o WITH (NOLOCK, INDEX(IX_OTAHotelInfo_RecallGridId))
+            WHERE o.CleanStatus = @cleanStatus
+              AND o.DataQualityStatus = @dataQualityStatus
+              AND o.Estate = @onlineEstate
+              AND (
+                  /*GRID_PREDICATE*/
+              )
+            OPTION (RECOMPILE, MAXDOP 1);
+            """.Replace(
+                "/*GRID_PREDICATE*/",
+                gridPredicate,
+                StringComparison.Ordinal);
+        return await QueryOtaRecallRowsAsync(
+            commandText,
+            parameters,
+            cancellationToken);
+    }
+
+    async Task<List<SupHotelInfoClean>> RecallSupplierCandidatesByDistanceAsync(
+        decimal latitude,
+        decimal longitude,
         int radiusMeters,
         int maxCandidates,
         CancellationToken cancellationToken)
     {
-        var longitude = ota.Longitude ?? throw new InvalidOperationException("OTA longitude is missing.");
-        var latitude = ota.Latitude ?? throw new InvalidOperationException("OTA latitude is missing.");
-        var recall = HotelRecallPolicy.Resolve(
-            ota.RegionLevel1Code,
-            ota.CountryCode,
-            radiusMeters,
-            maxCandidates);
-        var candidateLimit = recall.MaxCandidates.HasValue
-            ? "TOP (@maxCandidates) "
-            : string.Empty;
-        var commandText = """
+        const string commandText = """
             DECLARE @origin geography = geography::Point(@latitude, @longitude, 4326);
 
-            SELECT /*CANDIDATE_LIMIT*/s.*
-            FROM dbo.SupHotelInfo AS s
-            WHERE s.CleanStatus = @cleanStatus
+            SELECT TOP (@maxCandidates)
+                s.SupHotelId,
+                s.SupId,
+                s.SHotelCode,
+                s.MTHotelCode,
+                s.HotelName,
+                s.HotelNameEn,
+                s.Longitude,
+                s.Latitude,
+                s.StarLevel,
+                s.Address,
+                s.RegionLevel1Code,
+                s.State,
+                s.CountryCode,
+                s.CountryName,
+                s.CityCode,
+                s.CityName,
+                s.PostCode,
+                s.Tel,
+                s.Fax,
+                s.Email,
+                s.CoordType,
+                s.RegionLevel1Name,
+                s.RegionLevel2Code,
+                s.RegionLevel2Name,
+                s.RegionLevel3Code,
+                s.RegionLevel3Name,
+                s.RegionResolveStatus,
+                s.DataQualityStatus,
+                s.DataQualityFlags
+            FROM dbo.SupHotelInfo AS s WITH (NOLOCK, INDEX(SIX_SupHotelInfo_GeoPoint))
+            WHERE s.State = 1
+              AND s.CleanStatus = @cleanStatus
               AND s.DataQualityStatus = @dataQualityStatus
               AND s.GeoPoint IS NOT NULL
               AND s.GeoPoint.STDistance(@origin) <= @radiusMeters
-            ORDER BY s.GeoPoint.STDistance(@origin)
-            """.Replace(
-                "/*CANDIDATE_LIMIT*/",
-                candidateLimit,
-                StringComparison.Ordinal);
-        var rows = await _dbContext.SupHotelInfos
-            .FromSqlRaw(
-                commandText,
+            ORDER BY s.GeoPoint.STDistance(@origin), s.SupHotelId
+            OPTION (RECOMPILE, MAXDOP 1);
+            """;
+        return await QuerySupplierRecallRowsAsync(
+            commandText,
+            [
                 new SqlParameter("@latitude", System.Data.SqlDbType.Float)
                 {
                     Value = Convert.ToDouble(latitude, CultureInfo.InvariantCulture)
@@ -1975,11 +2645,11 @@ public sealed class RoomMappingHotelRepository :
                 },
                 new SqlParameter("@radiusMeters", System.Data.SqlDbType.Int)
                 {
-                    Value = recall.RadiusMeters
+                    Value = radiusMeters
                 },
                 new SqlParameter("@maxCandidates", System.Data.SqlDbType.Int)
                 {
-                    Value = recall.MaxCandidates ?? int.MaxValue
+                    Value = maxCandidates
                 },
                 new SqlParameter("@cleanStatus", System.Data.SqlDbType.TinyInt)
                 {
@@ -1988,11 +2658,313 @@ public sealed class RoomMappingHotelRepository :
                 new SqlParameter("@dataQualityStatus", System.Data.SqlDbType.TinyInt)
                 {
                     Value = (byte)HotelDataQualityStatus.Valid
-                })
-            .AsNoTracking()
-            .ToListAsync(cancellationToken);
-        await LoadAndAttachMatchingPhonesAsync([], rows, cancellationToken);
-        return rows.Select(MapCleaned).ToArray();
+                }
+            ],
+            cancellationToken);
+    }
+
+    async Task<List<SupHotelInfoClean>> RecallSupplierCandidatesByGridAsync(
+        decimal latitude,
+        decimal longitude,
+        int radiusMeters,
+        CancellationToken cancellationToken)
+    {
+        var parameters = new List<object>
+        {
+            new SqlParameter("@cleanStatus", System.Data.SqlDbType.TinyInt)
+            {
+                Value = (byte)HotelCleanStatus.Ready
+            },
+            new SqlParameter("@dataQualityStatus", System.Data.SqlDbType.TinyInt)
+            {
+                Value = (byte)HotelDataQualityStatus.Valid
+            }
+        };
+        var gridPredicate = AddRecallGridParameters(
+            "s.RecallGridId",
+            latitude,
+            longitude,
+            radiusMeters,
+            parameters);
+        var commandText = """
+            SELECT
+                s.SupHotelId,
+                s.SupId,
+                s.SHotelCode,
+                s.MTHotelCode,
+                s.HotelName,
+                s.HotelNameEn,
+                s.Longitude,
+                s.Latitude,
+                s.StarLevel,
+                s.Address,
+                s.RegionLevel1Code,
+                s.State,
+                s.CountryCode,
+                s.CountryName,
+                s.CityCode,
+                s.CityName,
+                s.PostCode,
+                s.Tel,
+                s.Fax,
+                s.Email,
+                s.CoordType,
+                s.RegionLevel1Name,
+                s.RegionLevel2Code,
+                s.RegionLevel2Name,
+                s.RegionLevel3Code,
+                s.RegionLevel3Name,
+                s.RegionResolveStatus,
+                s.DataQualityStatus,
+                s.DataQualityFlags
+            FROM dbo.SupHotelInfo AS s WITH (NOLOCK, INDEX(IX_SupHotelInfo_RecallGridId))
+            WHERE s.State = 1
+              AND s.CleanStatus = @cleanStatus
+              AND s.DataQualityStatus = @dataQualityStatus
+              AND (
+                  /*GRID_PREDICATE*/
+              )
+            OPTION (RECOMPILE, MAXDOP 1);
+            """.Replace(
+                "/*GRID_PREDICATE*/",
+                gridPredicate,
+                StringComparison.Ordinal);
+        return await QuerySupplierRecallRowsAsync(
+            commandText,
+            parameters,
+            cancellationToken);
+    }
+
+    async Task<List<OTAHotelInfo>> QueryOtaRecallRowsAsync(
+        string commandText,
+        IReadOnlyCollection<object> parameters,
+        CancellationToken cancellationToken)
+    {
+        await using var connection = new SqlConnection(_connectionString);
+        await connection.OpenAsync(cancellationToken);
+        await using var command = connection.CreateCommand();
+        command.CommandTimeout = 300;
+        command.CommandText = commandText;
+        foreach (var parameter in parameters)
+        {
+            command.Parameters.Add(parameter);
+        }
+
+        var hotels = new List<OTAHotelInfo>();
+        await using var reader = await command.ExecuteReaderAsync(
+            System.Data.CommandBehavior.SequentialAccess,
+            cancellationToken);
+        while (await reader.ReadAsync(cancellationToken))
+        {
+            hotels.Add(new OTAHotelInfo
+            {
+                HotelID = reader.GetInt32(0),
+                MTHotelCode = reader.GetString(1),
+                HotelName = reader.GetString(2),
+                HotelEnName = GetNullableString(reader, 3),
+                Longitude = GetNullableDecimal(reader, 4),
+                Latitude = GetNullableDecimal(reader, 5),
+                StarLevel = GetNullableDecimal(reader, 6),
+                Address = GetNullableString(reader, 7),
+                RegionLevel1Code = GetNullableString(reader, 8),
+                CountryCode = GetNullableString(reader, 9),
+                CountryName = GetNullableString(reader, 10),
+                CityCode = GetNullableString(reader, 11),
+                CityName = GetNullableString(reader, 12),
+                PostCode = GetNullableString(reader, 13),
+                Tel = GetNullableString(reader, 14),
+                Fax = GetNullableString(reader, 15),
+                Email = GetNullableString(reader, 16),
+                CoordType = reader.GetByte(17),
+                RegionLevel1Name = GetNullableString(reader, 18),
+                RegionLevel2Code = GetNullableString(reader, 19),
+                RegionLevel2Name = GetNullableString(reader, 20),
+                RegionLevel3Code = GetNullableString(reader, 21),
+                RegionLevel3Name = GetNullableString(reader, 22),
+                RegionResolveStatus = reader.GetByte(23),
+                DataQualityStatus = reader.GetByte(24),
+                DataQualityFlags = reader.GetInt64(25)
+            });
+        }
+        return hotels;
+    }
+
+    async Task<List<SupHotelInfoClean>> QuerySupplierRecallRowsAsync(
+        string commandText,
+        IReadOnlyCollection<object> parameters,
+        CancellationToken cancellationToken)
+    {
+        await using var connection = new SqlConnection(_connectionString);
+        await connection.OpenAsync(cancellationToken);
+        await using var command = connection.CreateCommand();
+        command.CommandTimeout = 300;
+        command.CommandText = commandText;
+        foreach (var parameter in parameters)
+        {
+            command.Parameters.Add(parameter);
+        }
+
+        var hotels = new List<SupHotelInfoClean>();
+        await using var reader = await command.ExecuteReaderAsync(
+            System.Data.CommandBehavior.SequentialAccess,
+            cancellationToken);
+        while (await reader.ReadAsync(cancellationToken))
+        {
+            hotels.Add(new SupHotelInfoClean
+            {
+                SupHotelId = reader.GetInt32(0),
+                SupId = reader.GetInt32(1),
+                SHotelCode = reader.GetString(2),
+                MTHotelCode = reader.GetString(3),
+                HotelName = GetNullableString(reader, 4),
+                HotelNameEn = GetNullableString(reader, 5),
+                Longitude = GetNullableDecimal(reader, 6),
+                Latitude = GetNullableDecimal(reader, 7),
+                StarLevel = GetNullableDecimal(reader, 8),
+                Address = GetNullableString(reader, 9),
+                RegionLevel1Code = GetNullableString(reader, 10),
+                State = reader.GetInt32(11),
+                CountryCode = GetNullableString(reader, 12),
+                CountryName = GetNullableString(reader, 13),
+                CityCode = GetNullableString(reader, 14),
+                CityName = GetNullableString(reader, 15),
+                PostCode = GetNullableString(reader, 16),
+                Tel = GetNullableString(reader, 17),
+                Fax = GetNullableString(reader, 18),
+                Email = GetNullableString(reader, 19),
+                CoordType = reader.GetByte(20),
+                RegionLevel1Name = GetNullableString(reader, 21),
+                RegionLevel2Code = GetNullableString(reader, 22),
+                RegionLevel2Name = GetNullableString(reader, 23),
+                RegionLevel3Code = GetNullableString(reader, 24),
+                RegionLevel3Name = GetNullableString(reader, 25),
+                RegionResolveStatus = reader.GetByte(26),
+                DataQualityStatus = reader.GetByte(27),
+                DataQualityFlags = reader.GetInt64(28)
+            });
+        }
+        return hotels;
+    }
+
+    static string AddRecallGridParameters(
+        string columnExpression,
+        decimal latitude,
+        decimal longitude,
+        int radiusMeters,
+        ICollection<object> parameters)
+    {
+        var ranges = HotelRecallGrid.GetRanges(latitude, longitude, radiusMeters);
+        var predicates = new string[ranges.Count];
+        for (var index = 0; index < ranges.Count; index++)
+        {
+            var minimumParameterName = $"@recallGridMinimum{index}";
+            var maximumParameterName = $"@recallGridMaximum{index}";
+            predicates[index] =
+                $"({columnExpression} BETWEEN {minimumParameterName} AND {maximumParameterName})";
+            parameters.Add(new SqlParameter(
+                minimumParameterName,
+                System.Data.SqlDbType.BigInt)
+            {
+                Value = ranges[index].Minimum
+            });
+            parameters.Add(new SqlParameter(
+                maximumParameterName,
+                System.Data.SqlDbType.BigInt)
+            {
+                Value = ranges[index].Maximum
+            });
+        }
+
+        return string.Join(
+            $"{Environment.NewLine}                  OR ",
+            predicates);
+    }
+
+    static async Task<bool> DelayOrCanceledAsync(
+        TimeSpan delay,
+        CancellationToken cancellationToken)
+    {
+        if (!cancellationToken.CanBeCanceled)
+        {
+            await Task.Delay(delay);
+            return true;
+        }
+        if (cancellationToken.IsCancellationRequested)
+        {
+            return false;
+        }
+
+        var cancellationCompletion =
+            new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
+        using var registration = cancellationToken.UnsafeRegister(
+            static state => ((TaskCompletionSource<bool>)state!).TrySetResult(true),
+            cancellationCompletion);
+        var delayTask = Task.Delay(delay);
+        return await Task.WhenAny(delayTask, cancellationCompletion.Task) == delayTask;
+    }
+
+    static string? GetNullableString(SqlDataReader reader, int ordinal)
+        => reader.IsDBNull(ordinal) ? null : reader.GetString(ordinal);
+
+    static decimal? GetNullableDecimal(SqlDataReader reader, int ordinal)
+        => reader.IsDBNull(ordinal) ? null : reader.GetDecimal(ordinal);
+
+    static void SortByDistance<T>(
+        List<T> rows,
+        decimal originLatitude,
+        decimal originLongitude,
+        Func<T, decimal?> latitude,
+        Func<T, decimal?> longitude,
+        Func<T, int> id)
+    {
+        rows.Sort((left, right) =>
+        {
+            var distanceComparison = DistanceMeters(
+                    originLatitude,
+                    originLongitude,
+                    latitude(left),
+                    longitude(left))
+                .CompareTo(DistanceMeters(
+                    originLatitude,
+                    originLongitude,
+                    latitude(right),
+                    longitude(right)));
+            return distanceComparison != 0
+                ? distanceComparison
+                : id(left).CompareTo(id(right));
+        });
+    }
+
+    static double DistanceMeters(
+        decimal originLatitude,
+        decimal originLongitude,
+        decimal? candidateLatitude,
+        decimal? candidateLongitude)
+    {
+        if (!candidateLatitude.HasValue || !candidateLongitude.HasValue)
+        {
+            return double.PositiveInfinity;
+        }
+
+        const double earthRadiusMeters = 6_371_008.8;
+        var latitude1 = (double)originLatitude * Math.PI / 180;
+        var latitude2 = (double)candidateLatitude.Value * Math.PI / 180;
+        var latitudeDelta = latitude2 - latitude1;
+        var longitudeDelta =
+            ((double)candidateLongitude.Value - (double)originLongitude)
+            * Math.PI
+            / 180;
+        var haversine = Math.Sin(latitudeDelta / 2) * Math.Sin(latitudeDelta / 2)
+            + Math.Cos(latitude1)
+            * Math.Cos(latitude2)
+            * Math.Sin(longitudeDelta / 2)
+            * Math.Sin(longitudeDelta / 2);
+        var boundedHaversine = Math.Clamp(haversine, 0, 1);
+        return earthRadiusMeters
+            * 2
+            * Math.Atan2(
+                Math.Sqrt(boundedHaversine),
+                Math.Sqrt(1 - boundedHaversine));
     }
 
     public async Task<IReadOnlyDictionary<string, IReadOnlyCollection<string>>> GetTrustedAliasesAsync(

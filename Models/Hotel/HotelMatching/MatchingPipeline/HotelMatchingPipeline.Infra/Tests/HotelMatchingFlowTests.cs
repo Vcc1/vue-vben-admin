@@ -84,6 +84,42 @@ public sealed class HotelMatchingFlowTests
     }
 
     [Fact]
+    public async Task Information_load_keeps_retrying_and_reports_retrying_state()
+    {
+        var pipelineRepository = new PipelineRepository(1, alwaysFailSupHotelId: 1);
+        using var serviceProvider = CreateServiceProvider(pipelineRepository);
+        var sharedStore = new InMemoryHotelMatchingStore();
+        var metrics = new HotelMatchingMetrics();
+        var service = new HotelMatchingService(
+            pipelineRepository,
+            sharedStore,
+            sharedStore,
+            new RecordingHotelMatchCache(),
+            new InMemoryThirdPartyHotelMatchClient(),
+            new HotelFactMatchEvaluator(),
+            Options.Create(new HotelMatchingOptions
+            {
+                QueueCapacity = 1,
+                WriteBatchSize = 1,
+                InformationRetryDelayMilliseconds = 1,
+                ProgressLogIntervalMilliseconds = 1_000
+            }),
+            NullLogger<HotelMatchingService>.Instance,
+            serviceProvider.GetRequiredService<IServiceScopeFactory>(),
+            metrics);
+        using var cancellation = new CancellationTokenSource(TimeSpan.FromMilliseconds(50));
+
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(
+            () => service.RunOnceAsync(cancellation.Token));
+
+        var snapshot = metrics.Snapshot();
+        Assert.True(snapshot.InformationRetryCount > 0);
+        Assert.True(snapshot.InformationRetrying > 0);
+        Assert.Equal(1, snapshot.InformationRetrySupHotelId);
+        Assert.Empty(pipelineRepository.SavedEvaluations);
+    }
+
+    [Fact]
     public async Task Information_load_uses_configured_parallelism()
     {
         var pipelineRepository = new PipelineRepository(
@@ -130,6 +166,7 @@ public sealed class HotelMatchingFlowTests
     sealed class PipelineRepository(
         int count,
         int loadFailuresBeforeSuccess = 0,
+        int? alwaysFailSupHotelId = null,
         int informationDelayMilliseconds = 0) : IHotelMatchPipelineRepository
     {
         int _remainingLoadFailures = loadFailuresBeforeSuccess;
@@ -167,6 +204,10 @@ public sealed class HotelMatchingFlowTests
                 if (Interlocked.Decrement(ref _remainingLoadFailures) >= 0)
                 {
                     throw new TimeoutException("Simulated information load timeout.");
+                }
+                if (alwaysFailSupHotelId == supHotelId)
+                {
+                    throw new TimeoutException("Simulated permanent information load timeout.");
                 }
                 if (informationDelayMilliseconds > 0)
                 {

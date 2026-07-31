@@ -8,10 +8,15 @@ public sealed class HotelPipelineDomainTests
 {
     [Theory]
     [InlineData("CN", null, 3000, 200, 3000, 200)]
-    [InlineData(null, "CHN", 3000, 200, 3000, 200)]
-    [InlineData("US", null, 3000, 200, 300, null)]
-    [InlineData(null, "DEU", 3000, 200, 300, null)]
-    [InlineData(null, null, 3000, 200, 3000, 200)]
+    [InlineData(null, "CHN", 3000, 200, 100, null)]
+    [InlineData("TW", null, 3000, 200, 3000, 200)]
+    [InlineData(null, "HKG", 3000, 200, 100, null)]
+    [InlineData("MAC", null, 3000, 200, 3000, 200)]
+    [InlineData("US", null, 3000, 200, 100, null)]
+    [InlineData("US", "CHN", 3000, 200, 100, null)]
+    [InlineData("CN", "USA", 3000, 200, 3000, 200)]
+    [InlineData(null, "DEU", 3000, 200, 100, null)]
+    [InlineData(null, null, 3000, 200, 100, null)]
     public void Recall_policy_uses_a_small_unbounded_search_outside_china(
         string? regionLevel1Code,
         string? countryCode,
@@ -28,6 +33,51 @@ public sealed class HotelPipelineDomainTests
 
         Assert.Equal(expectedRadius, result.RadiusMeters);
         Assert.Equal(expectedMaxCandidates, result.MaxCandidates);
+    }
+
+    [Theory]
+    [InlineData("CN", false)]
+    [InlineData("CHN", false)]
+    [InlineData("TW", false)]
+    [InlineData("TWN", false)]
+    [InlineData("HK", false)]
+    [InlineData("HKG", false)]
+    [InlineData("MO", false)]
+    [InlineData("MAC", false)]
+    [InlineData("US", true)]
+    [InlineData(null, false)]
+    [InlineData("", false)]
+    public void Greater_china_matching_is_disabled(
+        string? regionLevel1Code,
+        bool expected)
+    {
+        Assert.Equal(
+            expected,
+            HotelRecallPolicy.IsMatchingEnabled(regionLevel1Code));
+    }
+
+    [Theory]
+    [InlineData(31, 121, 31.0008, 121)]
+    [InlineData(31, 121, 31, 121.001)]
+    [InlineData(0, 179.9998, 0, -179.9995)]
+    public void Recall_grid_ranges_cover_points_within_one_hundred_meters(
+        decimal originLatitude,
+        decimal originLongitude,
+        decimal candidateLatitude,
+        decimal candidateLongitude)
+    {
+        var ranges = HotelRecallGrid.GetRanges(
+            originLatitude,
+            originLongitude,
+            HotelRecallPolicy.NonChinaRadiusMeters);
+        var candidateGridId = HotelRecallGrid.GetGridId(
+            candidateLatitude,
+            candidateLongitude);
+
+        Assert.Contains(
+            ranges,
+            range => candidateGridId >= range.Minimum
+                && candidateGridId <= range.Maximum);
     }
 
     [Fact]
