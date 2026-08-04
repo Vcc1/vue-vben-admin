@@ -9,6 +9,7 @@ using Infrastructure.Sql.RoomMapping.Entitys;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Options;
+using Tests.Host.HotelMappingSync;
 
 namespace Tests.Host.Controllers;
 
@@ -21,19 +22,36 @@ public sealed class HotelMatchDataController : ControllerBase
     readonly HotelFactMatchEvaluator _evaluator;
     readonly HotelNameMatcher _nameMatcher;
     readonly HotelMatchingOptions _options;
+    readonly HotelMappingRedisSyncWorker _redisSyncWorker;
 
     public HotelMatchDataController(
         RoomMappingDbContext dbContext,
         IHotelMatchPipelineRepository pipelineRepository,
         HotelFactMatchEvaluator evaluator,
         HotelNameMatcher nameMatcher,
-        IOptions<HotelMatchingOptions> options)
+        IOptions<HotelMatchingOptions> options,
+        HotelMappingRedisSyncWorker redisSyncWorker)
     {
         _dbContext = dbContext;
         _pipelineRepository = pipelineRepository;
         _evaluator = evaluator;
         _nameMatcher = nameMatcher;
         _options = options.Value;
+        _redisSyncWorker = redisSyncWorker;
+    }
+
+    [HttpPost("redis-sync")]
+    public IActionResult StartRedisSync()
+    {
+        return _redisSyncWorker.TryStart(out var status)
+            ? Accepted(status)
+            : Conflict(status);
+    }
+
+    [HttpGet("redis-sync/status")]
+    public ActionResult<HotelMappingRedisSyncStatus> GetRedisSyncStatus()
+    {
+        return Ok(_redisSyncWorker.GetStatus());
     }
 
     [HttpGet("results")]

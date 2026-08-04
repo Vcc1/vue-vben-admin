@@ -31,6 +31,7 @@ using RoomMatch.Core.RoomMatch;
 using RoomMatch.Core.RoomMatchingStrategies;
 using OTADomain.Matchings;
 using FromServicesAttribute = Microsoft.AspNetCore.Mvc.FromServicesAttribute;
+using Tests.Host.HotelMappingSync;
 
 Directory.SetCurrentDirectory(AppContext.BaseDirectory);
 
@@ -58,6 +59,12 @@ builder.Services.Configure<JsonOptions>(options =>
 builder.Services.AddBusiness([typeof(RoomMappingDbContext).Assembly]);
 builder.Services.AddHotelMatchingApplication(builder.Configuration);
 builder.Services.AddHotelMatchingInfrastructure(builder.Configuration);
+builder.Services.AddScoped<IHotelMappingSourceReader, HotelMappingSourceReader>();
+builder.Services.AddSingleton<IHotelMappingRedisStore, HotelMappingRedisStore>();
+builder.Services.AddSingleton<IHotelMappingQueueWriter, HotelMappingQueueWriter>();
+builder.Services.AddScoped<HotelMappingSyncRunner>();
+builder.Services.AddSingleton<HotelMappingRedisSyncWorker>();
+builder.Services.AddHostedService(provider => provider.GetRequiredService<HotelMappingRedisSyncWorker>());
 builder.Services.RemoveAll<HotelCleaner>();
 builder.Services.RemoveAll<HotelCleaningService>();
 builder.Services.RemoveAll<HotelMatchingService>();

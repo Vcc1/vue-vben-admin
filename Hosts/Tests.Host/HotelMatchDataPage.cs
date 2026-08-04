@@ -99,6 +99,18 @@ internal static class HotelMatchDataPage
         }
         .table-title { margin: 0; font-size: 15px; font-weight: 650; }
         .table-meta { color: var(--muted); font-size: 12px; }
+        .toolbar-actions { display: flex; align-items: center; gap: 12px; }
+        .sync-status {
+            padding: 9px 14px;
+            border-bottom: 1px solid var(--line);
+            background: var(--brand-soft);
+            color: #344253;
+            font-size: 12px;
+            line-height: 1.5;
+        }
+        .sync-status.failed { background: var(--danger-soft); color: var(--danger); }
+        .sync-status.succeeded { background: var(--success-soft); color: var(--success); }
+        .sync-status[hidden] { display: none; }
         .table-scroll { width: 100%; overflow-x: auto; }
         table { width: 100%; min-width: 1080px; border-collapse: collapse; table-layout: fixed; }
         th, td {
@@ -344,8 +356,12 @@ internal static class HotelMatchDataPage
         <section class="table-panel">
             <div class="table-toolbar">
                 <h1 class="table-title" id="pageTitle">酒店匹配数据</h1>
-                <div class="table-meta" id="tableMeta">等待查询</div>
+                <div class="toolbar-actions">
+                    <div class="table-meta" id="tableMeta">等待查询</div>
+                    <button class="command" id="syncRedisButton" type="button" hidden>同步 Redis</button>
+                </div>
             </div>
+            <div class="sync-status" id="syncRedisStatus" hidden></div>
             <div class="table-scroll">
                 <table><thead><tr id="tableHead"></tr></thead><tbody id="tableBody"></tbody></table>
             </div>
@@ -392,8 +408,16 @@ internal static class HotelMatchDataPage
         const queryButton = document.querySelector('#queryButton');
         const tableBody = document.querySelector('#tableBody');
         const drawerLayer = document.querySelector('#drawerLayer');
+        const syncRedisButton = document.querySelector('#syncRedisButton');
+        const syncRedisStatus = document.querySelector('#syncRedisStatus');
+        let syncStatusTimer = null;
 
         document.querySelector('#pageTitle').textContent = config.title;
+        syncRedisButton.hidden = kind !== 'results';
+        if (kind === 'results') {
+            syncRedisButton.addEventListener('click', startRedisSync);
+            pollRedisSyncStatus();
+        }
         document.querySelector('#statusFilter').innerHTML = config.statuses
             .map(([value, label]) => `<option value="${escapeHtml(value)}">${escapeHtml(label)}</option>`).join('');
         document.querySelector('#tableHead').innerHTML = config.headers
@@ -448,6 +472,63 @@ internal static class HotelMatchDataPage
                 state.loading = false;
                 queryButton.disabled = false;
             }
+        }
+
+        async function startRedisSync() {
+            if (!window.confirm('确认以 HotelMatchResult 全量数据同步 Redis 映射吗？多余映射将被删除。')) return;
+            syncRedisButton.disabled = true;
+            try {
+                const response = await fetch('/api/hotel-match-data/redis-sync', { method: 'POST' });
+                const status = await response.json();
+                if (!response.ok && response.status !== 409) {
+                    throw new Error(status.error || `启动失败，HTTP ${response.status}`);
+                }
+                renderRedisSyncStatus(status);
+                scheduleRedisSyncPoll();
+            } catch (error) {
+                syncRedisStatus.hidden = false;
+                syncRedisStatus.className = 'sync-status failed';
+                syncRedisStatus.textContent = error.message;
+                syncRedisButton.disabled = false;
+            }
+        }
+
+        async function pollRedisSyncStatus() {
+            try {
+                const response = await fetch('/api/hotel-match-data/redis-sync/status');
+                if (!response.ok) throw new Error(`状态查询失败，HTTP ${response.status}`);
+                const status = await response.json();
+                renderRedisSyncStatus(status);
+                if (status.state === 'running') scheduleRedisSyncPoll();
+            } catch (error) {
+                syncRedisStatus.hidden = false;
+                syncRedisStatus.className = 'sync-status failed';
+                syncRedisStatus.textContent = error.message;
+                syncRedisButton.disabled = false;
+            }
+        }
+
+        function scheduleRedisSyncPoll() {
+            if (syncStatusTimer) window.clearTimeout(syncStatusTimer);
+            syncStatusTimer = window.setTimeout(pollRedisSyncStatus, 1500);
+        }
+
+        function renderRedisSyncStatus(status) {
+            const running = status.state === 'running';
+            syncRedisButton.disabled = running;
+            syncRedisButton.textContent = running ? '同步中...' : '同步 Redis';
+            if (status.state === 'idle') {
+                syncRedisStatus.hidden = true;
+                return;
+            }
+
+            const stateText = running ? '正在同步' : status.state === 'succeeded' ? '同步完成' : '同步失败';
+            const summary = `${stateText}：源数据 ${number(status.sourceCount)}，Redis 原数据 ${number(status.redisCount)}，` +
+                `新增 ${number(status.addedCount)}，修改 ${number(status.updatedCount)}，删除 ${number(status.deletedCount)}，` +
+                `已入队 ${number(status.queuedCount)}，待投递 ${number(status.pendingCount)}`;
+            syncRedisStatus.hidden = false;
+            syncRedisStatus.className = `sync-status ${status.state}`;
+            syncRedisStatus.textContent = status.error ? `${summary}。错误：${status.error}` : summary;
         }
 
         function renderRows(items) {
