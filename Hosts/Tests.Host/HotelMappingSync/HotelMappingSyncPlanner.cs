@@ -1,13 +1,16 @@
+using Infrastructure.Redis.HotelMatchingRedis;
+
 namespace Tests.Host.HotelMappingSync;
 
 public static class HotelMappingSyncPlanner
 {
-    public static IReadOnlyDictionary<string, string> BuildDesiredMappings(
+    public static IReadOnlyDictionary<string, IReadOnlyList<SupHotelInfoDto>> BuildDesiredMappings(
         IEnumerable<HotelMappingSourceRow> sourceRows)
     {
         ArgumentNullException.ThrowIfNull(sourceRows);
 
-        var desired = new Dictionary<string, string>(StringComparer.Ordinal);
+        var grouped = new Dictionary<string, List<SupHotelInfoDto>>(StringComparer.Ordinal);
+        var assignedSupplierHotels = new Dictionary<string, string>(StringComparer.Ordinal);
         foreach (var row in sourceRows)
         {
             var mtHotelCode = row.MTHotelCode?.Trim();
@@ -23,20 +26,43 @@ public static class HotelMappingSyncPlanner
                     $"SupHotelInfo contains an empty SHotelCode for SupId {row.SupId}.");
             }
 
-            var field = $"{row.SupId}_{supplierHotelCode}";
-            if (!desired.TryAdd(field, mtHotelCode))
+            var supplierHotel = $"{row.SupId}_{supplierHotelCode}";
+            if (!assignedSupplierHotels.TryAdd(supplierHotel, mtHotelCode))
             {
                 throw new InvalidOperationException(
-                    $"Duplicate hotel mapping field after normalization: {field}.");
+                    $"Duplicate hotel mapping field after normalization: {supplierHotel}.");
             }
+
+            if (!grouped.TryGetValue(mtHotelCode, out var supplierHotels))
+            {
+                supplierHotels = [];
+                grouped.Add(mtHotelCode, supplierHotels);
+            }
+
+            supplierHotels.Add(new SupHotelInfoDto
+            {
+                MTHotelCode = mtHotelCode,
+                SupId = row.SupId,
+                SContryCode = row.CountryCode?.Trim() ?? string.Empty,
+                SCityCode = row.CityCode?.Trim() ?? string.Empty,
+                SHotelCode = supplierHotelCode,
+                SHotelName = FirstNotEmpty(row.HotelNameEn, row.HotelName),
+                LV = 1
+            });
         }
 
-        return desired;
+        return grouped.ToDictionary(
+            pair => pair.Key,
+            pair => (IReadOnlyList<SupHotelInfoDto>)pair.Value
+                .OrderBy(hotel => hotel.SupId)
+                .ThenBy(hotel => hotel.SHotelCode, StringComparer.Ordinal)
+                .ToArray(),
+            StringComparer.Ordinal);
     }
 
     public static HotelMappingSyncPlan CreatePlan(
-        IReadOnlyDictionary<string, string> desired,
-        IReadOnlyDictionary<string, string> current)
+        IReadOnlyDictionary<string, IReadOnlyList<SupHotelInfoDto>> desired,
+        IReadOnlyDictionary<string, IReadOnlyList<SupHotelInfoDto>> current)
     {
         ArgumentNullException.ThrowIfNull(desired);
         ArgumentNullException.ThrowIfNull(current);
@@ -55,7 +81,7 @@ public static class HotelMappingSyncPlanner
                     null,
                     pair.Value));
             }
-            else if (!string.Equals(currentValue, pair.Value, StringComparison.Ordinal))
+            else if (!HaveSameSupplierHotels(currentValue, pair.Value))
             {
                 updated.Add(new HotelMappingSyncOperation(
                     HotelMappingSyncOperationType.Update,
@@ -78,5 +104,22 @@ public static class HotelMappingSyncPlanner
         }
 
         return new HotelMappingSyncPlan(added, updated, deleted);
+    }
+
+    static bool HaveSameSupplierHotels(
+        IReadOnlyList<SupHotelInfoDto> left,
+        IReadOnlyList<SupHotelInfoDto> right)
+    {
+        return left.OrderBy(Identity, StringComparer.Ordinal)
+            .SequenceEqual(right.OrderBy(Identity, StringComparer.Ordinal));
+    }
+
+    static string Identity(SupHotelInfoDto hotel) => $"{hotel.SupId}_{hotel.SHotelCode}";
+
+    static string FirstNotEmpty(string? preferred, string? fallback)
+    {
+        return !string.IsNullOrWhiteSpace(preferred)
+            ? preferred.Trim()
+            : fallback?.Trim() ?? string.Empty;
     }
 }

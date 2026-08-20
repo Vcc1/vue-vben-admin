@@ -7,7 +7,7 @@
         <TargetFramework>net10.0</TargetFramework>
         <ImplicitUsings>enable</ImplicitUsings>
         <DockerDefaultTargetOS>Linux</DockerDefaultTargetOS>
-        <DockerfileContext>..\..\..\..\..\MengtuV</DockerfileContext>
+        <DockerfileContext>..\..\..\..\..</DockerfileContext>
     </PropertyGroup>
 
     <ItemGroup>
@@ -28,7 +28,7 @@
     </ItemGroup>
 
     <ItemGroup>
-        <PackageReference Include="Microsoft.VisualStudio.Azure.Containers.Tools.Targets" Version="1.21.0" />
+        <PackageReference Include="Microsoft.VisualStudio.Azure.Containers.Tools.Targets" Version="1.23.0" />
         <PackageReference Include="VBase.AppMetrics" Version="1.0.5" />
     </ItemGroup>
 

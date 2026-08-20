@@ -1,7 +1,11 @@
+using Microsoft.Data.SqlClient;
+
 namespace Infrastructure.SupRoomInfoIngestion;
 
 public sealed class SqlSupRoomInfoBatchWriter : ISupRoomInfoBatchWriter
 {
+    const int DatabaseTimeoutSeconds = 5 * 60;
+
     readonly IServiceScopeFactory _scopeFactory;
     readonly SupRoomInfoIngestionMetrics _metrics;
     readonly ILogger<SqlSupRoomInfoBatchWriter> _logger;
@@ -20,12 +24,16 @@ public sealed class SqlSupRoomInfoBatchWriter : ISupRoomInfoBatchWriter
     {
         using var serviceScope = _scopeFactory.CreateScope();
         var dbContext = serviceScope.ServiceProvider.GetRequiredService<RoomMappingDbContext>();
+        ConfigureTimeouts(dbContext);
 
         try
         {
             using (_metrics.MeasureDuration("temp_bulk_insert_duration"))
             {
-                await dbContext.BulkInsertAsync(batch.ToList(), cancellationToken: cancellationToken);
+                await dbContext.BulkInsertAsync(
+                    batch.ToList(),
+                    bulkConfig: new BulkConfig { BulkCopyTimeout = DatabaseTimeoutSeconds },
+                    cancellationToken: cancellationToken);
             }
 
             _metrics.RecordPipelineStep("temp_bulk_insert", batch.Count);
@@ -34,6 +42,7 @@ public sealed class SqlSupRoomInfoBatchWriter : ISupRoomInfoBatchWriter
         {
             _metrics.RecordError("temp_bulk_insert");
             _logger.LogError(ex, "批量写入 TempSupRoomInfo2 失败。count={Count}", batch.Count);
+            await TryCleanupAfterFailureAsync();
             throw;
         }
 
@@ -50,6 +59,7 @@ public sealed class SqlSupRoomInfoBatchWriter : ISupRoomInfoBatchWriter
         {
             _metrics.RecordError("sync_stored_procedure");
             _logger.LogError(ex, "执行 SyncSupRoomInfoFromTemp2 失败。count={Count}", batch.Count);
+            await TryCleanupAfterFailureAsync();
             throw;
         }
 
@@ -66,9 +76,52 @@ public sealed class SqlSupRoomInfoBatchWriter : ISupRoomInfoBatchWriter
         {
             _metrics.RecordError("temp_table_cleanup");
             _logger.LogError(ex, "清理 TempSupRoomInfo2 失败。count={Count}", batch.Count);
+            await TryCleanupAfterFailureAsync();
             throw;
         }
 
         return batch.Count;
+    }
+
+    static void ConfigureTimeouts(RoomMappingDbContext dbContext)
+    {
+        dbContext.Database.SetCommandTimeout(DatabaseTimeoutSeconds);
+
+        if (dbContext.Database.GetDbConnection() is not SqlConnection sqlConnection)
+        {
+            return;
+        }
+
+        var connectionString = new SqlConnectionStringBuilder(sqlConnection.ConnectionString)
+        {
+            ConnectTimeout = DatabaseTimeoutSeconds,
+        };
+        sqlConnection.ConnectionString = connectionString.ConnectionString;
+    }
+
+    async Task TryCleanupAfterFailureAsync()
+    {
+        using var cleanupCancellation = new CancellationTokenSource(TimeSpan.FromSeconds(DatabaseTimeoutSeconds));
+        try
+        {
+            using var serviceScope = _scopeFactory.CreateScope();
+            var dbContext = serviceScope.ServiceProvider.GetRequiredService<RoomMappingDbContext>();
+            ConfigureTimeouts(dbContext);
+
+            using (_metrics.MeasureDuration("temp_table_cleanup_after_failure_duration"))
+            {
+                await dbContext.Database.ExecuteSqlRawAsync(
+                    "TRUNCATE TABLE TempSupRoomInfo2",
+                    cleanupCancellation.Token);
+            }
+
+            _metrics.RecordPipelineStep("temp_table_cleanup_after_failure", 1);
+            _logger.LogWarning("写入失败后已清理 TempSupRoomInfo2。");
+        }
+        catch (Exception cleanupException)
+        {
+            _metrics.RecordError("temp_table_cleanup_after_failure");
+            _logger.LogError(cleanupException, "写入失败后清理 TempSupRoomInfo2 仍然失败。");
+        }
     }
 }

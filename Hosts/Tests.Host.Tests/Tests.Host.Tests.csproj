@@ -19,6 +19,7 @@
 
   <ItemGroup>
     <ProjectReference Include="..\Tests.Host\Tests.Host.csproj" />
+    <ProjectReference Include="..\..\Providers\Infrastructure.Redis.HotelMatchingRedis\Infrastructure.Redis.HotelMatchingRedis.csproj" />
   </ItemGroup>
 
 </Project>

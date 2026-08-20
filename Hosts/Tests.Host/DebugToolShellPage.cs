@@ -10,7 +10,8 @@ internal static class DebugToolShellPage
         new("静态数据查询", "/supplier-static-data", "SD"),
         new("酒店匹配结果", "/hotel-match-results", "MR"),
         new("酒店重复候选", "/hotel-match-conflicts", "MC"),
-        new("酒店匹配投递", "/hotel-match-deliveries", "MD")
+        new("酒店匹配投递", "/hotel-match-deliveries", "MD"),
+        new("酒店 Redis 同步", "/hotel-match-redis-sync", "RS")
     ];
 
     public static string Render(string title, string activePath, string pageHtml)
@@ -244,7 +245,7 @@ internal static class DebugToolShellPage
             .host-shell {
                 height: auto;
                 min-height: 100vh;
-                grid-template-columns: 1fr;
+                grid-template-columns: minmax(0, 1fr);
                 overflow: visible;
             }
 

@@ -35,7 +35,7 @@ public sealed class HotelMappingRedisSyncWorker(
 
             var startedAt = DateTimeOffset.Now;
             _status = new HotelMappingRedisSyncStatus(
-                "running", startedAt, null, 0, 0, 0, 0, 0, 0, 0, null);
+                "running", "starting", startedAt, null, 0, 0, 0, 0, 0, 0, 0, 0, null);
             if (!_requests.Writer.TryWrite(true))
             {
                 _status = _status with
@@ -64,16 +64,19 @@ public sealed class HotelMappingRedisSyncWorker(
                 var progress = await runner.RunAsync(UpdateProgress, stoppingToken);
                 SetStatus(current => current with
                 {
-                    State = "succeeded",
+                    State = progress.Warning is null ? "succeeded" : "partial",
+                    Phase = "completed",
                     CompletedAt = DateTimeOffset.Now,
                     SourceCount = progress.SourceCount,
                     RedisCount = progress.RedisCount,
                     AddedCount = progress.AddedCount,
                     UpdatedCount = progress.UpdatedCount,
                     DeletedCount = progress.DeletedCount,
+                    AppliedCount = progress.AppliedCount,
                     QueuedCount = progress.QueuedCount,
                     PendingCount = progress.PendingCount,
-                    Error = null
+                    Error = null,
+                    Warning = progress.Warning
                 });
             }
             catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested)
@@ -87,7 +90,8 @@ public sealed class HotelMappingRedisSyncWorker(
                 {
                     State = "failed",
                     CompletedAt = DateTimeOffset.Now,
-                    Error = ex.Message
+                    Error = ex.Message,
+                    Warning = null
                 });
             }
         }
@@ -97,13 +101,16 @@ public sealed class HotelMappingRedisSyncWorker(
     {
         SetStatus(current => current with
         {
+            Phase = progress.Phase,
             SourceCount = progress.SourceCount,
             RedisCount = progress.RedisCount,
             AddedCount = progress.AddedCount,
             UpdatedCount = progress.UpdatedCount,
             DeletedCount = progress.DeletedCount,
+            AppliedCount = progress.AppliedCount,
             QueuedCount = progress.QueuedCount,
-            PendingCount = progress.PendingCount
+            PendingCount = progress.PendingCount,
+            Warning = progress.Warning
         });
     }
 

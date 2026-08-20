@@ -1,3 +1,4 @@
+using Infrastructure.Redis.HotelMatchingRedis;
 using Tests.Host.HotelMappingSync;
 
 namespace Tests.Host.Tests;
@@ -12,13 +13,12 @@ public sealed class HotelMappingSyncRunnerTests
             new HotelMappingSourceRow(51, "A", "MT-A"),
             new HotelMappingSourceRow(51, "B", "MT-B-NEW")
         ]);
-        var store = new FakeRedisStore(new Dictionary<string, string>
+        var store = new FakeRedisStore(new Dictionary<string, IReadOnlyList<SupHotelInfoDto>>
         {
-            ["51_B"] = "MT-B-OLD",
-            ["51_C"] = "MT-C"
+            ["MT-B-NEW"] = [Hotel("MT-B-NEW", 51, "B-OLD")],
+            ["MT-C"] = [Hotel("MT-C", 51, "C")]
         });
-        var queue = new FakeTriggerQueue();
-        var runner = new HotelMappingSyncRunner(source, store, queue);
+        var runner = new HotelMappingSyncRunner(source, store);
 
         var result = await runner.RunAsync(null, CancellationToken.None);
 
@@ -26,41 +26,45 @@ public sealed class HotelMappingSyncRunnerTests
         Assert.Equal(1, result.UpdatedCount);
         Assert.Equal(1, result.DeletedCount);
         Assert.Equal(3, result.QueuedCount);
-        Assert.Equal(0, result.PendingCount);
+        Assert.Equal(3, result.PendingCount);
         Assert.Equal(
             new Dictionary<string, string>
             {
-                ["51_A"] = "MT-A",
-                ["51_B"] = "MT-B-NEW"
+                ["MT-A"] = "A",
+                ["MT-B-NEW"] = "B"
             },
-            store.Mappings);
-        Assert.Equal(["MT-A", "MT-B-NEW", "MT-C"], queue.Messages);
+            store.Mappings.ToDictionary(
+                pair => pair.Key,
+                pair => Assert.Single(pair.Value).SHotelCode));
+        Assert.Equal(["MT-C", "MT-B-NEW", "MT-A"], store.PendingQueue);
+        Assert.Equal("MT-A", store.RightPop());
+        Assert.Equal("MT-B-NEW", store.RightPop());
+        Assert.Equal("MT-C", store.RightPop());
     }
 
     [Fact]
-    public async Task RunAsync_KeepsFailedDeliveryInOutboxAndReplaysItNextRun()
+    public async Task RunAsync_PreservesPendingListWithoutDuplicatingUnchangedMappings()
     {
         var source = new FakeSourceReader(
         [new HotelMappingSourceRow(51, "A", "MT-A")]);
-        var store = new FakeRedisStore(new Dictionary<string, string>());
-        var failingQueue = new FakeTriggerQueue { FailNext = true };
-        var firstRunner = new HotelMappingSyncRunner(source, store, failingQueue);
+        var store = new FakeRedisStore(
+            new Dictionary<string, IReadOnlyList<SupHotelInfoDto>>());
+        var firstRunner = new HotelMappingSyncRunner(source, store);
 
-        await Assert.ThrowsAsync<InvalidOperationException>(
-            () => firstRunner.RunAsync(null, CancellationToken.None));
+        var firstResult = await firstRunner.RunAsync(null, CancellationToken.None);
 
-        Assert.Equal("MT-A", store.Mappings["51_A"]);
-        Assert.Single(store.Outbox);
+        Assert.Equal("A", Assert.Single(store.Mappings["MT-A"]).SHotelCode);
+        Assert.Equal(["MT-A"], store.PendingQueue);
+        Assert.Equal(1, firstResult.QueuedCount);
+        Assert.Equal(1, firstResult.PendingCount);
 
-        var recoveredQueue = new FakeTriggerQueue();
-        var secondRunner = new HotelMappingSyncRunner(source, store, recoveredQueue);
+        var secondRunner = new HotelMappingSyncRunner(source, store);
         var result = await secondRunner.RunAsync(null, CancellationToken.None);
 
         Assert.Equal(0, result.AddedCount);
-        Assert.Equal(1, result.QueuedCount);
-        Assert.Equal(0, result.PendingCount);
-        Assert.Empty(store.Outbox);
-        Assert.Equal(["MT-A"], recoveredQueue.Messages);
+        Assert.Equal(0, result.QueuedCount);
+        Assert.Equal(1, result.PendingCount);
+        Assert.Equal(["MT-A"], store.PendingQueue);
     }
 
     [Fact]
@@ -68,18 +72,17 @@ public sealed class HotelMappingSyncRunnerTests
     {
         var source = new FakeSourceReader(
         [new HotelMappingSourceRow(51, "A", "MT-A")]);
-        var store = new FakeRedisStore(new Dictionary<string, string>
+        var store = new FakeRedisStore(new Dictionary<string, IReadOnlyList<SupHotelInfoDto>>
         {
-            ["51_A"] = "MT-A"
+            ["MT-A"] = [Hotel("MT-A", 51, "A")]
         });
-        var queue = new FakeTriggerQueue();
-        var runner = new HotelMappingSyncRunner(source, store, queue);
+        var runner = new HotelMappingSyncRunner(source, store);
 
         var result = await runner.RunAsync(null, CancellationToken.None);
 
         Assert.Equal(0, result.AddedCount + result.UpdatedCount + result.DeletedCount);
         Assert.Equal(0, result.QueuedCount);
-        Assert.Empty(queue.Messages);
+        Assert.Empty(store.PendingQueue);
     }
 
     sealed class FakeSourceReader(IReadOnlyList<HotelMappingSourceRow> rows)
@@ -92,18 +95,34 @@ public sealed class HotelMappingSyncRunnerTests
 
     sealed class FakeRedisStore : IHotelMappingRedisStore
     {
-        public FakeRedisStore(Dictionary<string, string> mappings)
+        public FakeRedisStore(
+            Dictionary<string, IReadOnlyList<SupHotelInfoDto>> mappings)
         {
-            Mappings = new Dictionary<string, string>(mappings, StringComparer.Ordinal);
+            Mappings = mappings.ToDictionary(
+                pair => pair.Key,
+                pair => (IReadOnlyList<SupHotelInfoDto>)pair.Value.ToArray(),
+                StringComparer.Ordinal);
         }
 
-        public Dictionary<string, string> Mappings { get; }
-        public Dictionary<string, HotelMappingOutboxEntry> Outbox { get; } = [];
+        public Dictionary<string, IReadOnlyList<SupHotelInfoDto>> Mappings { get; }
+        public List<string> PendingQueue { get; } = [];
 
-        public Task<IReadOnlyDictionary<string, string>> ReadMappingsAsync(
+        public HotelMappingRedisConnectionInfo GetConnectionInfo()
+            => new(0, []);
+
+        public Task<TimeSpan> PingAsync(CancellationToken cancellationToken)
+            => Task.FromResult(TimeSpan.Zero);
+
+        public Task<int> GetPendingQueueLengthAsync(CancellationToken cancellationToken)
+            => Task.FromResult(PendingQueue.Count);
+
+        public Task<IReadOnlyDictionary<string, IReadOnlyList<SupHotelInfoDto>>> ReadMappingsAsync(
             CancellationToken cancellationToken)
-            => Task.FromResult<IReadOnlyDictionary<string, string>>(
-                new Dictionary<string, string>(Mappings, StringComparer.Ordinal));
+            => Task.FromResult<IReadOnlyDictionary<string, IReadOnlyList<SupHotelInfoDto>>>(
+                Mappings.ToDictionary(
+                    pair => pair.Key,
+                    pair => (IReadOnlyList<SupHotelInfoDto>)pair.Value.ToArray(),
+                    StringComparer.Ordinal));
 
         public Task ApplyAsync(
             IReadOnlyList<HotelMappingSyncOperation> operations,
@@ -113,57 +132,39 @@ public sealed class HotelMappingSyncRunnerTests
             {
                 if (operation.Type == HotelMappingSyncOperationType.Delete)
                 {
-                    Mappings.Remove(operation.Field);
+                    Mappings.Remove(operation.MTHotelCode);
                 }
                 else
                 {
-                    Mappings[operation.Field] = operation.NewValue!;
+                    Mappings[operation.MTHotelCode] =
+                        operation.NewSupplierHotels!.ToArray();
                 }
 
-                var id = Guid.NewGuid().ToString("N");
-                Outbox[id] = new HotelMappingOutboxEntry(
-                    id,
-                    operation.Type,
-                    operation.Field,
-                    operation.OldValue,
-                    operation.NewValue,
-                    operation.QueueValue,
-                    DateTimeOffset.Now);
+                PendingQueue.Insert(0, operation.MTHotelCode);
             }
 
             return Task.CompletedTask;
         }
 
-        public Task<IReadOnlyList<HotelMappingOutboxEntry>> ReadOutboxAsync(
-            CancellationToken cancellationToken)
-            => Task.FromResult<IReadOnlyList<HotelMappingOutboxEntry>>(
-                Outbox.Values.OrderBy(entry => entry.CreatedAt).ToArray());
-
-        public Task AcknowledgeOutboxAsync(
-            string id,
-            CancellationToken cancellationToken)
+        public string? RightPop()
         {
-            Outbox.Remove(id);
-            return Task.CompletedTask;
-        }
-    }
-
-    sealed class FakeTriggerQueue : IHotelMappingQueueWriter
-    {
-        public List<string> Messages { get; } = [];
-        public bool FailNext { get; init; }
-
-        public Task EnqueueAsync(
-            string mtHotelCode,
-            CancellationToken cancellationToken)
-        {
-            if (FailNext && Messages.Count == 0)
+            if (PendingQueue.Count == 0)
             {
-                throw new InvalidOperationException("Queue unavailable.");
+                return null;
             }
 
-            Messages.Add(mtHotelCode);
-            return Task.CompletedTask;
+            var index = PendingQueue.Count - 1;
+            var value = PendingQueue[index];
+            PendingQueue.RemoveAt(index);
+            return value;
         }
     }
+
+    static SupHotelInfoDto Hotel(string mtHotelCode, int supId, string supplierHotelCode)
+        => new()
+        {
+            MTHotelCode = mtHotelCode,
+            SupId = supId,
+            SHotelCode = supplierHotelCode
+        };
 }

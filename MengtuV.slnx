@@ -96,6 +96,7 @@
     <Project Path="Providers/Infrastructure.HTTP.QueryPrice/Infrastructure.HTTP.QueryPrice.csproj" />
     <Project Path="Providers/Infrastructure.HTTP.SupStaticData/Infrastructure.HTTP.SupStaticData.csproj" Id="f8ad0402-711b-42ab-9c53-7b979733f0f2" />
     <Project Path="Providers/Infrastructure.HTTP.WorkWechatAlert/Infrastructure.HTTP.WorkWechatAlert.csproj" />
+    <Project Path="Providers/Infrastructure.Redis.HotelMatchingRedis/Infrastructure.Redis.HotelMatchingRedis.csproj" />
     <Project Path="Providers/Infrastructure.Redis.RoomMatchingRedis/Infrastructure.Redis.RoomMatchingRedis.csproj" Id="c5478d2c-1836-4673-9d51-30de376f8c62" />
     <Project Path="Providers/Infrastructure.Redis.SupPriceCahce/Infrastructure.Redis.SupPriceCahce.csproj" />
     <Project Path="Providers/Infrastructure.Redis.SupRoomInfo.CachePriceDiscovery/Infrastructure.Redis.SupRoomInfo.CachePriceDiscovery.csproj" />

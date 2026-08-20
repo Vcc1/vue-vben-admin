@@ -28,6 +28,7 @@
     <ProjectReference Include="..\..\Models\Hotel\SupplierStaticData\SupplierStaticData.App\SupplierStaticData.App.csproj" />
     <ProjectReference Include="..\..\Models\Base\Shared\OTA.Domain\OTA.Domain.csproj" />
     <ProjectReference Include="..\..\Providers\Infrastructure.SupplierStaticData\Infrastructure.SupplierStaticData.csproj" />
+    <ProjectReference Include="..\..\Providers\Infrastructure.Redis.HotelMatchingRedis\Infrastructure.Redis.HotelMatchingRedis.csproj" />
     <ProjectReference Include="..\..\Providers\Infrastructure.Sql.RoomMapping\Infrastructure.Sql.RoomMapping.csproj" />
   </ItemGroup>
 

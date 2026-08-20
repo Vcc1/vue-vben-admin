@@ -3,6 +3,7 @@ using HotelMatchingPipeline.App;
 using HotelMatchingPipeline.Infra;
 using HotelMatchingPipeline.Domain.Hotels;
 using Infrastructure.SupplierStaticData;
+using Infrastructure.Redis.HotelMatchingRedis;
 using MengTu.Connectmate.Client;
 using MengTu.Connectmate.Client.Tool;
 using Microsoft.AspNetCore.Builder;
@@ -38,6 +39,11 @@ Directory.SetCurrentDirectory(AppContext.BaseDirectory);
 var builder = WebApplication.CreateBuilder(args);
 builder.Logging.ClearProviders();
 builder.Logging.AddNLog("Configs/nlog.config");
+builder.Logging.AddFilter("Microsoft.AspNetCore", LogLevel.Warning);
+builder.Logging.AddFilter("MengTu.Connectmate.Client", LogLevel.Warning);
+builder.Logging.AddFilter(
+    "System.Net.Http.HttpClient.IConnectmateConfigurationPullClient",
+    LogLevel.Warning);
 
 builder.Services.AddHttpClient();
 builder.Services.AddLogging();
@@ -45,7 +51,10 @@ builder.Services.AddHealthChecks();
 builder.Services.AddScoped<EFLoggerProvider>();
 builder.Services.AddScoped<ILogContextService, LogContextService>();
 builder.Services.AddConnectmateDatabaseSerializer<ConnectmateFallbackSerializer>();
-builder.Services.AddConnectmateRemoteConfiguration(builder.Configuration);
+if (!builder.Configuration.GetValue<bool>("Connectmate:SkipRemoteConfiguration"))
+{
+    builder.Services.AddConnectmateRemoteConfiguration(builder.Configuration);
+}
 builder.Services.Configure<JsonOptions>(options =>
 {
     var json = options.SerializerOptions;
@@ -60,8 +69,6 @@ builder.Services.AddBusiness([typeof(RoomMappingDbContext).Assembly]);
 builder.Services.AddHotelMatchingApplication(builder.Configuration);
 builder.Services.AddHotelMatchingInfrastructure(builder.Configuration);
 builder.Services.AddScoped<IHotelMappingSourceReader, HotelMappingSourceReader>();
-builder.Services.AddSingleton<IHotelMappingRedisStore, HotelMappingRedisStore>();
-builder.Services.AddSingleton<IHotelMappingQueueWriter, HotelMappingQueueWriter>();
 builder.Services.AddScoped<HotelMappingSyncRunner>();
 builder.Services.AddSingleton<HotelMappingRedisSyncWorker>();
 builder.Services.AddHostedService(provider => provider.GetRequiredService<HotelMappingRedisSyncWorker>());
@@ -100,9 +107,32 @@ app.MapGet("/hotel-match-conflicts", () => Results.Content(
 app.MapGet("/hotel-match-deliveries", () => Results.Content(
     DebugToolShellPage.Render("酒店匹配投递", "/hotel-match-deliveries", HotelMatchDataPage.Html),
     "text/html; charset=utf-8"));
+app.MapGet("/hotel-match-redis-sync", () => Results.Content(
+    DebugToolShellPage.Render("酒店 Redis 同步", "/hotel-match-redis-sync", HotelMappingRedisSyncPage.Html),
+    "text/html; charset=utf-8"));
 
 app.MapPost("/api/query", ExecuteQueryAsync);
 app.MapPost("/api/room-match/evaluate", EvaluateRoomMatchAsync);
+app.MapPost("/api/hotel-mapping-redis-sync", (HotelMappingRedisSyncWorker worker) =>
+    worker.TryStart(out var status)
+        ? Results.Accepted(value: status)
+        : Results.Conflict(status));
+app.MapGet("/api/hotel-mapping-redis-sync/status", (HotelMappingRedisSyncWorker worker) =>
+    Results.Ok(worker.GetStatus()));
+app.MapGet("/api/hotel-mapping-redis-sync/connection", async (
+    IHotelMappingRedisStore redisStore,
+    CancellationToken cancellationToken) =>
+{
+    var mappingLatency = await redisStore.PingAsync(cancellationToken);
+    var connectionInfo = redisStore.GetConnectionInfo();
+    return Results.Ok(new
+    {
+        connected = true,
+        latencyMilliseconds = mappingLatency.TotalMilliseconds,
+        database = connectionInfo.Database,
+        endpoints = connectionInfo.Endpoints
+    });
+});
 app.MapControllers();
 app.MapHealthChecks("/alive");
 

@@ -1,7 +1,7 @@
 using HotelMatchingPipeline.App.Contracts;
 using HotelMatchingPipeline.Infra.Sql;
 using HotelMatchingPipeline.Infra.ThirdParty;
-using HotelMatchingPipeline.Infra.Redis;
+using Infrastructure.Redis.HotelMatchingRedis;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 
@@ -22,7 +22,7 @@ public static class ServiceCollectionExtensions
         services.AddScoped<IHotelMatchPipelineRepository>(provider => provider.GetRequiredService<RoomMappingHotelRepository>());
         services.AddScoped<IHotelMatchingRepository>(provider => provider.GetRequiredService<RoomMappingHotelRepository>());
         services.AddScoped<IHotelMatchDeliveryRepository>(provider => provider.GetRequiredService<RoomMappingHotelRepository>());
-        services.AddSingleton<IHotelMatchCache, HotelMatchRedisCache>();
+        services.AddHotelMatchingRedis();
 
         services.AddOptions<ThirdPartyHotelMatchOptions>()
             .Bind(configuration.GetSection(ThirdPartyHotelMatchOptions.SectionName));

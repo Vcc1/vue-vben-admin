@@ -1,9 +1,9 @@
 namespace Tests.Host.HotelMappingSync;
 
+using Infrastructure.Redis.HotelMatchingRedis;
 public sealed class HotelMappingSyncRunner(
     IHotelMappingSourceReader sourceReader,
-    IHotelMappingRedisStore redisStore,
-    IHotelMappingQueueWriter queueWriter)
+    IHotelMappingRedisStore redisStore)
 {
     const int RedisBatchSize = 500;
 
@@ -11,18 +11,32 @@ public sealed class HotelMappingSyncRunner(
         Action<HotelMappingSyncProgress>? progressChanged,
         CancellationToken cancellationToken)
     {
-        var progress = new HotelMappingSyncProgress();
-        progress = await DeliverOutboxAsync(progress, progressChanged, cancellationToken);
+        var progress = new HotelMappingSyncProgress(Phase: "preparingQueue");
+        progressChanged?.Invoke(progress);
+        var pendingCount = await redisStore.GetPendingQueueLengthAsync(cancellationToken);
+        progress = progress with { PendingCount = pendingCount };
+        progressChanged?.Invoke(progress);
 
+        progress = progress with { Phase = "loadingSource" };
+        progressChanged?.Invoke(progress);
         var sourceRows = await sourceReader.ReadAsync(cancellationToken);
         var desired = HotelMappingSyncPlanner.BuildDesiredMappings(sourceRows);
+
+        progress = progress with
+        {
+            Phase = "readingRedis",
+            SourceCount = desired.Count
+        };
+        progressChanged?.Invoke(progress);
         var current = await redisStore.ReadMappingsAsync(cancellationToken);
+
+        progress = progress with { Phase = "planning", RedisCount = current.Count };
+        progressChanged?.Invoke(progress);
         var plan = HotelMappingSyncPlanner.CreatePlan(desired, current);
 
         progress = progress with
         {
-            SourceCount = desired.Count,
-            RedisCount = current.Count,
+            Phase = "writingRedis",
             AddedCount = plan.Added.Count,
             UpdatedCount = plan.Updated.Count,
             DeletedCount = plan.Deleted.Count
@@ -32,33 +46,17 @@ public sealed class HotelMappingSyncRunner(
         foreach (var batch in plan.Operations.Chunk(RedisBatchSize))
         {
             await redisStore.ApplyAsync(batch, cancellationToken);
-        }
-
-        progress = await DeliverOutboxAsync(progress, progressChanged, cancellationToken);
-        return progress;
-    }
-
-    async Task<HotelMappingSyncProgress> DeliverOutboxAsync(
-        HotelMappingSyncProgress progress,
-        Action<HotelMappingSyncProgress>? progressChanged,
-        CancellationToken cancellationToken)
-    {
-        var entries = await redisStore.ReadOutboxAsync(cancellationToken);
-        progress = progress with { PendingCount = entries.Count };
-        progressChanged?.Invoke(progress);
-
-        foreach (var entry in entries)
-        {
-            await queueWriter.EnqueueAsync(entry.QueueValue, cancellationToken);
-            await redisStore.AcknowledgeOutboxAsync(entry.Id, cancellationToken);
             progress = progress with
             {
-                QueuedCount = progress.QueuedCount + 1,
-                PendingCount = progress.PendingCount - 1
+                AppliedCount = progress.AppliedCount + batch.Length,
+                QueuedCount = progress.QueuedCount + batch.Length,
+                PendingCount = progress.PendingCount + batch.Length
             };
             progressChanged?.Invoke(progress);
         }
 
+        progress = progress with { Phase = "completed" };
+        progressChanged?.Invoke(progress);
         return progress;
     }
 }
