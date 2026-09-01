@@ -115,10 +115,54 @@ public sealed class OtaRoomBuilderRepository : IOtaRoomBuilderRepository
         }
 
         var supIdFilter = BuildSupIdFilter(enabledSupIds);
+        return await LoadSupplierRoomsCoreAsync(
+            hotelCodeParameter,
+            $" AND a.SupId IN ({supIdFilter})",
+            lastDaysOffset,
+            cancellationToken);
+    }
+
+    public async Task<IReadOnlyList<SupRoomInfo>> LoadAiSupplierRoomsAsync(
+        IReadOnlyCollection<string> hotelCodes,
+        int? lastDaysOffset,
+        CancellationToken cancellationToken)
+    {
+        _dbContext.Database.SetCommandTimeout(TimeSpan.FromMinutes(3));
+        var hotelCodeParameter = CreateHotelCodesParameter(hotelCodes);
+        if (hotelCodeParameter is null)
+        {
+            return [];
+        }
+
+        return await LoadSupplierRoomsCoreAsync(
+            hotelCodeParameter,
+            supplierFilter: string.Empty,
+            lastDaysOffset,
+            cancellationToken);
+    }
+
+    async Task<IReadOnlyList<SupRoomInfo>> LoadSupplierRoomsCoreAsync(
+        SqlParameter hotelCodeParameter,
+        string supplierFilter,
+        int? lastDaysOffset,
+        CancellationToken cancellationToken)
+    {
+        var sql = BuildSupplierRoomsQuery(supplierFilter, lastDaysOffset);
+
+        var rows = await _dbContext.Database
+            .SqlQueryRaw<SupplierRoomRow>(sql, hotelCodeParameter)
+            .ToListAsync(cancellationToken);
+
+        return rows.Select(MapSupplierRoom).ToList();
+    }
+
+    internal static string BuildSupplierRoomsQuery(string supplierFilter, int? lastDaysOffset)
+    {
         var lastDaysFilter = lastDaysOffset.HasValue
             ? $" AND a.LastUpdate_Date >= DATEADD(DAY, {lastDaysOffset.Value}, GETDATE())"
             : string.Empty;
-        var sql = $"""
+
+        return $"""
             SELECT
                 a.Id,
                 a.SupId,
@@ -127,20 +171,21 @@ public sealed class OtaRoomBuilderRepository : IOtaRoomBuilderRepository
                 a.MTHotelCode,
                 a.SRoomName_CN AS SRoomNameCN,
                 a.SRoomName_EN AS SRoomNameEN,
+                a.BedInfo,
+                a.AcreageFrom,
+                a.AcreageTo,
                 a.SmokeType,
                 a.MaxAdt
             FROM dbo.SupRoomInfo AS a WITH (NOLOCK)
             WHERE a.MTHotelCode IN (SELECT Value FROM @MTHotelCodes)
-              AND a.SupId IN ({supIdFilter})
+              {supplierFilter}
               {lastDaysFilter}
             OPTION (RECOMPILE);
             """;
+    }
 
-        var rows = await _dbContext.Database
-            .SqlQueryRaw<SupplierRoomRow>(sql, hotelCodeParameter)
-            .ToListAsync(cancellationToken);
-
-        return rows.Select(static row => new SupRoomInfo
+    internal static SupRoomInfo MapSupplierRoom(SupplierRoomRow row)
+        => new()
         {
             Id = row.Id,
             SupId = row.SupId,
@@ -149,12 +194,13 @@ public sealed class OtaRoomBuilderRepository : IOtaRoomBuilderRepository
             MTHotelCode = row.MTHotelCode,
             SRoomNameCN = row.SRoomNameCN,
             SRoomNameEN = row.SRoomNameEN,
+            BedInfo = row.BedInfo ?? string.Empty,
+            AcreageFrom = row.AcreageFrom,
+            AcreageTo = row.AcreageTo,
             SmokeType = row.SmokeType,
             MaxAdt = row.MaxAdt,
-            BedInfoKey = string.Empty,
-            BedInfo = string.Empty
-        }).ToList();
-    }
+            BedInfoKey = string.Empty
+        };
 
     public async Task<IReadOnlyList<OTARoomInfo>> LoadOtaRoomsAsync(
         IReadOnlyCollection<string> hotelCodes,
@@ -245,7 +291,7 @@ public sealed class OtaRoomBuilderRepository : IOtaRoomBuilderRepository
         public int Id { get; set; }
     }
 
-    sealed class SupplierRoomRow
+    internal sealed class SupplierRoomRow
     {
         public int Id { get; set; }
 
@@ -260,6 +306,12 @@ public sealed class OtaRoomBuilderRepository : IOtaRoomBuilderRepository
         public string SRoomNameCN { get; set; } = string.Empty;
 
         public string? SRoomNameEN { get; set; }
+
+        public string? BedInfo { get; set; }
+
+        public decimal? AcreageFrom { get; set; }
+
+        public decimal? AcreageTo { get; set; }
 
         public int? SmokeType { get; set; }
 

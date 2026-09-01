@@ -9,6 +9,10 @@
   </PropertyGroup>
 
   <ItemGroup>
+    <Compile Remove="Tests\**\*.cs" />
+  </ItemGroup>
+
+  <ItemGroup>
     <PackageReference Include="Cronos" Version="0.11.1" />
     <PackageReference Include="EFCore.BulkExtensions.SqlServer" Version="9.0.2" />
     <PackageReference Include="Microsoft.Extensions.Http" Version="10.0.0" />
@@ -20,6 +24,8 @@
     <ProjectReference Include="..\..\Core\RoomMatch.Domain\RoomMatch.Domain.csproj" />
     <ProjectReference Include="..\..\Core\RoomMatch.Core.App\RoomMatch.Core.App.csproj" />
     <ProjectReference Include="..\..\..\..\..\Providers\Infrastructure.Sql.RoomMapping\Infrastructure.Sql.RoomMapping.csproj" />
+    <ProjectReference Include="..\..\..\..\..\Models\AI\AgentPlatform\AgentPlatform.Contracts\AgentPlatform.Contracts.csproj" />
+    <ProjectReference Include="..\..\..\..\..\Models\Hotel\HotelResearch\HotelResearch.Contracts\HotelResearch.Contracts.csproj" />
   </ItemGroup>
 
 </Project>

@@ -1,5 +1,7 @@
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
+using OTARoomBuilder.AI;
+using OTARoomBuilder.Contracts;
 
 namespace OTARoomBuilder;
 
@@ -26,6 +28,7 @@ public static class ServiceCollectionExtensions
             .ValidateOnStart();
 
         services.AddSingleton<OTARoomBuilderMetrics>();
+        services.AddScoped<IAiRoomBuilder, MafAiRoomBuilder>();
         services.AddScoped<OTARoomBuilderProcessor>();
         services.AddHostedService<OTARoomBuilderWorker>();
 

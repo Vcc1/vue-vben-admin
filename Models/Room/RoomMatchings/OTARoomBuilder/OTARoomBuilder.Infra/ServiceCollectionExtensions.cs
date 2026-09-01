@@ -12,6 +12,7 @@ public static class ServiceCollectionExtensions
         ArgumentNullException.ThrowIfNull(services);
 
         services.AddScoped<IOtaRoomBuilderRepository, OtaRoomBuilderRepository>();
+        services.AddScoped<IAiRoomAuditRepository, OtaRoomAiAuditRepository>();
         services.AddScoped<ISupplierRoomBuildPlugin, EanSupplierRoomBuildPlugin>();
         services.AddScoped<ISupplierRoomBuildPlugin, WordRuleSupplierRoomBuildPlugin>();
         services.AddScoped<ISupplierRoomBuildPlugin>(services => new StaticDataSupplierRoomBuildPlugin(

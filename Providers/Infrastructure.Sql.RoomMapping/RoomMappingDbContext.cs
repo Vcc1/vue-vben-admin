@@ -98,6 +98,8 @@ public class RoomMappingDbContext : DbContext
     public DbSet<AgodaHotelRoomSource> AgodaHotelRoomSources { get; set; }
     public DbSet<AgodaRoomMapSource> AgodaRoomMapSources { get; set; }
     public DbSet<AgodaSupRoomMatchResult> AgodaSupRoomMatchResults { get; set; }
+    public DbSet<OtaRoomAiDecision> OtaRoomAiDecisions { get; set; }
+    public DbSet<OtaRoomAiCreateFailure> OtaRoomAiCreateFailures { get; set; }
     public DbSet<SqllabSuperaggRoomMappingSt> SqllabSuperaggRoomMappingSts { get; set; }
 }
 

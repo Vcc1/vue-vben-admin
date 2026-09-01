@@ -19,6 +19,7 @@
 
   <ItemGroup>
     <ProjectReference Include="..\HotelMatchingPipeline.Domain\HotelMatchingPipeline.Domain.csproj" />
+    <ProjectReference Include="..\..\..\HotelResearch\HotelResearch.Contracts\HotelResearch.Contracts.csproj" />
   </ItemGroup>
 
 </Project>

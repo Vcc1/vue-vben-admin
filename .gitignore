@@ -149,3 +149,4 @@ tmp/
 .qoder/
 .artifacts/
 .codex-build/
+Hosts/Agent.Host/App_Data/

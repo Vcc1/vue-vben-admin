@@ -1,0 +1,30 @@
+<Project Sdk="Microsoft.NET.Sdk.Web">
+
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <UserSecretsId>ca4c5f83-f4ba-46e5-8874-f8e5278b6d57</UserSecretsId>
+    <DockerDefaultTargetOS>Linux</DockerDefaultTargetOS>
+    <DockerfileContext>..\..</DockerfileContext>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\Models\AI\AgentPlatform\AgentPlatform.Api\AgentPlatform.Api.csproj" />
+    <ProjectReference Include="..\..\Models\AI\AgentPlatform\AgentPlatform.App\AgentPlatform.App.csproj" />
+    <ProjectReference Include="..\..\Models\AI\AgentPlatform\AgentPlatform.Infra\AgentPlatform.Infra.csproj" />
+    <ProjectReference Include="..\..\Models\Hotel\HotelResearch\HotelResearch.Api\HotelResearch.Api.csproj" />
+    <ProjectReference Include="..\..\Models\Hotel\HotelResearch\HotelResearch.App\HotelResearch.App.csproj" />
+    <ProjectReference Include="..\..\Models\Hotel\HotelResearch\HotelResearch.Infra\HotelResearch.Infra.csproj" />
+    <ProjectReference Include="..\..\Models\Hotel\HotelBusiness\HotelBusiness.Api\HotelBusiness.Api.csproj" />
+    <ProjectReference Include="..\..\Models\Hotel\HotelBusiness\HotelBusiness.App\HotelBusiness.App.csproj" />
+    <ProjectReference Include="..\..\Models\Hotel\HotelBusiness\HotelBusiness.Infra\HotelBusiness.Infra.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Reference Include="MengTu.Connectmate.Client">
+      <HintPath>..\..\999.DLL\Connectmate\net10.0\MengTu.Connectmate.Client.dll</HintPath>
+    </Reference>
+  </ItemGroup>
+
+</Project>

@@ -4,5 +4,14 @@ namespace OTARoomBuilder.Contracts;
 
 public interface IOtaRoomCreateClient
 {
-    Task PostAsync(IReadOnlyList<OTARoomInfoPre> rooms, CancellationToken cancellationToken);
+    Task<IReadOnlyList<RoomCreateResult>> PostAsync(
+        IReadOnlyList<OTARoomInfoPre> rooms,
+        CancellationToken cancellationToken);
 }
+
+public sealed record RoomCreateResult(
+    int SupplierRoomId,
+    string MTHotelCode,
+    bool Succeeded,
+    int Attempts,
+    string? Error);

@@ -33,6 +33,8 @@
     <ProjectReference Include="..\..\..\..\..\Providers\Infrastructure.HTTP.OTARoomCreate\Infrastructure.HTTP.OTARoomCreate.csproj" />
     <ProjectReference Include="..\..\..\..\..\Providers\Infrastructure.SupplierStaticData\Infrastructure.SupplierStaticData.csproj" />
     <ProjectReference Include="..\..\Core\RoomMatch.Infra\RoomMatch.Infra.csproj" />
+    <ProjectReference Include="..\..\..\..\..\Models\AI\AgentPlatform\AgentPlatform.Client\AgentPlatform.Client.csproj" />
+    <ProjectReference Include="..\..\..\..\..\Models\Hotel\HotelResearch\HotelResearch.Client\HotelResearch.Client.csproj" />
   </ItemGroup>
 
   <ItemGroup>

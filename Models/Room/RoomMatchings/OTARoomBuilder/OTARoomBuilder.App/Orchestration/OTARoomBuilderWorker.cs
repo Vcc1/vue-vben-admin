@@ -17,6 +17,7 @@ public sealed partial class OTARoomBuilderWorker : BackgroundService
     readonly Channel<HotelBuildQueueItem> _hotelBuildChannel;
     readonly Channel<StaticDataQueueItem> _staticDataChannel;
     readonly Channel<RoomCreateQueueItem> _roomCreateChannel;
+    readonly Channel<AiRoomQueueItem> _aiRoomChannel;
     int _activeStaticDataTasks;
 
     public OTARoomBuilderWorker(
@@ -37,6 +38,7 @@ public sealed partial class OTARoomBuilderWorker : BackgroundService
         _hotelBuildChannel = Channel.CreateBounded<HotelBuildQueueItem>(CreateBoundedOptions(ClampQueueCapacity(options.CurrentValue.HotelBuildQueueCapacity)));
         _staticDataChannel = Channel.CreateBounded<StaticDataQueueItem>(CreateBoundedOptions(ClampQueueCapacity(options.CurrentValue.StaticDataQueueCapacity)));
         _roomCreateChannel = Channel.CreateBounded<RoomCreateQueueItem>(CreateBoundedOptions(ClampQueueCapacity(options.CurrentValue.RoomCreateQueueCapacity)));
+        _aiRoomChannel = Channel.CreateBounded<AiRoomQueueItem>(CreateBoundedOptions(ClampQueueCapacity(options.CurrentValue.AiRoomQueueCapacity)));
     }
 
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
@@ -50,8 +52,9 @@ public sealed partial class OTARoomBuilderWorker : BackgroundService
         var matcher = RunMatcherAsync(stoppingToken);
         var staticDataLoader = RunStaticDataAsync(stoppingToken);
         var creator = RunCreatorAsync(stoppingToken);
+        var aiRoomBuilder = RunAiRoomAsync(stoppingToken);
 
-        await Task.WhenAll(fullSyncProducer, incrementalProducer, hotelLoader, matcher, staticDataLoader, creator);
+        await Task.WhenAll(fullSyncProducer, incrementalProducer, hotelLoader, matcher, staticDataLoader, creator, aiRoomBuilder);
     }
 
     static TimeSpan GetNextDelay(string cronText)
@@ -82,22 +85,31 @@ public sealed partial class OTARoomBuilderWorker : BackgroundService
         public static HotelBuildQueueItem ForCompletion(TaskCompletionSource completion) => new(null, null, completion);
     }
 
-    sealed record StaticDataQueueItem(HotelRoomMatchResult? MatchResult, string? OutputMode, TaskCompletionSource? Completion)
+    sealed record StaticDataQueueItem(HotelRoomBuildContext? Hotel, HotelRoomMatchResult? MatchResult, string? OutputMode, TaskCompletionSource? Completion)
     {
-        public static StaticDataQueueItem ForHotel(HotelRoomMatchResult matchResult, string outputMode)
-            => new(matchResult, outputMode, null);
+        public static StaticDataQueueItem ForHotel(HotelRoomBuildContext hotel, HotelRoomMatchResult matchResult, string outputMode)
+            => new(hotel, matchResult, outputMode, null);
 
         public static StaticDataQueueItem ForCompletion(TaskCompletionSource completion)
-            => new(null, null, completion);
+            => new(null, null, null, completion);
     }
 
-    sealed record RoomCreateQueueItem(List<Infrastructure.Sql.RoomMapping.Entitys.OTARoomInfoPre>? Rooms, string? OutputMode, TaskCompletionSource? Completion)
+    sealed record RoomCreateQueueItem(HotelRoomBuildContext? Hotel, List<Infrastructure.Sql.RoomMapping.Entitys.OTARoomInfoPre>? Rooms, string? OutputMode, TaskCompletionSource? Completion)
     {
-        public static RoomCreateQueueItem ForHotel(List<Infrastructure.Sql.RoomMapping.Entitys.OTARoomInfoPre> rooms, string outputMode)
-            => new(rooms, outputMode, null);
+        public static RoomCreateQueueItem ForHotel(HotelRoomBuildContext hotel, List<Infrastructure.Sql.RoomMapping.Entitys.OTARoomInfoPre> rooms, string outputMode)
+            => new(hotel, rooms, outputMode, null);
 
         public static RoomCreateQueueItem ForCompletion(TaskCompletionSource completion)
-            => new(null, null, completion);
+            => new(null, null, null, completion);
+    }
+
+    sealed record AiRoomQueueItem(HotelRoomBuildContext? Hotel, IReadOnlySet<int>? SuccessfullyCreatedSupplierRoomIds, string? OutputMode, TaskCompletionSource? Completion)
+    {
+        public static AiRoomQueueItem ForHotel(HotelRoomBuildContext hotel, IReadOnlySet<int> successfullyCreatedSupplierRoomIds, string outputMode)
+            => new(hotel, successfullyCreatedSupplierRoomIds, outputMode, null);
+
+        public static AiRoomQueueItem ForCompletion(TaskCompletionSource completion)
+            => new(null, null, null, completion);
     }
 
     static BoundedChannelOptions CreateBoundedOptions(int capacity)

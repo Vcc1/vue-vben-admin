@@ -4,6 +4,7 @@ using HotelMatchingPipeline.Domain.Hotels;
 using HotelMatchingPipeline.Domain.HotelNameMatching;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.DependencyInjection.Extensions;
 
 namespace HotelMatchingPipeline.App;
 
@@ -13,25 +14,65 @@ public static class ServiceCollectionExtensions
         this IServiceCollection services,
         IConfiguration configuration)
     {
-        services.AddOptions<HotelCleaningOptions>()
-            .Bind(configuration.GetSection(HotelCleaningOptions.SectionName))
-            .ValidateDataAnnotations();
-        services.AddOptions<HotelMatchingOptions>()
-            .Bind(configuration.GetSection(HotelMatchingOptions.SectionName))
-            .ValidateDataAnnotations();
+        AddSharedHotelServices(services, configuration);
+        AddHotelCleaningServicesCore(services, configuration);
+        AddHotelMatchingServicesCore(services, configuration);
+        return services;
+    }
+
+    public static IServiceCollection AddHotelCleaningServices(
+        this IServiceCollection services,
+        IConfiguration configuration)
+    {
+        AddSharedHotelServices(services, configuration);
+        AddHotelCleaningServicesCore(services, configuration);
+        return services;
+    }
+
+    public static IServiceCollection AddHotelMatchingServices(
+        this IServiceCollection services,
+        IConfiguration configuration)
+    {
+        AddSharedHotelServices(services, configuration);
+        AddHotelMatchingServicesCore(services, configuration);
+        return services;
+    }
+
+    static void AddSharedHotelServices(
+        IServiceCollection services,
+        IConfiguration configuration)
+    {
         services.AddOptions<HotelStarLevelOptions>()
             .Bind(configuration.GetSection(HotelStarLevelOptions.SectionName))
             .ValidateDataAnnotations();
-        services.AddSingleton<HotelNameMatcher>();
-        services.AddSingleton<IHotelPhoneNormalizer, LibPhoneNumberNormalizer>();
-        services.AddSingleton<IHotelStarLevelConverter, ConfiguredSupplierStarLevelConverter>();
-        services.AddSingleton<IHotelStarLevelNormalizer, HotelStarLevelNormalizer>();
-        services.AddSingleton<HotelMatchEvaluator>();
-        services.AddSingleton<HotelFactMatchEvaluator>();
+        services.TryAddSingleton<HotelNameMatcher>();
+        services.TryAddSingleton<IHotelPhoneNormalizer, LibPhoneNumberNormalizer>();
+        services.TryAddEnumerable(
+            ServiceDescriptor.Singleton<IHotelStarLevelConverter, ConfiguredSupplierStarLevelConverter>());
+        services.TryAddSingleton<IHotelStarLevelNormalizer, HotelStarLevelNormalizer>();
+    }
+
+    static void AddHotelCleaningServicesCore(
+        IServiceCollection services,
+        IConfiguration configuration)
+    {
+        services.AddOptions<HotelCleaningOptions>()
+            .Bind(configuration.GetSection(HotelCleaningOptions.SectionName))
+            .ValidateDataAnnotations();
         services.AddScoped<HotelCleaner>();
         services.AddScoped<HotelCleaningService>();
+    }
+
+    static void AddHotelMatchingServicesCore(
+        IServiceCollection services,
+        IConfiguration configuration)
+    {
+        services.AddOptions<HotelMatchingOptions>()
+            .Bind(configuration.GetSection(HotelMatchingOptions.SectionName))
+            .ValidateDataAnnotations();
+        services.AddSingleton<HotelMatchEvaluator>();
+        services.AddSingleton<HotelFactMatchEvaluator>();
         services.AddScoped<HotelMatchingService>();
         services.AddScoped<HotelDebugService>();
-        return services;
     }
 }

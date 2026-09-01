@@ -22,6 +22,11 @@ public interface IOtaRoomBuilderRepository
         int? lastDaysOffset,
         CancellationToken cancellationToken);
 
+    Task<IReadOnlyList<SupRoomInfo>> LoadAiSupplierRoomsAsync(
+        IReadOnlyCollection<string> hotelCodes,
+        int? lastDaysOffset,
+        CancellationToken cancellationToken);
+
     Task<IReadOnlyList<OTARoomInfo>> LoadOtaRoomsAsync(
         IReadOnlyCollection<string> hotelCodes,
         CancellationToken cancellationToken);

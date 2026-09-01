@@ -65,7 +65,7 @@ public sealed partial class OTARoomBuilderWorker
             var rooms = await processor.EnrichMatchedRoomsForHotelAsync(matchResult, cancellationToken);
 
             await _roomCreateChannel.Writer.WriteAsync(
-                RoomCreateQueueItem.ForHotel(rooms, item.OutputMode ?? string.Empty),
+                RoomCreateQueueItem.ForHotel(item.Hotel!, rooms, item.OutputMode ?? string.Empty),
                 cancellationToken);
             _metrics.RecordQueueEnqueued("room_create");
 
@@ -92,7 +92,7 @@ public sealed partial class OTARoomBuilderWorker
                 matchResult.Candidates.Count);
 
             await _roomCreateChannel.Writer.WriteAsync(
-                RoomCreateQueueItem.ForHotel([], item.OutputMode ?? string.Empty),
+                RoomCreateQueueItem.ForHotel(item.Hotel!, [], item.OutputMode ?? string.Empty),
                 cancellationToken);
             _metrics.RecordQueueEnqueued("room_create");
         }

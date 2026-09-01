@@ -43,7 +43,7 @@ public sealed partial class OTARoomBuilderWorker
             cancellationToken.ThrowIfCancellationRequested();
             var matchResult = await processor.MatchOtaRoomsForHotelAsync(item.Hotel, cancellationToken);
             await _staticDataChannel.Writer.WriteAsync(
-                StaticDataQueueItem.ForHotel(matchResult, item.OutputMode ?? string.Empty),
+                StaticDataQueueItem.ForHotel(item.Hotel, matchResult, item.OutputMode ?? string.Empty),
                 cancellationToken);
             _metrics.RecordQueueEnqueued("static_data");
         }
@@ -59,6 +59,7 @@ public sealed partial class OTARoomBuilderWorker
             {
                 await _staticDataChannel.Writer.WriteAsync(
                     StaticDataQueueItem.ForHotel(
+                        item.Hotel,
                         HotelRoomMatchResult.Empty(item.Hotel.MTHotelCode),
                         item.OutputMode ?? string.Empty),
                     cancellationToken);

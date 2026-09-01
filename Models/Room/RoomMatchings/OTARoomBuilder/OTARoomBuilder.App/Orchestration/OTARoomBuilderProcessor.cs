@@ -4,8 +4,11 @@ using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using OTARoomBuilder.Contracts;
+using HotelResearch.Contracts;
 using RoomMatch.Core.RoomAnalysis;
 using RoomMatch.Core.RoomNameNormalizer;
+using RoomMatch.Core.RoomMatchingStrategies;
+using OTARoomBuilder.AI;
 
 namespace OTARoomBuilder;
 
@@ -20,6 +23,9 @@ public sealed class OTARoomBuilderProcessor
     readonly OTARoomBuilderMetrics _metrics;
     readonly ILogger<OTARoomBuilderProcessor> _logger;
     readonly IServiceProvider _serviceProvider;
+    readonly IAiRoomBuilder _aiRoomBuilder;
+    readonly IHotelFactsClient _hotelFactsClient;
+    readonly IAiRoomAuditRepository _aiRoomAuditRepository;
 
     public OTARoomBuilderProcessor(
         IRoomAnalyzer roomAnalyzer,
@@ -30,7 +36,10 @@ public sealed class OTARoomBuilderProcessor
         IOptionsMonitor<OTARoomBuilderOptions> options,
         OTARoomBuilderMetrics metrics,
         ILogger<OTARoomBuilderProcessor> logger,
-        IServiceProvider serviceProvider)
+        IServiceProvider serviceProvider,
+        IAiRoomBuilder aiRoomBuilder,
+        IHotelFactsClient hotelFactsClient,
+        IAiRoomAuditRepository aiRoomAuditRepository)
     {
         _roomAnalyzer = roomAnalyzer;
         _roomNameNormalizer = roomNameNormalizer;
@@ -44,6 +53,157 @@ public sealed class OTARoomBuilderProcessor
         _metrics = metrics;
         _logger = logger;
         _serviceProvider = serviceProvider;
+        _aiRoomBuilder = aiRoomBuilder;
+        _hotelFactsClient = hotelFactsClient;
+        _aiRoomAuditRepository = aiRoomAuditRepository;
+    }
+
+    public async Task<AiRoomBuildResult> BuildAiRoomDecisionsForHotelAsync(
+        HotelRoomBuildContext hotel,
+        IReadOnlySet<int> successfullyCreatedSupplierRoomIds,
+        CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(hotel);
+        var setting = new RoomAnalysisSetting
+        {
+            CleanFormatType = CleanFormatType.BASIC_NORMALIZE,
+            IsUnknownWordSplitBySpace = true
+        };
+        var matcher = new FullSequenceMatcher();
+        var otaContexts = hotel.OtaRooms
+            .SelectMany(room => BuildOtaContexts(room, setting))
+            .Where(static context => context is not null && !string.IsNullOrWhiteSpace(context.RoomNameCleaned))
+            .Cast<RoomContext>()
+            .ToList();
+        var candidates = new List<AiRoomCandidate>();
+        foreach (var room in AiRoomCandidateSelector.Select(
+            hotel.AiSupplierRooms,
+            successfullyCreatedSupplierRoomIds))
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            var contexts = BuildSupplierContext(room.SRoomNameCN, room.SRoomNameEN, setting);
+            if (HasFullSequenceMatch(contexts, otaContexts, matcher))
+            {
+                continue;
+            }
+
+            candidates.Add(new AiRoomCandidate
+            {
+                SupplierRoomId = room.Id,
+                SupId = room.SupId,
+                SHotelCode = room.SHotelCode,
+                SRoomCode = room.SRoomCode,
+                MTHotelCode = room.MTHotelCode,
+                RoomNameChinese = room.SRoomNameCN,
+                RoomNameEnglish = room.SRoomNameEN,
+                BedInfo = room.BedInfo,
+                AreaMin = room.AcreageFrom,
+                AreaMax = room.AcreageTo,
+                MaxOccupancy = room.MaxAdt,
+                SmokeType = room.SmokeType
+            });
+        }
+
+        if (candidates.Count == 0)
+        {
+            return new AiRoomBuildResult(hotel.MTHotelCode, [], [], null);
+        }
+
+        var facts = await _hotelFactsClient.ResolveAsync(
+            hotel.MTHotelCode,
+            HotelResearchResolveMode.ReuseOrRefresh,
+            cancellationToken);
+        var searchRoomContexts = BuildSearchRoomContexts(facts, setting);
+        candidates = candidates
+            .Select(candidate => candidate with
+            {
+                MatchedSearchRoomNames = FindSearchRoomMatches(
+                    candidate,
+                    searchRoomContexts,
+                    setting,
+                    matcher)
+            })
+            .ToList();
+        var candidatesToProcess = new List<AiRoomCandidate>(candidates.Count);
+        foreach (var candidate in candidates)
+        {
+            if (await _aiRoomAuditRepository.ShouldProcessAsync(
+                candidate,
+                facts?.SourceResultVersion,
+                cancellationToken))
+            {
+                candidatesToProcess.Add(candidate);
+            }
+        }
+
+        if (candidatesToProcess.Count == 0)
+        {
+            return new AiRoomBuildResult(hotel.MTHotelCode, [], [], facts?.SourceResultVersion);
+        }
+
+        var decisions = await _aiRoomBuilder.ProcessAsync(
+            hotel.MTHotelCode,
+            candidatesToProcess,
+            facts,
+            cancellationToken);
+        foreach (var decision in decisions)
+        {
+            var candidate = candidatesToProcess.FirstOrDefault(item => item.SupplierRoomId == decision.SupplierRoomId);
+            if (candidate is not null)
+            {
+                await _aiRoomAuditRepository.UpsertDecisionAsync(
+                    candidate,
+                    decision,
+                    facts?.SourceResultVersion,
+                    cancellationToken);
+            }
+        }
+        return new AiRoomBuildResult(hotel.MTHotelCode, candidatesToProcess, decisions, facts?.SourceResultVersion);
+    }
+
+    static bool HasFullSequenceMatch(
+        SupplierRoomContexts contexts,
+        IReadOnlyList<RoomContext> otaContexts,
+        FullSequenceMatcher matcher)
+        => contexts.CN is not null && otaContexts.Any(ota => matcher.Match(contexts.CN, ota).IsMatch)
+            || contexts.EN is not null && otaContexts.Any(ota => matcher.Match(contexts.EN, ota).IsMatch);
+
+    List<(string Name, RoomContext Context)> BuildSearchRoomContexts(
+        HotelFactsResult? facts,
+        RoomAnalysisSetting setting)
+    {
+        if (facts is null)
+        {
+            return [];
+        }
+
+        return facts.ConfirmedSites
+            .SelectMany(site => site.Rooms)
+            .SelectMany(room => new[] { room.RoomNameChinese, room.RoomNameEnglish, room.RoomNameLocal })
+            .Where(name => !string.IsNullOrWhiteSpace(name))
+            .Select(name => name!.Trim())
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .Select(name => (name, _roomAnalyzer.Analysis(new RoomContext(name, setting))))
+            .Where(item => !string.IsNullOrWhiteSpace(item.Item2.RoomNameCleaned))
+            .ToList();
+    }
+
+    IReadOnlyList<string> FindSearchRoomMatches(
+        AiRoomCandidate candidate,
+        IReadOnlyList<(string Name, RoomContext Context)> searchRooms,
+        RoomAnalysisSetting setting,
+        FullSequenceMatcher matcher)
+    {
+        var supplier = BuildSupplierContext(
+            candidate.RoomNameChinese,
+            candidate.RoomNameEnglish,
+            setting);
+        return searchRooms
+            .Where(search => supplier.CN is not null && matcher.Match(supplier.CN, search.Context).IsMatch
+                || supplier.EN is not null && matcher.Match(supplier.EN, search.Context).IsMatch)
+            .Select(search => search.Name)
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToArray();
     }
 
     public async Task RunAsync(CancellationToken cancellationToken)
@@ -134,12 +294,21 @@ public sealed class OTARoomBuilderProcessor
             _options.CurrentValue.GetEnabledSupIds(),
             lastDaysOffset,
             cancellationToken);
+        var aiSupplierRooms = _options.CurrentValue.EnableAiRoomBranch
+            ? await _repository.LoadAiSupplierRoomsAsync(
+                hotelChunk,
+                lastDaysOffset,
+                cancellationToken)
+            : [];
         var otaRooms = await _repository.LoadOtaRoomsAsync(hotelChunk, cancellationToken);
 
         var otaRoomLookup = otaRooms
             .GroupBy(static room => room.MTHotelCode)
             .ToDictionary(static group => group.Key, static group => group.ToList());
         var supplierRoomLookup = supplierRooms
+            .GroupBy(static room => room.MTHotelCode)
+            .ToDictionary(static group => group.Key, static group => group.ToList());
+        var aiSupplierRoomLookup = aiSupplierRooms
             .GroupBy(static room => room.MTHotelCode)
             .ToDictionary(static group => group.Key, static group => group.ToList());
 
@@ -150,7 +319,8 @@ public sealed class OTARoomBuilderProcessor
             {
                 MTHotelCode = hotelCode,
                 OtaRooms = otaRoomLookup.GetValueOrDefault(hotelCode) ?? [],
-                SupplierRooms = supplierRoomLookup.GetValueOrDefault(hotelCode) ?? []
+                SupplierRooms = supplierRoomLookup.GetValueOrDefault(hotelCode) ?? [],
+                AiSupplierRooms = aiSupplierRoomLookup.GetValueOrDefault(hotelCode) ?? []
             });
         }
 
@@ -171,15 +341,59 @@ public sealed class OTARoomBuilderProcessor
             {
                 cancellationToken.ThrowIfCancellationRequested();
                 var createdRooms = await BuildOtaRoomsForHotelAsync(hotel, cancellationToken);
+                IReadOnlySet<int> successfullyCreated = new HashSet<int>();
 
-                if (createdRooms.Count == 0)
+                if (createdRooms.Count > 0)
+                {
+                    successfullyCreated = await PersistCreatedRoomsWithResultsAsync(
+                        createdRooms,
+                        batchContext.OutputMode,
+                        cancellationToken);
+                    _metrics.RecordCreated(createdRooms.Count, batchContext.OutputMode);
+                }
+                else
                 {
                     _metrics.RecordSkipped(1, "no_new_rooms");
-                    continue;
                 }
 
-                await PersistCreatedRoomsAsync(createdRooms, batchContext.OutputMode, cancellationToken);
-                _metrics.RecordCreated(createdRooms.Count, batchContext.OutputMode);
+                if (_options.CurrentValue.EnableAiRoomBranch)
+                {
+                    var aiResult = await BuildAiRoomDecisionsForHotelAsync(
+                        hotel,
+                        successfullyCreated,
+                        cancellationToken);
+                    var aiDrafts = BuildAiDraftsForHotel(hotel, aiResult);
+                    if (aiDrafts.Count > 0)
+                    {
+                        var aiSuccessIds = await PersistCreatedRoomsWithResultsAsync(
+                            aiDrafts,
+                            batchContext.OutputMode,
+                            cancellationToken);
+                        _metrics.RecordCreated(aiDrafts.Count, batchContext.OutputMode);
+                        var aiCandidates = aiResult.Candidates.ToDictionary(item => item.SupplierRoomId);
+                        foreach (var draft in aiDrafts)
+                        {
+                            if (!aiCandidates.TryGetValue(draft.Source ?? 0, out var candidate))
+                            {
+                                continue;
+                            }
+
+                            if (aiSuccessIds.Contains(candidate.SupplierRoomId))
+                            {
+                                await _aiRoomAuditRepository.MarkCreateSucceededAsync(candidate, cancellationToken);
+                            }
+                            else
+                            {
+                                await _aiRoomAuditRepository.RecordCreateFailureAsync(
+                                    candidate,
+                                    3,
+                                    "房型创建接口连续重试后仍失败。",
+                                    aiResult.SearchResultVersion,
+                                    cancellationToken);
+                            }
+                        }
+                    }
+                }
             }
             finally
             {
@@ -328,9 +542,123 @@ public sealed class OTARoomBuilderProcessor
         List<OTARoomInfoPre> rooms,
         string outputMode,
         CancellationToken cancellationToken)
+        => PersistAsync(rooms, outputMode, cancellationToken);
+
+    public async Task<IReadOnlySet<int>> PersistCreatedRoomsWithResultsAsync(
+        IReadOnlyList<OTARoomInfoPre> rooms,
+        string outputMode,
+        CancellationToken cancellationToken)
     {
-        return PersistAsync(rooms, outputMode, cancellationToken);
+        if (rooms.Count == 0)
+        {
+            return new HashSet<int>();
+        }
+
+        if (string.Equals(outputMode, "create", StringComparison.OrdinalIgnoreCase)
+            || string.Equals(outputMode, "post", StringComparison.OrdinalIgnoreCase))
+        {
+            var results = await _roomCreateClient.PostAsync(rooms, cancellationToken);
+            return results
+                .Where(result => result.Succeeded)
+                .Select(result => result.SupplierRoomId)
+                .ToHashSet();
+        }
+
+        if (string.Equals(outputMode, "bulk", StringComparison.OrdinalIgnoreCase)
+            || string.Equals(outputMode, "database", StringComparison.OrdinalIgnoreCase))
+        {
+            await _repository.BulkInsertOtaRoomInfoPresAsync(rooms, cancellationToken);
+            return rooms.Select(room => room.Source ?? 0).ToHashSet();
+        }
+
+        return new HashSet<int>();
     }
+
+    public List<OTARoomInfoPre> BuildAiDraftsForHotel(
+        HotelRoomBuildContext hotel,
+        AiRoomBuildResult aiResult)
+    {
+        var rooms = hotel.AiSupplierRooms
+            .ToDictionary(room => room.Id);
+        var drafts = new List<OTARoomInfoPre>();
+        foreach (var decision in aiResult.Decisions.Where(item => item.SuitableForCreation))
+        {
+            if (!rooms.TryGetValue(decision.SupplierRoomId, out var supplier))
+            {
+                continue;
+            }
+
+            var cn = decision.RoomNameChinese?.Trim();
+            var en = decision.RoomNameEnglish?.Trim();
+            var local = decision.RoomNameLocal?.Trim();
+            if (string.IsNullOrWhiteSpace(cn) && string.IsNullOrWhiteSpace(en) && string.IsNullOrWhiteSpace(local))
+            {
+                continue;
+            }
+
+            if (string.IsNullOrWhiteSpace(cn))
+            {
+                cn = en ?? local;
+            }
+            if (string.IsNullOrWhiteSpace(en))
+            {
+                en = cn;
+            }
+
+            drafts.Add(new OTARoomInfoPre
+            {
+                MTHotelCode = hotel.MTHotelCode,
+                RoomNameCN = cn ?? string.Empty,
+                RoomNameEN = en ?? string.Empty,
+                Person = (byte)Math.Clamp(decision.MaxOccupancy ?? decision.RecommendedMaxOccupancy, 1, byte.MaxValue),
+                AreaMin = ToShort(supplier.AcreageFrom),
+                AreaMax = ToShort(supplier.AcreageTo),
+                Smoke = (byte)Math.Clamp(supplier.SmokeType ?? 0, 0, byte.MaxValue),
+                Source = supplier.Id,
+                SourceType = 3,
+                Status = 1,
+                Author = "SystemBuilderAI",
+                CreateTime = DateTime.Now,
+                BedInfo = decision.BedType ?? string.Empty,
+                IsCleanedValid = true
+            });
+        }
+
+        return drafts;
+    }
+
+    public async Task RecordAiCreateResultsAsync(
+        AiRoomBuildResult aiResult,
+        IReadOnlyList<OTARoomInfoPre> drafts,
+        IReadOnlySet<int> successfulSupplierRoomIds,
+        CancellationToken cancellationToken)
+    {
+        var candidates = aiResult.Candidates.ToDictionary(item => item.SupplierRoomId);
+        foreach (var draft in drafts)
+        {
+            if (!candidates.TryGetValue(draft.Source ?? 0, out var candidate))
+            {
+                continue;
+            }
+
+            if (successfulSupplierRoomIds.Contains(candidate.SupplierRoomId))
+            {
+                await _aiRoomAuditRepository.MarkCreateSucceededAsync(candidate, cancellationToken);
+            }
+            else
+            {
+                await _aiRoomAuditRepository.RecordCreateFailureAsync(
+                    candidate,
+                    3,
+                    "房型创建接口连续重试后仍失败。",
+                    aiResult.SearchResultVersion,
+                    cancellationToken);
+            }
+        }
+    }
+
+    static short? ToShort(decimal? value)
+        => value is null ? null : (short)Math.Clamp(decimal.ToInt32(decimal.Round(value.Value)), short.MinValue, short.MaxValue);
 
     async Task<List<OTARoomInfoPre>> BuildOtaRoomsForHotelCoreAsync(
         HotelRoomBuildContext hotel,
@@ -531,7 +859,16 @@ public sealed class OTARoomBuilderProcessor
         if (string.Equals(outputMode, "create", StringComparison.OrdinalIgnoreCase)
             || string.Equals(outputMode, "post", StringComparison.OrdinalIgnoreCase))
         {
-            await _roomCreateClient.PostAsync(rooms, cancellationToken);
+            var results = await _roomCreateClient.PostAsync(rooms, cancellationToken);
+            var failures = results.Where(result => !result.Succeeded).ToArray();
+            if (failures.Length > 0)
+            {
+                _logger.LogWarning(
+                    "Some OTA room creates failed after retries. MTHotelCode={MTHotelCode}, FailedCount={FailedCount}, Errors={Errors}",
+                    rooms[0].MTHotelCode,
+                    failures.Length,
+                    string.Join(" | ", failures.Select(failure => failure.Error)));
+            }
             return;
         }
 
@@ -548,3 +885,9 @@ public sealed class OTARoomBuilderProcessor
     sealed record SupplierRoomCandidate(SupRoomInfo Room, SupplierRoomContexts Context);
     sealed record SupplierRoomContexts(RoomContext? CN, RoomContext? EN);
 }
+
+public sealed record AiRoomBuildResult(
+    string MTHotelCode,
+    IReadOnlyList<AiRoomCandidate> Candidates,
+    IReadOnlyList<AiRoomDecision> Decisions,
+    int? SearchResultVersion);

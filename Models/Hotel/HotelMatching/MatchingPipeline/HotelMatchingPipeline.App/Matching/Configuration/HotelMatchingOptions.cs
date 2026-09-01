@@ -42,4 +42,6 @@ public sealed class HotelMatchingOptions
 
     [Range(1, 1_000)]
     public int MatchDistanceMeters { get; set; } = 60;
+
+    public bool EnableSearchFacts { get; set; }
 }

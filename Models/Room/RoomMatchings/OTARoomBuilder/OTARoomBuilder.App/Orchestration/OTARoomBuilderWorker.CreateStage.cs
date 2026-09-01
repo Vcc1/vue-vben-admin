@@ -29,7 +29,16 @@ public sealed partial class OTARoomBuilderWorker
         {
             if (item.Completion is not null)
             {
-                item.Completion.TrySetResult();
+                if (_options.CurrentValue.EnableAiRoomBranch)
+                {
+                    await _aiRoomChannel.Writer.WriteAsync(
+                        AiRoomQueueItem.ForCompletion(item.Completion),
+                        cancellationToken);
+                }
+                else
+                {
+                    item.Completion.TrySetResult();
+                }
                 return;
             }
 
@@ -37,17 +46,29 @@ public sealed partial class OTARoomBuilderWorker
             var processor = scope.ServiceProvider.GetRequiredService<OTARoomBuilderProcessor>();
 
             var rooms = item.Rooms ?? [];
-            if (rooms.Count == 0)
+            IReadOnlySet<int> successfullyCreated = new HashSet<int>();
+            if (rooms.Count > 0)
+            {
+                successfullyCreated = await processor.PersistCreatedRoomsWithResultsAsync(
+                    rooms,
+                    item.OutputMode ?? string.Empty,
+                    cancellationToken);
+                _metrics.RecordCreated(successfullyCreated.Count, item.OutputMode ?? string.Empty);
+            }
+            else
             {
                 _metrics.RecordSkipped(1, "no_new_rooms");
-                return;
             }
 
-            await processor.PersistCreatedRoomsAsync(
-                rooms,
-                item.OutputMode ?? string.Empty,
-                cancellationToken);
-            _metrics.RecordCreated(rooms.Count, item.OutputMode ?? string.Empty);
+            if (_options.CurrentValue.EnableAiRoomBranch && item.Hotel is not null)
+            {
+                await _aiRoomChannel.Writer.WriteAsync(
+                    AiRoomQueueItem.ForHotel(
+                        item.Hotel,
+                        successfullyCreated,
+                        item.OutputMode ?? string.Empty),
+                    cancellationToken);
+            }
         }
         catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
         {
@@ -62,7 +83,7 @@ public sealed partial class OTARoomBuilderWorker
         }
         finally
         {
-            if (item.Completion is null)
+            if (item.Completion is null && !_options.CurrentValue.EnableAiRoomBranch)
             {
                 _metrics.DecrementPendingHotels();
             }

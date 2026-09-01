@@ -2,6 +2,8 @@ using Framework.Core.IOC;
 using Infrastructure.HTTP.OTARoomCreate;
 using Infrastructure.OTARoomBuilder;
 using Infrastructure.SupplierStaticData;
+using AgentPlatform.Client;
+using HotelResearch.Client;
 using MengTu.Connectmate.Client;
 using MengTu.Connectmate.Client.Tool;
 using Microsoft.Extensions.Hosting;
@@ -55,5 +57,8 @@ var host = Serve.Run(new RunOptions
             typeof(RoomWord).Assembly,
             typeof(RoomDictionarySingleton).Assembly
         ]);
+    var agentHost = configuration["AgentPlatform:BaseAddress"] ?? "http://127.0.0.1:8080/";
+    services.AddAgentPlatformClient(client => client.BaseAddress = new Uri(agentHost));
+    services.AddHotelFactsClient(client => client.BaseAddress = new Uri(agentHost));
 });
 await host.RunAsync();

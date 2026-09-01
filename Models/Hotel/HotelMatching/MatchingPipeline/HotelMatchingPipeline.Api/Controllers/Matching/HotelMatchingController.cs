@@ -5,6 +5,7 @@ using Microsoft.AspNetCore.Mvc;
 namespace HotelMatchingPipeline.Api.Controllers;
 
 [ApiController]
+[ApiExplorerSettings(GroupName = OpenApiMetadata.DocumentName)]
 [Route("api/admin/hotel-matching")]
 public sealed class HotelMatchingController : ControllerBase
 {

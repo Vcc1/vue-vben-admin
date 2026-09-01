@@ -5,7 +5,8 @@ namespace HotelMatchingPipeline.Domain.Hotels;
 public enum HotelMatchFactSource : byte
 {
     Ota = 1,
-    Supplier = 2
+    Supplier = 2,
+    WebSearch = 3
 }
 
 public sealed record HotelMatchFact(
@@ -20,7 +21,10 @@ public sealed record HotelMatchFact(
     decimal? Latitude,
     decimal? StarLevel,
     string? Address,
-    IReadOnlyList<string> Phones);
+    IReadOnlyList<string> Phones,
+    string? SourceSiteName = null,
+    string? SourceUrl = null,
+    int? SourceResultVersion = null);
 
 public sealed record HotelMatchingWorkItem(
     int SupHotelId,

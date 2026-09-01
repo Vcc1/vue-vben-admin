@@ -51,6 +51,14 @@ public sealed class OTARoomBuilderOptions
 
     public int SqlTimeoutMinutes { get; set; } = 3;
 
+    public bool EnableAiRoomBranch { get; set; }
+
+    [Range(1, 100)]
+    public int AiRoomQueueCapacity { get; set; } = 50;
+
+    [Range(1, 32)]
+    public int AiRoomTaskConcurrency { get; set; } = 4;
+
     public string GetFullSyncCron()
     {
         return string.IsNullOrWhiteSpace(FullSyncCron) ? DailyCron : FullSyncCron;

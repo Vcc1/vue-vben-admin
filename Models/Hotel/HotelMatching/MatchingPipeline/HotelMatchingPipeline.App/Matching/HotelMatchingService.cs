@@ -10,6 +10,7 @@ using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using System.Threading.Channels;
+using HotelResearch.Contracts;
 
 namespace HotelMatchingPipeline.App;
 
@@ -28,6 +29,7 @@ public sealed class HotelMatchingService
     readonly ILogger _ambiguousCandidateLogger;
     readonly HotelMatchingMetrics _metrics;
     readonly IServiceScopeFactory _scopeFactory;
+    readonly IHotelFactsClient? _hotelFactsClient;
 
     public HotelMatchingService(
         IHotelMatchPipelineRepository pipelineRepository,
@@ -40,7 +42,8 @@ public sealed class HotelMatchingService
         ILogger<HotelMatchingService> logger,
         IServiceScopeFactory scopeFactory,
         HotelMatchingMetrics? metrics = null,
-        ILoggerFactory? loggerFactory = null)
+        ILoggerFactory? loggerFactory = null,
+        IHotelFactsClient? hotelFactsClient = null)
     {
         _pipelineRepository = pipelineRepository;
         _repository = repository;
@@ -54,6 +57,7 @@ public sealed class HotelMatchingService
             loggerFactory?.CreateLogger(AmbiguousCandidateLoggerCategory) ?? logger;
         _metrics = metrics ?? new HotelMatchingMetrics();
         _scopeFactory = scopeFactory;
+        _hotelFactsClient = hotelFactsClient;
     }
 
     public async Task<int> RunOnceAsync(CancellationToken cancellationToken)
@@ -314,11 +318,78 @@ public sealed class HotelMatchingService
     {
         await using var scope = _scopeFactory.CreateAsyncScope();
         var repository = scope.ServiceProvider.GetRequiredService<IHotelMatchPipelineRepository>();
-        return await repository.LoadMatchingWorkItemAsync(
+        var workItem = await repository.LoadMatchingWorkItemAsync(
             supHotelId,
             recallRadiusMeters,
             maxCandidates,
             cancellationToken);
+        return _options.Value.EnableSearchFacts
+            ? await AddSearchFactsAsync(workItem, cancellationToken)
+            : workItem;
+    }
+
+    async Task<HotelMatchingWorkItem> AddSearchFactsAsync(
+        HotelMatchingWorkItem workItem,
+        CancellationToken cancellationToken)
+    {
+        var client = _hotelFactsClient
+            ?? throw new InvalidOperationException(
+                "HotelMatching:EnableSearchFacts requires IHotelFactsClient registration.");
+        var candidateCodes = workItem.NearbyOtaHotels
+            .Select(fact => fact.MTHotelCode)
+            .Concat(workItem.NearbySupplierHotels.Select(fact => fact.MTHotelCode))
+            .Concat(workItem.OtaLinkedSupplierHotels.Select(fact => fact.MTHotelCode))
+            .Where(code => !string.IsNullOrWhiteSpace(code))
+            .Cast<string>()
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToArray();
+        var searchFacts = new List<HotelMatchFact>();
+        var factId = -1;
+        foreach (var mtHotelCode in candidateCodes)
+        {
+            var facts = await client.ResolveAsync(
+                mtHotelCode,
+                HotelResearchResolveMode.ReuseOrRefresh,
+                cancellationToken);
+            if (facts is null)
+            {
+                continue;
+            }
+
+            foreach (var site in facts.ConfirmedSites)
+            {
+                var names = new[] { site.HotelNameChinese, site.HotelNameLocal }
+                    .Concat(site.Aliases)
+                    .Where(name => !string.IsNullOrWhiteSpace(name))
+                    .Distinct(StringComparer.OrdinalIgnoreCase)
+                    .DefaultIfEmpty(site.HotelNameEnglish)
+                    .ToArray();
+                foreach (var name in names)
+                {
+                    searchFacts.Add(new HotelMatchFact(
+                        HotelMatchFactSource.WebSearch,
+                        factId--,
+                        null,
+                        site.SiteUrl,
+                        facts.MTHotelCode,
+                        name,
+                        site.HotelNameEnglish,
+                        site.Longitude,
+                        site.Latitude,
+                        site.StarRating,
+                        site.AddressChinese ?? site.AddressEnglish ?? site.AddressLocal,
+                        string.IsNullOrWhiteSpace(site.HotelPhone) ? [] : [site.HotelPhone],
+                        site.SiteName,
+                        site.SiteUrl,
+                        facts.SourceResultVersion));
+                }
+            }
+        }
+
+        return workItem with
+        {
+            NearbyOtaHotels = [.. workItem.NearbyOtaHotels, .. searchFacts]
+        };
     }
 
     async Task MatchAsync(

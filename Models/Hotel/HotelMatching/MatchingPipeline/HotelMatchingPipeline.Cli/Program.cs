@@ -15,6 +15,7 @@ using Microsoft.Extensions.Hosting;
 using System.Diagnostics;
 using VBase.AppMetrics;
 using VBaseFramework.ServiceDefaults;
+using HotelResearch.Client;
 
 Environment.SetEnvironmentVariable("TZ", "Asia/Shanghai");
 TimeZoneInfo.ClearCachedData();
@@ -76,9 +77,23 @@ var host = Serve.Run(new RunOptions
     services.AddSingleton<HotelCleaningMetrics>();
     services.AddSingleton<HotelMatchingMetrics>();
     services
-        .AddHotelMatchingApplication(configuration)
         .AddHotelMatchingInfrastructure(configuration)
         .AddBusiness([typeof(RoomMappingDbContext).Assembly]);
+    if (command == "run-all")
+    {
+        services.AddHotelMatchingApplication(configuration);
+    }
+    else if (command == "clean-once")
+    {
+        services.AddHotelCleaningServices(configuration);
+    }
+    else
+    {
+        services.AddHotelMatchingServices(configuration);
+    }
+
+    var agentHost = configuration["AgentPlatform:BaseAddress"] ?? "http://127.0.0.1:5217/";
+    services.AddHotelFactsClient(client => client.BaseAddress = new Uri(agentHost));
 
     if (command is "run-all" or "clean-once")
     {
