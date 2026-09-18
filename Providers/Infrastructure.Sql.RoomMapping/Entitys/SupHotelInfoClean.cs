@@ -62,7 +62,7 @@ public sealed class SupHotelInfoClean : IHasEntityConfiguration<SupHotelInfoClea
     {
         const string collation = "Chinese_PRC_CI_AS";
 
-        builder.ToTable("SupHotelInfo", "dbo");
+        builder.ToTable("SupHotelInfo", "dbo", table => table.UseSqlOutputClause(false));
         builder.HasKey(x => x.SupHotelId).HasName("PK_SupHotelInfo");
         builder.Property(x => x.SupHotelId).ValueGeneratedNever().IsRequired();
         builder.Property(x => x.SHotelCode).HasMaxLength(50).UseCollation(collation).IsRequired();

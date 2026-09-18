@@ -121,9 +121,34 @@
     <Project Path="Models/Backoffice/Backoffice.App/Backoffice.App.csproj" />
     <Project Path="Models/Backoffice/Backoffice.Infra/Backoffice.Infra.csproj" />
   </Folder>
-  <Folder Name="/Models/AI/" />
-  <Folder Name="/Models/AI/AgentPlatform/" />
+  <Folder Name="/Models/6.Data/Backoffice/AdminIdentity/">
+    <Project Path="Models/Backoffice/AdminIdentity/AdminIdentity.Api/AdminIdentity.Api.csproj" />
+    <Project Path="Models/Backoffice/AdminIdentity/AdminIdentity.App/AdminIdentity.App.csproj" />
+    <Project Path="Models/Backoffice/AdminIdentity/AdminIdentity.Infra/AdminIdentity.Infra.csproj" />
+  </Folder>
+  <Folder Name="/Models/6.Data/Backoffice/TaskScheduling/">
+    <Project Path="Models/Backoffice/TaskScheduling/TaskScheduling.Api/TaskScheduling.Api.csproj" />
+    <Project Path="Models/Backoffice/TaskScheduling/TaskScheduling.App/TaskScheduling.App.csproj" />
+    <Project Path="Models/Backoffice/TaskScheduling/TaskScheduling.Contracts/TaskScheduling.Contracts.csproj" />
+    <Project Path="Models/Backoffice/TaskScheduling/TaskScheduling.Infra/TaskScheduling.Infra.csproj" />
+  </Folder>
+  <Folder Name="/Models/6.Data/Backoffice/OidcServer/">
+    <Project Path="Models/Backoffice/OidcServer/OidcServer.Api/OidcServer.Api.csproj" />
+    <Project Path="Models/Backoffice/OidcServer/OidcServer.App/OidcServer.App.csproj" />
+    <Project Path="Models/Backoffice/OidcServer/OidcServer.Infra/OidcServer.Infra.csproj" />
+  </Folder>
+  <Folder Name="/Models/6.Data/Backoffice/ApiGateway/">
+    <Project Path="Models/Backoffice/ApiGateway/ApiGateway.Api/ApiGateway.Api.csproj" />
+    <Project Path="Models/Backoffice/ApiGateway/ApiGateway.App/ApiGateway.App.csproj" />
+    <Project Path="Models/Backoffice/ApiGateway/ApiGateway.Domain/ApiGateway.Domain.csproj" />
+    <Project Path="Models/Backoffice/ApiGateway/ApiGateway.Infra/ApiGateway.Infra.csproj" />
+  </Folder>
+  <Folder Name="/7.Documentation/">
+    <Project Path="Documentation/Documentation.Driver/Documentation.Driver.csproj" />
+  </Folder>
   <Folder Name="/Providers/">
+    <Project Path="Providers/Infrastructure.Sql.Admin/Infrastructure.Sql.Admin.csproj" />
+    <Project Path="Providers/Infrastructure.Sql.Admin/Tests/Infrastructure.Sql.Admin.Tests.csproj" />
     <Project Path="Providers/Infrastructure.HTTP.OTAHotelInfo/Infrastructure.HTTP.OTAHotelInfo.csproj" />
     <Project Path="Providers/Infrastructure.HTTP.OTARoomCreate/Infrastructure.HTTP.OTARoomCreate.csproj" />
     <Project Path="Providers/Infrastructure.HTTP.Prometheus/Infrastructure.HTTP.Prometheus.csproj" />
@@ -149,7 +174,7 @@
   </Folder>
   <Folder Name="/Tests/">
     <Project Path="Models/Backoffice/Backoffice.Infra/Tests/Backoffice.Infra.Tests.csproj" />
-    <Project Path="Models/Hotel/HotelResearch/HotelResearch.App/Tests/HotelResearch.App.Tests.csproj" />
     <Project Path="Models/Hotel/HotelBusiness/HotelBusiness.Infra/Tests/HotelBusiness.Infra.Tests.csproj" />
+    <Project Path="Models/Hotel/HotelResearch/HotelResearch.App/Tests/HotelResearch.App.Tests.csproj" />
   </Folder>
 </Solution>

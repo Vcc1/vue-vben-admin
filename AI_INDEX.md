@@ -5,6 +5,7 @@
 ## 1. Repository Overview
 
 - Solution: `MengtuV.slnx`
+- Documentation: `Documentation/Source` (generated document source and `catalog.json`), `Documentation/Documentation.Driver` (renderer), `Documentation/site` (generated HTML and SVG catalogs)
 - Main layout:
   - `Models/<business-group>/<business>/<project>`: business modules grouped by capability.
   - Project suffixes:
@@ -83,3 +84,5 @@
 - Do not recreate layer folders such as `Application`, `Infrastructure`, `Domain`, or `Presentation`.
 - Keep provider project names under `Providers` unchanged unless doing a dedicated provider cleanup.
 - Internal C# namespaces are intentionally not aligned with project names yet.
+- Documentation is maintained in `Documentation/Source`; the driver only scans these generated documents and `catalog.json`, then renders the Models structure SVG and catalog pages. Run `dotnet run --project Documentation/Documentation.Driver -- --clean` after changing it.
+- When adding a project or feature, update the matching source document and this index when navigation or executable services change. Solution folders carry numeric prefixes; physical folders do not.

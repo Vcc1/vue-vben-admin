@@ -69,6 +69,7 @@ public sealed class OtaEntityMappingTests
         Assert.Null(clean.FindProperty("Id"));
         Assert.Null(clean.FindProperty("RawId"));
         Assert.Null(clean.FindProperty("ExistingMTHotelCode"));
+        Assert.False(clean.IsSqlOutputClauseUsed());
         Assert.Contains(clean.GetIndexes(), index => index.GetDatabaseName() == "IX_SupHotelInfo_CleaningSnapshot");
 
         var phone = database.Model.FindEntityType(typeof(SupHotelPhone))!;
@@ -87,5 +88,16 @@ public sealed class OtaEntityMappingTests
         Assert.Equal(
             [nameof(HotelMatchResult.SupHotelId)],
             businessKey.Properties.Select(property => property.Name));
+
+        var veto = database.Model.FindEntityType(typeof(HotelMatchVeto))!;
+        var pairIndex = veto.GetIndexes().Single(
+            index => index.GetDatabaseName() == "UX_HotelMatchVeto_Pair");
+        Assert.True(pairIndex.IsUnique);
+        Assert.Equal(
+            [nameof(HotelMatchVeto.SupHotelId), nameof(HotelMatchVeto.MTHotelCode)],
+            pairIndex.Properties.Select(property => property.Name));
+        Assert.Contains(veto.GetIndexes(),
+            index => index.GetDatabaseName() == "IX_HotelMatchVeto_PendingSync");
+        Assert.Equal(4000, veto.FindProperty(nameof(HotelMatchVeto.LastRedisSyncError))!.GetMaxLength());
     }
 }

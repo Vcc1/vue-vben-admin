@@ -1,0 +1,137 @@
+[
+  {
+    "path": "architecture.md",
+    "output": "architecture.html",
+    "title": "解决方案架构",
+    "headings": [
+      {
+        "level": 1,
+        "text": "解决方案架构",
+        "anchor": "解决方案架构"
+      },
+      {
+        "level": 2,
+        "text": "命名和物理路径",
+        "anchor": "命名和物理路径"
+      },
+      {
+        "level": 2,
+        "text": "项目层次",
+        "anchor": "项目层次"
+      },
+      {
+        "level": 2,
+        "text": "依赖方向",
+        "anchor": "依赖方向"
+      },
+      {
+        "level": 2,
+        "text": "文档项目",
+        "anchor": "文档项目"
+      }
+    ]
+  },
+  {
+    "path": "development.md",
+    "output": "development.html",
+    "title": "开发与文档同步",
+    "headings": [
+      {
+        "level": 1,
+        "text": "开发与文档同步",
+        "anchor": "开发与文档同步"
+      },
+      {
+        "level": 2,
+        "text": "新增项目",
+        "anchor": "新增项目"
+      },
+      {
+        "level": 2,
+        "text": "新增功能",
+        "anchor": "新增功能"
+      },
+      {
+        "level": 2,
+        "text": "写作约定",
+        "anchor": "写作约定"
+      },
+      {
+        "level": 2,
+        "text": "验证命令",
+        "anchor": "验证命令"
+      }
+    ]
+  },
+  {
+    "path": "index.md",
+    "output": "overview.html",
+    "title": "MengtuV 项目文档",
+    "headings": [
+      {
+        "level": 1,
+        "text": "MengtuV 项目文档",
+        "anchor": "mengtuv-项目文档"
+      },
+      {
+        "level": 2,
+        "text": "文档结构",
+        "anchor": "文档结构"
+      },
+      {
+        "level": 2,
+        "text": "阅读入口",
+        "anchor": "阅读入口"
+      },
+      {
+        "level": 2,
+        "text": "生成文档",
+        "anchor": "生成文档"
+      }
+    ]
+  },
+  {
+    "path": "Projects/Documentation.Driver/index.md",
+    "output": "Projects/Documentation.Driver/index.html",
+    "title": "Documentation.Driver",
+    "headings": [
+      {
+        "level": 1,
+        "text": "Documentation.Driver",
+        "anchor": "documentation-driver"
+      },
+      {
+        "level": 2,
+        "text": "项目定位",
+        "anchor": "项目定位"
+      },
+      {
+        "level": 2,
+        "text": "目录职责",
+        "anchor": "目录职责"
+      },
+      {
+        "level": 2,
+        "text": "生成命令",
+        "anchor": "生成命令"
+      }
+    ]
+  },
+  {
+    "path": "services.md",
+    "output": "services.html",
+    "title": "可执行服务",
+    "headings": [
+      {
+        "level": 1,
+        "text": "可执行服务",
+        "anchor": "可执行服务"
+      },
+      {
+        "level": 2,
+        "text": "入口定位",
+        "anchor": "入口定位"
+      }
+    ]
+  }
+]

@@ -4,6 +4,7 @@ using System.Text.Encodings.Web;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 using HotelMatchingPipeline.App.Contracts;
+using HotelMatchingPipeline.App.Models;
 using HotelMatchingPipeline.Domain.Hotels;
 using Infrastructure.Sql.RoomMapping;
 using Infrastructure.Sql.RoomMapping.Entitys;
@@ -17,7 +18,8 @@ public sealed class RoomMappingHotelRepository :
     IHotelCleaningRepository,
     IHotelMatchPipelineRepository,
     IHotelMatchingRepository,
-    IHotelMatchDeliveryRepository
+    IHotelMatchDeliveryRepository,
+    IHotelMatchVetoRepository
 {
     const byte DeliveryPending = 0;
     const byte DeliverySending = 1;
@@ -1259,12 +1261,25 @@ public sealed class RoomMappingHotelRepository :
             },
             cancellationToken);
 
+        var vetoedMTHotelCodes = await RunMatchingInformationStageAsync(
+            supHotelId,
+            "match_vetoes",
+            token => _dbContext.HotelMatchVetoes
+                .AsNoTracking()
+                .Where(veto => veto.SupHotelId == supHotelId)
+                .Select(veto => veto.MTHotelCode)
+                .ToHashSetAsync(StringComparer.OrdinalIgnoreCase, token),
+            cancellationToken);
+
         return new HotelMatchingWorkItem(
             pending.SupHotelId,
             MapFact(pending),
             otaRows.Select(MapFact).ToArray(),
             nearbySupplierRows.Select(MapFact).ToArray(),
-            linkedSupplierRows.Select(MapFact).ToArray());
+            linkedSupplierRows.Select(MapFact).ToArray())
+        {
+            VetoedMTHotelCodes = vetoedMTHotelCodes
+        };
     }
 
     async Task<T> RunMatchingInformationStageAsync<T>(
@@ -1926,7 +1941,64 @@ public sealed class RoomMappingHotelRepository :
             return;
         }
 
-        var evaluationRows = evaluations.Select(evaluation => new
+        await using var connection = new SqlConnection(_connectionString);
+        await connection.OpenAsync(cancellationToken);
+        await using var transaction = (SqlTransaction)await connection.BeginTransactionAsync(
+            System.Data.IsolationLevel.ReadCommitted,
+            cancellationToken);
+        await using (var lockCommand = connection.CreateCommand())
+        {
+            lockCommand.Transaction = transaction;
+            lockCommand.CommandText = """
+                DECLARE @applicationLockResult int;
+                EXEC @applicationLockResult = sys.sp_getapplock
+                    @Resource = N'HotelMatching:VetoWrite',
+                    @LockMode = N'Exclusive',
+                    @LockOwner = N'Transaction',
+                    @LockTimeout = 300000;
+                IF @applicationLockResult < 0
+                    THROW 51000, 'Unable to acquire the hotel matching veto write lock.', 1;
+                """;
+            await lockCommand.ExecuteNonQueryAsync(cancellationToken);
+        }
+
+        var vetoedPairs = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        await using (var vetoCommand = connection.CreateCommand())
+        {
+            vetoCommand.Transaction = transaction;
+            vetoCommand.CommandText = """
+                SELECT veto.SupHotelId, veto.MTHotelCode
+                FROM dbo.HotelMatchVeto AS veto WITH (UPDLOCK, HOLDLOCK)
+                INNER JOIN OPENJSON(@supHotelIds)
+                    WITH (SupHotelId int '$') AS requested
+                    ON requested.SupHotelId = veto.SupHotelId;
+                """;
+            vetoCommand.Parameters.Add(new SqlParameter(
+                "@supHotelIds",
+                System.Data.SqlDbType.NVarChar,
+                -1)
+            {
+                Value = JsonSerializer.Serialize(
+                    evaluations.Select(evaluation => evaluation.SupHotelId).Distinct(),
+                    JsonOptions)
+            });
+            await using var reader = await vetoCommand.ExecuteReaderAsync(cancellationToken);
+            while (await reader.ReadAsync(cancellationToken))
+            {
+                vetoedPairs.Add(VetoPairKey(reader.GetInt32(0), reader.GetString(1)));
+            }
+        }
+
+        var filteredEvaluations = evaluations
+            .Select(evaluation => evaluation with
+            {
+                Matches = evaluation.Matches
+                    .Where(match => !vetoedPairs.Contains(
+                        VetoPairKey(evaluation.SupHotelId, match.MTHotelCode)))
+                    .ToArray()
+            })
+            .ToArray();
+        var evaluationRows = filteredEvaluations.Select(evaluation => new
         {
             supHotelId = evaluation.SupHotelId,
             supId = evaluation.SupId,
@@ -1938,7 +2010,7 @@ public sealed class RoomMappingHotelRepository :
                 JsonOptions),
             candidatesJson = JsonSerializer.Serialize(evaluation.Matches, JsonOptions)
         }).ToArray();
-        var matchRows = evaluations.Select(evaluation =>
+        var matchRows = filteredEvaluations.Select(evaluation =>
             !string.IsNullOrEmpty(evaluation.ResolvedMTHotelCode)
                 ? CreateMatchResultRow(
                     evaluation.SupHotelId,
@@ -1965,11 +2037,10 @@ public sealed class RoomMappingHotelRepository :
             Value = matchingVersion
         };
 
-        await using var connection = new SqlConnection(_connectionString);
-        await connection.OpenAsync(cancellationToken);
         if (!_hotelMatchResultHasLegacyMatchingVersion.HasValue)
         {
             await using var schemaCommand = connection.CreateCommand();
+            schemaCommand.Transaction = transaction;
             schemaCommand.CommandText = """
                 SELECT CONVERT(bit, CASE
                     WHEN COL_LENGTH(N'dbo.HotelMatchResult', N'MatchingVersion') IS NULL THEN 0
@@ -1989,12 +2060,11 @@ public sealed class RoomMappingHotelRepository :
         }
 
         await using var command = connection.CreateCommand();
+        command.Transaction = transaction;
         command.CommandTimeout = 300;
         var commandText = """
             SET NOCOUNT ON;
             SET XACT_ABORT ON;
-            BEGIN TRANSACTION;
-            BEGIN TRY
                 DELETE older
                 FROM dbo.HotelMatchResult AS older WITH (ROWLOCK)
                 INNER JOIN OPENJSON(@evaluations)
@@ -2008,10 +2078,19 @@ public sealed class RoomMappingHotelRepository :
                       AND newer.Id > older.Id
                 );
 
+                DELETE target
+                FROM dbo.HotelMatchResult AS target WITH (ROWLOCK)
+                INNER JOIN OPENJSON(@evaluations)
+                    WITH (SupHotelId int '$.supHotelId') AS evaluation
+                    ON evaluation.SupHotelId = target.SupHotelId
+                INNER JOIN dbo.HotelMatchVeto AS veto WITH (UPDLOCK, HOLDLOCK)
+                    ON veto.SupHotelId = target.SupHotelId
+                   AND veto.MTHotelCode = target.MTHotelCode;
+
                 MERGE dbo.HotelMatchResult WITH (HOLDLOCK, ROWLOCK) AS target
                 USING
                 (
-                    SELECT *
+                    SELECT parsed.*
                     FROM OPENJSON(@matches)
                     WITH
                     (
@@ -2041,7 +2120,15 @@ public sealed class RoomMappingHotelRepository :
                         OtaFactCount int '$.otaFactCount',
                         SupplierFactCount int '$.supplierFactCount',
                         EvidenceJson nvarchar(max) '$.evidenceJson'
-                    )
+                    ) AS parsed
+                    WHERE parsed.MTHotelCode = ''
+                       OR NOT EXISTS
+                       (
+                           SELECT 1
+                           FROM dbo.HotelMatchVeto AS veto WITH (UPDLOCK, HOLDLOCK)
+                           WHERE veto.SupHotelId = parsed.SupHotelId
+                             AND veto.MTHotelCode = parsed.MTHotelCode
+                       )
                 ) AS source
                     ON source.SupHotelId = target.SupHotelId
                 WHEN MATCHED THEN UPDATE SET
@@ -2176,6 +2263,15 @@ public sealed class RoomMappingHotelRepository :
                     target.MatchError = NULL,
                     target.MatchStatus = CASE
                         WHEN source.MatchCount = 0 THEN 2
+                        WHEN source.MatchCount = 1 AND EXISTS
+                        (
+                            SELECT 1
+                            FROM OPENJSON(source.MTHotelCodesJson)
+                                WITH (MTHotelCode varchar(100) '$') AS candidate
+                            INNER JOIN dbo.HotelMatchVeto AS veto WITH (UPDLOCK, HOLDLOCK)
+                                ON veto.SupHotelId = source.SupHotelId
+                               AND veto.MTHotelCode = candidate.MTHotelCode
+                        ) THEN 2
                         WHEN source.MatchCount = 1 THEN 4
                         ELSE 3
                     END,
@@ -2190,12 +2286,6 @@ public sealed class RoomMappingHotelRepository :
                     ON source.SupHotelId = target.SupHotelId
                 OPTION (LOOP JOIN, MAXDOP 1, RECOMPILE);
 
-                COMMIT TRANSACTION;
-            END TRY
-            BEGIN CATCH
-                IF @@TRANCOUNT > 0 ROLLBACK TRANSACTION;
-                THROW;
-            END CATCH;
             """;
         command.CommandText = _hotelMatchResultHasLegacyMatchingVersion.Value
             ? commandText
@@ -2223,7 +2313,11 @@ public sealed class RoomMappingHotelRepository :
         command.Parameters.AddRange(
             [evaluationsParameter, matchesParameter, nowParameter, matchingVersionParameter]);
         await command.ExecuteNonQueryAsync(cancellationToken);
+        await transaction.CommitAsync(cancellationToken);
     }
+
+    static string VetoPairKey(int supHotelId, string mtHotelCode)
+        => $"{supHotelId}\u001F{mtHotelCode.Trim()}";
 
     static HotelMatchResultWriteRow CreateUnmatchedResultRow(
         HotelMatchEvaluation evaluation,
@@ -2375,6 +2469,13 @@ public sealed class RoomMappingHotelRepository :
                 cancellationToken);
         rows.RemoveAll(hotel =>
             !HotelRecallPolicy.IsMatchingEnabled(hotel.RegionLevel1Code));
+        var vetoedMTHotelCodes = await _dbContext.HotelMatchVetoes
+            .AsNoTracking()
+            .Where(veto => veto.SupplierHotel.SupId == supplier.Hotel.SupplierId
+                && veto.SupplierHotel.SHotelCode == supplier.Hotel.HotelCode)
+            .Select(veto => veto.MTHotelCode)
+            .ToHashSetAsync(StringComparer.OrdinalIgnoreCase, cancellationToken);
+        rows.RemoveAll(hotel => vetoedMTHotelCodes.Contains(hotel.MTHotelCode));
         SortByDistance(
             rows,
             latitude,
@@ -2418,6 +2519,12 @@ public sealed class RoomMappingHotelRepository :
                 cancellationToken);
         rows.RemoveAll(hotel =>
             !HotelRecallPolicy.IsMatchingEnabled(hotel.RegionLevel1Code));
+        var vetoedSupplierHotelIds = await _dbContext.HotelMatchVetoes
+            .AsNoTracking()
+            .Where(veto => veto.MTHotelCode == ota.HotelCode)
+            .Select(veto => veto.SupHotelId)
+            .ToHashSetAsync(cancellationToken);
+        rows.RemoveAll(hotel => vetoedSupplierHotelIds.Contains(hotel.SupHotelId));
         SortByDistance(
             rows,
             latitude,
@@ -3039,6 +3146,244 @@ public sealed class RoomMappingHotelRepository :
                 cancellationToken);
         return row is null ? null : MapCleaned(row);
     }
+
+    public async Task<HotelMatchVetoCreateResult> CreateAsync(
+        HotelMatchVetoRequest request,
+        CancellationToken cancellationToken)
+    {
+        await using var transaction = await _dbContext.Database.BeginTransactionAsync(
+            System.Data.IsolationLevel.Serializable,
+            cancellationToken);
+        await _dbContext.Database.ExecuteSqlRawAsync(
+            """
+            DECLARE @applicationLockResult int;
+            EXEC @applicationLockResult = sys.sp_getapplock
+                @Resource = N'HotelMatching:VetoWrite',
+                @LockMode = N'Exclusive',
+                @LockOwner = N'Transaction',
+                @LockTimeout = 300000;
+            IF @applicationLockResult < 0
+                THROW 51000, 'Unable to acquire the hotel matching veto write lock.', 1;
+            """,
+            cancellationToken);
+
+        var supplier = await _dbContext.SupHotelInfos.AsTracking()
+            .SingleOrDefaultAsync(
+                hotel => hotel.SupId == request.SupId && hotel.SHotelCode == request.SHotelCode,
+                cancellationToken);
+        if (supplier is null)
+        {
+            await transaction.RollbackAsync(cancellationToken);
+            return new HotelMatchVetoCreateResult(HotelMatchVetoCreateStatus.SupplierNotFound, null);
+        }
+
+        var existing = await _dbContext.HotelMatchVetoes.AsTracking()
+            .SingleOrDefaultAsync(
+                veto => veto.SupHotelId == supplier.SupHotelId
+                    && veto.MTHotelCode == request.MTHotelCode,
+                cancellationToken);
+        var match = await _dbContext.HotelMatchResults.AsTracking()
+            .SingleOrDefaultAsync(result => result.SupHotelId == supplier.SupHotelId, cancellationToken);
+        var created = existing is null;
+        if (created)
+        {
+            if (match is null || string.IsNullOrWhiteSpace(match.MTHotelCode))
+            {
+                await transaction.RollbackAsync(cancellationToken);
+                return new HotelMatchVetoCreateResult(HotelMatchVetoCreateStatus.MatchNotFound, null);
+            }
+
+            if (!string.Equals(match.MTHotelCode, request.MTHotelCode, StringComparison.OrdinalIgnoreCase))
+            {
+                await transaction.RollbackAsync(cancellationToken);
+                return new HotelMatchVetoCreateResult(
+                    HotelMatchVetoCreateStatus.CurrentMatchChanged,
+                    null,
+                    match.MTHotelCode);
+            }
+
+            var now = DateTime.Now;
+            existing = new HotelMatchVeto
+            {
+                SupHotelId = supplier.SupHotelId,
+                MTHotelCode = match.MTHotelCode.Trim(),
+                Operator = request.Operator,
+                Reason = request.Reason,
+                CreateTime = now,
+                UpdateTime = now
+            };
+            _dbContext.HotelMatchVetoes.Add(existing);
+        }
+
+        var removedCurrentMatch = match is not null
+            && string.Equals(match.MTHotelCode, request.MTHotelCode, StringComparison.OrdinalIgnoreCase);
+        if (removedCurrentMatch)
+        {
+            _dbContext.HotelMatchResults.Remove(match!);
+        }
+
+        var updateTime = DateTime.Now;
+        if (created || removedCurrentMatch)
+        {
+            var conflict = await _dbContext.HotelMatchConflicts.AsTracking()
+                .SingleOrDefaultAsync(item => item.SupHotelId == supplier.SupHotelId, cancellationToken);
+            if (conflict is { IsActive: true })
+            {
+                conflict.IsActive = false;
+                conflict.ResolvedTime = updateTime;
+                conflict.UpdateTime = updateTime;
+            }
+
+            supplier.MatchStatus = (byte)HotelMatchStatus.Pending;
+            supplier.LastMatchVersion = null;
+            supplier.LastMatchedDataHash = null;
+            supplier.NextMatchTime = null;
+            supplier.MatchError = null;
+            supplier.UpdateTime = updateTime;
+        }
+
+        await _dbContext.SaveChangesAsync(cancellationToken);
+        await transaction.CommitAsync(cancellationToken);
+        return new HotelMatchVetoCreateResult(
+            created ? HotelMatchVetoCreateStatus.Created : HotelMatchVetoCreateStatus.AlreadyExists,
+            existing!.Id);
+    }
+
+    public async Task<HotelMatchVetoSyncItem?> GetAsync(long vetoId, CancellationToken cancellationToken)
+    {
+        var veto = await QueryVetoSyncItems()
+            .SingleOrDefaultAsync(item => item.Id == vetoId, cancellationToken);
+        return veto is null ? null : MapVeto(veto);
+    }
+
+    public async Task<IReadOnlyList<HotelMatchVetoSyncItem>> LoadPendingSyncAsync(
+        int batchSize,
+        CancellationToken cancellationToken)
+    {
+        var rows = await QueryVetoSyncItems()
+            .Where(item => item.RedisSyncedTime == null
+                || item.FirstRedisSyncFailureTime != null
+                    && (item.FailureAlertSentTime == null
+                        || item.RedisSyncedTime != null && item.RecoveryAlertSentTime == null))
+            .OrderBy(item => item.RedisSyncedTime == null ? 0 : 1)
+            .ThenBy(item => item.LastRedisSyncAttemptTime)
+            .ThenBy(item => item.Id)
+            .Take(batchSize)
+            .ToListAsync(cancellationToken);
+        return rows.Select(MapVeto).ToArray();
+    }
+
+    public async Task<HotelMatchVetoSyncItem> RecordRedisFailureAsync(
+        long vetoId,
+        string error,
+        DateTimeOffset failedAt,
+        CancellationToken cancellationToken)
+    {
+        var veto = await _dbContext.HotelMatchVetoes.AsTracking()
+            .SingleAsync(item => item.Id == vetoId, cancellationToken);
+        var failedTime = failedAt.LocalDateTime;
+        veto.RedisSyncAttemptCount++;
+        veto.FirstRedisSyncFailureTime ??= failedTime;
+        veto.LastRedisSyncAttemptTime = failedTime;
+        veto.LastRedisSyncError = error.Length <= 4000 ? error : error[..4000];
+        veto.UpdateTime = failedTime;
+        await _dbContext.SaveChangesAsync(cancellationToken);
+        return await GetRequiredVetoAsync(vetoId, cancellationToken);
+    }
+
+    public Task MarkFailureAlertSentAsync(
+        long vetoId,
+        DateTimeOffset sentAt,
+        CancellationToken cancellationToken)
+        => UpdateVetoAsync(vetoId, veto =>
+        {
+            veto.FailureAlertSentTime ??= sentAt.LocalDateTime;
+            veto.UpdateTime = sentAt.LocalDateTime;
+        }, cancellationToken);
+
+    public async Task<HotelMatchVetoSyncItem> MarkRedisSyncedAsync(
+        long vetoId,
+        DateTimeOffset syncedAt,
+        CancellationToken cancellationToken)
+    {
+        await UpdateVetoAsync(vetoId, veto =>
+        {
+            veto.RedisSyncAttemptCount++;
+            veto.LastRedisSyncAttemptTime = syncedAt.LocalDateTime;
+            veto.LastRedisSyncError = null;
+            veto.RedisSyncedTime = syncedAt.LocalDateTime;
+            veto.UpdateTime = syncedAt.LocalDateTime;
+        }, cancellationToken);
+        return await GetRequiredVetoAsync(vetoId, cancellationToken);
+    }
+
+    public Task MarkRecoveryAlertSentAsync(
+        long vetoId,
+        DateTimeOffset sentAt,
+        CancellationToken cancellationToken)
+        => UpdateVetoAsync(vetoId, veto =>
+        {
+            veto.RecoveryAlertSentTime ??= sentAt.LocalDateTime;
+            veto.UpdateTime = sentAt.LocalDateTime;
+        }, cancellationToken);
+
+    public Task<bool> IsVetoedAsync(
+        int supId,
+        string supplierHotelCode,
+        string mtHotelCode,
+        CancellationToken cancellationToken)
+        => _dbContext.HotelMatchVetoes.AsNoTracking().AnyAsync(
+            veto => veto.SupplierHotel.SupId == supId
+                && veto.SupplierHotel.SHotelCode == supplierHotelCode
+                && veto.MTHotelCode == mtHotelCode,
+            cancellationToken);
+
+    IQueryable<HotelMatchVeto> QueryVetoSyncItems()
+        => _dbContext.HotelMatchVetoes
+            .AsNoTracking()
+            .Include(veto => veto.SupplierHotel);
+
+    async Task<HotelMatchVetoSyncItem> GetRequiredVetoAsync(
+        long vetoId,
+        CancellationToken cancellationToken)
+        => await GetAsync(vetoId, cancellationToken)
+            ?? throw new InvalidOperationException($"Hotel match veto {vetoId} was not found.");
+
+    async Task UpdateVetoAsync(
+        long vetoId,
+        Action<HotelMatchVeto> update,
+        CancellationToken cancellationToken)
+    {
+        var veto = await _dbContext.HotelMatchVetoes.AsTracking()
+            .SingleAsync(item => item.Id == vetoId, cancellationToken);
+        update(veto);
+        await _dbContext.SaveChangesAsync(cancellationToken);
+    }
+
+    static HotelMatchVetoSyncItem MapVeto(HotelMatchVeto veto)
+        => new(
+            veto.Id,
+            veto.SupHotelId,
+            veto.SupplierHotel.SupId,
+            veto.SupplierHotel.SHotelCode,
+            veto.MTHotelCode,
+            veto.Operator,
+            veto.Reason,
+            veto.RedisSyncAttemptCount,
+            AsOffset(veto.CreateTime),
+            AsOffset(veto.UpdateTime),
+            AsOffset(veto.FirstRedisSyncFailureTime),
+            AsOffset(veto.LastRedisSyncAttemptTime),
+            veto.LastRedisSyncError,
+            AsOffset(veto.FailureAlertSentTime),
+            AsOffset(veto.RedisSyncedTime),
+            AsOffset(veto.RecoveryAlertSentTime));
+
+    static DateTimeOffset AsOffset(DateTime value)
+        => new(DateTime.SpecifyKind(value, DateTimeKind.Local));
+
+    static DateTimeOffset? AsOffset(DateTime? value)
+        => value.HasValue ? AsOffset(value.Value) : null;
 
     public async Task<bool> TryCreateAsync(HotelMatchDeliveryCommand command, CancellationToken cancellationToken)
     {

@@ -18,6 +18,7 @@ public sealed class HotelFactMatchEvaluator
         ArgumentNullException.ThrowIfNull(workItem);
         var matches = workItem.NearbyOtaHotels
             .Where(fact => !string.IsNullOrWhiteSpace(fact.MTHotelCode))
+            .Where(fact => !workItem.VetoedMTHotelCodes.Contains(fact.MTHotelCode!))
             .GroupBy(fact => fact.MTHotelCode!, StringComparer.OrdinalIgnoreCase)
             .Select(group => EvaluateCandidate(workItem, group.Key, group, maximumDistanceMeters))
             .Where(candidate => candidate is not null)

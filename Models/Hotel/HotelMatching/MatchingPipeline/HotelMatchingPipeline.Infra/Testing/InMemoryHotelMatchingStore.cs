@@ -229,6 +229,13 @@ public sealed class InMemoryHotelMatchingStore : IHotelCleaningRepository, IHote
             && x.Raw.Estate == 1
             && string.Equals(x.Cleaned.HotelCode, mtHotelCode, StringComparison.OrdinalIgnoreCase))?.Cleaned);
 
+    public Task<bool> IsVetoedAsync(
+        int supId,
+        string supplierHotelCode,
+        string mtHotelCode,
+        CancellationToken cancellationToken)
+        => Task.FromResult(false);
+
     public Task<bool> TryCreateAsync(HotelMatchDeliveryCommand command, CancellationToken cancellationToken)
     {
         if (_deliveries.TryGetValue(command.IdempotencyKey, out var existingReceipt))

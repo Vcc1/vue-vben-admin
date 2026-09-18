@@ -88,10 +88,9 @@ public sealed class HotelMatchRedisCache : RedisContextBase, IHotelMatchCache
 
                 var supplierHotelCode = GetSupplierHotelCode(evaluation);
                 var supplierHotel = currentSupplierHotels.TryGetValue(supplierHotelCode, out var existing)
-                    ? existing with { MTHotelCode = mtHotelCode }
+                    ? existing
                     : new SupHotelInfoDto
                     {
-                        MTHotelCode = mtHotelCode,
                         SupId = evaluation.SupId,
                         SHotelCode = evaluation.SupHotelCode.Trim()
                     };

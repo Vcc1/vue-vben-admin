@@ -63,4 +63,10 @@ public interface IHotelMatchingRepository
         CancellationToken cancellationToken);
 
     Task<CleanedHotel?> GetOtaHotelAsync(string mtHotelCode, CancellationToken cancellationToken);
+
+    Task<bool> IsVetoedAsync(
+        int supId,
+        string supplierHotelCode,
+        string mtHotelCode,
+        CancellationToken cancellationToken);
 }

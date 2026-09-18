@@ -20,6 +20,7 @@
     <ProjectReference Include="..\HotelMatchingPipeline.App\HotelMatchingPipeline.App.csproj" />
     <ProjectReference Include="..\HotelMatchingPipeline.Domain\HotelMatchingPipeline.Domain.csproj" />
     <ProjectReference Include="..\..\..\..\..\Providers\Infrastructure.Redis.HotelMatchingRedis\Infrastructure.Redis.HotelMatchingRedis.csproj" />
+    <ProjectReference Include="..\..\..\..\..\Providers\Infrastructure.HTTP.WorkWechatAlert\Infrastructure.HTTP.WorkWechatAlert.csproj" />
     <ProjectReference Include="..\..\..\..\..\Providers\Infrastructure.Sql.RoomMapping\Infrastructure.Sql.RoomMapping.csproj" />
   </ItemGroup>
 

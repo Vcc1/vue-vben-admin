@@ -41,7 +41,6 @@ public static class HotelMappingSyncPlanner
 
             supplierHotels.Add(new SupHotelInfoDto
             {
-                MTHotelCode = mtHotelCode,
                 SupId = row.SupId,
                 SContryCode = row.CountryCode?.Trim() ?? string.Empty,
                 SCityCode = row.CityCode?.Trim() ?? string.Empty,
@@ -110,6 +109,11 @@ public static class HotelMappingSyncPlanner
         IReadOnlyList<SupHotelInfoDto> left,
         IReadOnlyList<SupHotelInfoDto> right)
     {
+        if (left.Any(hotel => hotel.HasLegacyM) || right.Any(hotel => hotel.HasLegacyM))
+        {
+            return false;
+        }
+
         return left.OrderBy(Identity, StringComparer.Ordinal)
             .SequenceEqual(right.OrderBy(Identity, StringComparer.Ordinal));
     }

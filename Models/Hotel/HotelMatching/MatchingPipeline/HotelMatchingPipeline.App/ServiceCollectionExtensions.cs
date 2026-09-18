@@ -70,9 +70,19 @@ public static class ServiceCollectionExtensions
         services.AddOptions<HotelMatchingOptions>()
             .Bind(configuration.GetSection(HotelMatchingOptions.SectionName))
             .ValidateDataAnnotations();
+        services.AddOptions<HotelMatchVetoOptions>()
+            .Bind(configuration.GetSection(HotelMatchVetoOptions.SectionName))
+            .ValidateDataAnnotations()
+            .Validate(
+                static options => options.AlertToUsers is { Length: > 0 }
+                    && options.AlertToUsers.Any(static user => !string.IsNullOrWhiteSpace(user)),
+                $"{HotelMatchVetoOptions.SectionName}:AlertToUsers must contain at least one user.")
+            .ValidateOnStart();
         services.AddSingleton<HotelMatchEvaluator>();
         services.AddSingleton<HotelFactMatchEvaluator>();
+        services.TryAddSingleton<HotelMatchVetoSyncSignal>();
         services.AddScoped<HotelMatchingService>();
         services.AddScoped<HotelDebugService>();
+        services.AddScoped<HotelMatchVetoService>();
     }
 }

@@ -1,0 +1,24 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <FrameworkReference Include="Microsoft.AspNetCore.App" />
+    <PackageReference Include="Microsoft.Data.SqlClient" Version="6.1.4" />
+    <PackageReference Include="Quartz.Extensions.Hosting" Version="3.21.0" />
+    <PackageReference Include="Quartz.Serialization.SystemTextJson" Version="3.21.0" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\TaskScheduling.App\TaskScheduling.App.csproj" />
+    <ProjectReference Include="..\TaskScheduling.Contracts\TaskScheduling.Contracts.csproj" />
+    <ProjectReference Include="..\..\AdminIdentity\AdminIdentity.App\AdminIdentity.App.csproj" />
+    <ProjectReference Include="..\..\..\..\Providers\Infrastructure.Sql.Admin\Infrastructure.Sql.Admin.csproj" />
+    <ProjectReference Include="..\..\..\..\BaseFrameworks\VBaseFramework.Core\VBaseFramework.Core.csproj" />
+  </ItemGroup>
+
+</Project>

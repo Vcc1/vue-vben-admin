@@ -87,6 +87,7 @@ public class RoomMappingDbContext : DbContext
     public DbSet<SupHotelInfoRaw> SupHotelInfoRaws { get; set; }
     public DbSet<SupHotelInfoClean> SupHotelInfos { get; set; }
     public DbSet<HotelMatchResult> HotelMatchResults { get; set; }
+    public DbSet<HotelMatchVeto> HotelMatchVetoes { get; set; }
     public DbSet<HotelMatchConflict> HotelMatchConflicts { get; set; }
     public DbSet<HotelMatchDelivery> HotelMatchDeliveries { get; set; }
     public DbSet<OTAHotelPhone> OTAHotelPhones { get; set; }

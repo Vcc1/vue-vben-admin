@@ -1,0 +1,53 @@
+{
+  "structure": [
+    {
+      "name": "Models",
+      "path": "Models",
+      "document": "architecture.md",
+      "children": [
+        { "name": "0.Base", "path": "Models/Base", "children": [ { "name": "Shared", "path": "Models/Base/Shared", "children": [ { "name": "OTA.Domain", "path": "Models/Base/Shared/OTA.Domain" } ] } ] },
+        { "name": "1.Hotel", "path": "Models/Hotel", "children": [
+          { "name": "OTAHotelInfoSync", "path": "Models/Hotel/OTAHotelInfoSync" },
+          { "name": "HotelMatching/MatchingPipeline", "path": "Models/Hotel/HotelMatching/MatchingPipeline" },
+          { "name": "HotelResearch", "path": "Models/Hotel/HotelResearch" },
+          { "name": "HotelBusiness", "path": "Models/Hotel/HotelBusiness" },
+          { "name": "SupplierStaticData", "path": "Models/Hotel/SupplierStaticData" }
+        ] },
+        { "name": "2.Room", "path": "Models/Room", "children": [
+          { "name": "RoomDataProcessings/QueryPriceSupRoomBuilder", "path": "Models/Room/RoomDataProcessings/QueryPriceSupRoomBuilder" },
+          { "name": "RoomMatchings/Core", "path": "Models/Room/RoomMatchings/Core" },
+          { "name": "RoomMatchings/OTARoomBuilder", "path": "Models/Room/RoomMatchings/OTARoomBuilder" },
+          { "name": "RoomMatchings/Statistics", "path": "Models/Room/RoomMatchings/Statistics" },
+          { "name": "SupRoomInfo/Ingestion", "path": "Models/Room/SupRoomInfo/Ingestion" }
+        ] },
+        { "name": "3.Price", "path": "Models/Price", "children": [ { "name": "ExpediaChaseRoom", "path": "Models/Price/ExpediaChaseRoom" }, { "name": "HotelPriceAvailability", "path": "Models/Price/HotelPriceAvailability" } ] },
+        { "name": "4.MetricsAndAlerts", "path": "Models/MetricsAndAlerts", "children": [ { "name": "GrafanaAlert", "path": "Models/MetricsAndAlerts/GrafanaAlert" }, { "name": "MetricsAndAlerts", "path": "Models/MetricsAndAlerts/MetricsAndAlerts" } ] },
+        { "name": "5.AI", "path": "Models/AI", "children": [ { "name": "AgentPlatform", "path": "Models/AI/AgentPlatform" } ] },
+        { "name": "6.Data", "path": "Models/Backoffice", "children": [ { "name": "Backoffice", "path": "Models/Backoffice" } ] }
+      ]
+    }
+  ],
+  "projects": [
+    {
+      "id": "documentation-driver",
+      "name": "Documentation Driver",
+      "path": "Documentation/Documentation.Driver/Documentation.Driver.csproj",
+      "summary": "扫描文档源并生成项目目录、Markdown 页面和资源预览。",
+      "features": [
+        {
+          "id": "catalog",
+          "name": "项目目录",
+          "summary": "自动枚举解决方案中的全部项目，并合并人工维护的项目和功能说明。",
+          "document": "Projects/Documentation.Driver/index.md"
+        },
+        {
+          "id": "assets",
+          "name": "资源展示",
+          "summary": "复制 SVG、图片、PDF 和其他源文件，支持在目录中直接打开。",
+          "asset": "assets/documentation-flow.svg"
+        }
+      ],
+      "documents": ["Projects/Documentation.Driver/index.md"]
+    }
+  ]
+}

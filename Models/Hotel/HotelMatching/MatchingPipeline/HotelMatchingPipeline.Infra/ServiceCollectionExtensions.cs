@@ -2,6 +2,7 @@ using HotelMatchingPipeline.App.Contracts;
 using HotelMatchingPipeline.Infra.Sql;
 using HotelMatchingPipeline.Infra.ThirdParty;
 using Infrastructure.Redis.HotelMatchingRedis;
+using Infrastructure.HTTP.WorkWechatAlert;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 
@@ -22,7 +23,11 @@ public static class ServiceCollectionExtensions
         services.AddScoped<IHotelMatchPipelineRepository>(provider => provider.GetRequiredService<RoomMappingHotelRepository>());
         services.AddScoped<IHotelMatchingRepository>(provider => provider.GetRequiredService<RoomMappingHotelRepository>());
         services.AddScoped<IHotelMatchDeliveryRepository>(provider => provider.GetRequiredService<RoomMappingHotelRepository>());
+        services.AddScoped<IHotelMatchVetoRepository>(provider => provider.GetRequiredService<RoomMappingHotelRepository>());
         services.AddHotelMatchingRedis();
+        services.AddWorkWechatAlertHttpProvider();
+        services.AddSingleton<IHotelMatchVetoRedisSynchronizer, HotelMatchVetoRedisSynchronizer>();
+        services.AddSingleton<IHotelMatchVetoNotifier, WorkWechatHotelMatchVetoNotifier>();
 
         services.AddOptions<ThirdPartyHotelMatchOptions>()
             .Bind(configuration.GetSection(ThirdPartyHotelMatchOptions.SectionName));

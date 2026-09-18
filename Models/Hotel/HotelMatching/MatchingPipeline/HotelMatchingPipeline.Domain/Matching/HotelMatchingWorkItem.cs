@@ -31,7 +31,11 @@ public sealed record HotelMatchingWorkItem(
     HotelMatchFact PendingSupplier,
     IReadOnlyList<HotelMatchFact> NearbyOtaHotels,
     IReadOnlyList<HotelMatchFact> NearbySupplierHotels,
-    IReadOnlyList<HotelMatchFact> OtaLinkedSupplierHotels);
+    IReadOnlyList<HotelMatchFact> OtaLinkedSupplierHotels)
+{
+    public IReadOnlySet<string> VetoedMTHotelCodes { get; init; } =
+        new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+}
 
 public sealed record HotelMatchEvidence(
     HotelMatchFactSource Source,

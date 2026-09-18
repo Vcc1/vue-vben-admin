@@ -144,6 +144,44 @@ public sealed class HotelFactMatchEvaluatorTests
         Assert.True(result.HasConflict);
     }
 
+    [Fact]
+    public void Vetoed_candidate_is_excluded_while_other_candidate_can_match()
+    {
+        var pending = Fact(
+            HotelMatchFactSource.Supplier,
+            1,
+            hotelName: "A Hotel",
+            longitude: 121m,
+            latitude: 31m);
+        var vetoed = Fact(
+            HotelMatchFactSource.Ota,
+            10,
+            mtHotelCode: "MT-10",
+            hotelName: "A Hotel",
+            longitude: 121.0001m,
+            latitude: 31m);
+        var allowed = Fact(
+            HotelMatchFactSource.Ota,
+            11,
+            mtHotelCode: "MT-11",
+            hotelName: "A Hotel",
+            longitude: 121.0002m,
+            latitude: 31m);
+        var workItem = new HotelMatchingWorkItem(1, pending, [vetoed, allowed], [], [])
+        {
+            VetoedMTHotelCodes = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
+            {
+                "mt-10"
+            }
+        };
+
+        var result = new HotelFactMatchEvaluator().Evaluate(workItem, 60);
+
+        var match = Assert.Single(result.Matches);
+        Assert.Equal("MT-11", match.MTHotelCode);
+        Assert.Equal("MT-11", result.ResolvedMTHotelCode);
+    }
+
     static HotelMatchFact Fact(
         HotelMatchFactSource source,
         int hotelId,

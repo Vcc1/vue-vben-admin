@@ -701,6 +701,15 @@ public sealed class HotelMatchingService
             return new HotelManualReviewResult(false, "dataProblem", "supplier_quality_problem");
         }
 
+        if (await _repository.IsVetoedAsync(
+                request.SupId,
+                request.SHotelCode,
+                request.MTHotelCode!,
+                cancellationToken))
+        {
+            return new HotelManualReviewResult(false, "vetoedCandidate", "hotel_match_pair_is_vetoed");
+        }
+
         var ota = await _repository.GetOtaHotelAsync(request.MTHotelCode!, cancellationToken);
         if (ota is null || !ota.IsQualityValid)
         {

@@ -23,8 +23,9 @@ public enum HotelMappingSyncOperationType
 
 public sealed record SupHotelInfoDto
 {
-    [JsonPropertyName("M")]
-    public string MTHotelCode { get; init; } = string.Empty;
+    // Used only to migrate values written by the previous payload shape.
+    [JsonIgnore]
+    public bool HasLegacyM { get; init; }
 
     [JsonPropertyName("I")]
     public int SupId { get; init; }
@@ -69,13 +70,20 @@ public interface IHotelMappingRedisStore
         IReadOnlyList<HotelMappingSyncOperation> operations,
         CancellationToken cancellationToken);
 
+    Task RemoveSupplierHotelAsync(
+        string mtHotelCode,
+        int supId,
+        string supplierHotelCode,
+        CancellationToken cancellationToken);
 }
 
 public sealed record HotelMappingRedisConnectionInfo(
     int Database,
     IReadOnlyList<string> Endpoints);
 
-public sealed class HotelMappingRedisStore : RedisContextBase, IHotelMappingRedisStore
+public sealed class HotelMappingRedisStore :
+    RedisContextBase,
+    IHotelMappingRedisStore
 {
     const int HashScanPageSize = 1000;
 
@@ -130,7 +138,7 @@ public sealed class HotelMappingRedisStore : RedisContextBase, IHotelMappingRedi
             var value = entry.Value.ToString().Trim();
             try
             {
-                mappings[field] = DeserializeSupplierHotels(field, value);
+                mappings[field] = DeserializeSupplierHotels(value);
             }
             catch (JsonException ex)
             {
@@ -165,7 +173,7 @@ public sealed class HotelMappingRedisStore : RedisContextBase, IHotelMappingRedi
                     HotelMatchingRedisKeys.Mapping,
                     operation.MTHotelCode,
                     JsonSerializer.Serialize(
-                        NormalizeSupplierHotels(operation.NewSupplierHotels ?? [], operation.MTHotelCode),
+                        NormalizeSupplierHotels(operation.NewSupplierHotels ?? []),
                         JsonOptions)));
 
             tasks.Add(transaction.ListLeftPushAsync(
@@ -181,24 +189,96 @@ public sealed class HotelMappingRedisStore : RedisContextBase, IHotelMappingRedi
         await Task.WhenAll(tasks);
     }
 
-    static IReadOnlyList<SupHotelInfoDto> DeserializeSupplierHotels(string mtHotelCode, string json)
+    public async Task RemoveSupplierHotelAsync(
+        string mtHotelCode,
+        int supId,
+        string supplierHotelCode,
+        CancellationToken cancellationToken)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(mtHotelCode);
+        ArgumentException.ThrowIfNullOrWhiteSpace(supplierHotelCode);
+        var normalizedMtHotelCode = mtHotelCode.Trim();
+        var normalizedSupplierHotelCode = supplierHotelCode.Trim();
+        var conflictField = $"{supId}_{normalizedSupplierHotelCode}";
+
+        while (true)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            var currentValue = await DB.HashGetAsync(
+                HotelMatchingRedisKeys.Mapping,
+                normalizedMtHotelCode);
+            var remaining = currentValue.IsNull
+                ? []
+                : RemoveSupplierHotel(
+                    DeserializeSupplierHotels(currentValue.ToString()),
+                    supId,
+                    normalizedSupplierHotelCode);
+
+            var transaction = DB.CreateTransaction();
+            transaction.AddCondition(currentValue.IsNull
+                ? Condition.HashNotExists(
+                    HotelMatchingRedisKeys.Mapping,
+                    normalizedMtHotelCode)
+                : Condition.HashEqual(
+                    HotelMatchingRedisKeys.Mapping,
+                    normalizedMtHotelCode,
+                    currentValue));
+            var tasks = new List<Task>(3)
+            {
+                remaining.Length == 0
+                    ? transaction.HashDeleteAsync(
+                        HotelMatchingRedisKeys.Mapping,
+                        normalizedMtHotelCode)
+                    : transaction.HashSetAsync(
+                        HotelMatchingRedisKeys.Mapping,
+                        normalizedMtHotelCode,
+                        JsonSerializer.Serialize(
+                            NormalizeSupplierHotels(remaining),
+                            JsonOptions)),
+                transaction.HashDeleteAsync(HotelMatchingRedisKeys.Conflict, conflictField),
+                transaction.ListLeftPushAsync(
+                    HotelMatchingRedisKeys.MappingSyncPending,
+                    normalizedMtHotelCode)
+            };
+
+            if (await transaction.ExecuteAsync())
+            {
+                await Task.WhenAll(tasks);
+                return;
+            }
+
+            await Task.Yield();
+        }
+    }
+
+    static IReadOnlyList<SupHotelInfoDto> DeserializeSupplierHotels(string json)
     {
         var hotels = JsonSerializer.Deserialize<SupHotelInfoDto[]>(json, JsonOptions) ?? [];
-        return NormalizeSupplierHotels(hotels, mtHotelCode);
+        var hasLegacyM = false;
+        using var document = JsonDocument.Parse(json);
+        if (document.RootElement.ValueKind == JsonValueKind.Array)
+        {
+            hasLegacyM = document.RootElement.EnumerateArray()
+                .Any(item => item.ValueKind == JsonValueKind.Object
+                    && item.TryGetProperty("M", out _));
+        }
+
+        return NormalizeSupplierHotels(hotels, hasLegacyM);
     }
 
     internal static SupHotelInfoDto[] NormalizeSupplierHotels(
         IEnumerable<SupHotelInfoDto> values,
-        string mtHotelCode)
+        bool hasLegacyM = false)
     {
         return values
             .Select(value => value with
             {
-                MTHotelCode = mtHotelCode.Trim(),
                 SContryCode = value.SContryCode.Trim(),
                 SCityCode = value.SCityCode.Trim(),
                 SHotelCode = value.SHotelCode.Trim(),
-                SHotelName = value.SHotelName.Trim()
+                SHotelName = value.SHotelName.Trim(),
+                LV = 1,
+                HasLegacyM = hasLegacyM
             })
             .Where(value => value.SHotelCode.Length > 0)
             .GroupBy(value => $"{value.SupId}_{value.SHotelCode}", StringComparer.Ordinal)
@@ -207,5 +287,17 @@ public sealed class HotelMappingRedisStore : RedisContextBase, IHotelMappingRedi
             .ThenBy(value => value.SHotelCode, StringComparer.Ordinal)
             .ToArray();
     }
+
+    internal static SupHotelInfoDto[] RemoveSupplierHotel(
+        IEnumerable<SupHotelInfoDto> values,
+        int supId,
+        string supplierHotelCode)
+        => values
+            .Where(hotel => hotel.SupId != supId
+                || !string.Equals(
+                    hotel.SHotelCode,
+                    supplierHotelCode,
+                    StringComparison.Ordinal))
+            .ToArray();
 
 }

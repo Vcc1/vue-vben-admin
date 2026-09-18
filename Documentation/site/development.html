@@ -1,0 +1,62 @@
+<!doctype html><html lang="zh-CN"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>开发与文档同步 - MengtuV</title><style>body{margin:0;color:#20242b;background:#f6f7f9;font:16px/1.65 system-ui,-apple-system,Segoe UI,sans-serif}header{background:#17202b;color:#fff;padding:18px max(24px,calc((100% - 1840px)/2));box-sizing:border-box}.brand{color:#fff;font-weight:700;text-decoration:none}.layout{width:min(1840px,calc(100% - 48px));margin:0 auto;display:grid;grid-template-columns:clamp(220px,18vw,320px) minmax(0,1fr);gap:clamp(28px,4vw,80px);padding:32px 0}.catalog-layout .index{width:auto;margin:0}.catalog-sidebar{position:sticky;top:24px;align-self:start}aside{border-right:1px solid #d8dde5;padding-right:20px}aside h2{font-size:15px;margin:0 0 12px}nav a{display:block;color:#4d5866;text-decoration:none;padding:5px 8px;border-radius:4px}nav a:hover,nav a.current{background:#e4e9f0;color:#17202b}.crumb{color:#77818d;font-size:13px}main{min-width:0}h1,h2,h3,h4{line-height:1.25;color:#17202b}h1{font-size:34px}h2{font-size:25px;margin-top:34px}h3{font-size:20px;margin-top:26px}.toc{border-left:3px solid #6a7d91;background:#fff;padding:12px 18px;margin:24px 0}.toc ul{margin:6px 0;padding-left:20px;list-style:none}.toc .level-3{padding-left:16px}.toc .level-4,.toc .level-5,.toc .level-6{padding-left:32px}a{color:#145da0}code{background:#e9edf2;border-radius:3px;padding:2px 5px;font-size:.92em}pre{background:#202832;color:#edf2f7;padding:16px;overflow:auto;border-radius:5px}pre code{background:none;padding:0}table{border-collapse:collapse;width:100%;margin:16px 0;background:#fff}th,td{border:1px solid #d8dde5;text-align:left;padding:8px 10px}th{background:#e9edf2}li{margin:4px 0}.index{width:min(1760px,calc(100% - 48px));margin:0 auto;padding:48px 0}.catalog-nav{display:flex;flex-wrap:wrap;gap:8px;margin-bottom:28px}.catalog-nav a{background:#fff;border:1px solid #cbd4df;padding:7px 12px;border-radius:4px;text-decoration:none}.project-list{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,420px),1fr));gap:14px;padding:0;list-style:none}.project-list>li{background:#fff;border:1px solid #d8dde5;border-radius:6px;padding:16px;min-width:0}.project-list>li>code{display:block;color:#77818d;margin-top:5px;overflow-wrap:anywhere}.feature-list{margin-top:10px}.stats{color:#5d6875}.document-list,.path-list,.feature-catalog{list-style:none;padding:0}.document-list li,.path-list li{display:flex;align-items:center;justify-content:space-between;gap:20px;border-bottom:1px solid #d8dde5;padding:12px 0}.document-list span,.path-list span{color:#77818d;font-size:13px}.path-group{margin:24px 0}.feature-catalog>li{background:#fff;border:1px solid #d8dde5;padding:8px 16px;margin:12px 0}.asset-preview{width:180px;height:72px;object-fit:contain;object-position:left center;background:#f6f7f9;border:1px solid #d8dde5;margin-right:12px;padding:4px}.asset-gallery{width:100%;margin:0 auto;padding:36px 0}.asset-gallery .catalog-nav,.asset-gallery h1,.asset-gallery>p{width:min(1840px,calc(100% - 48px));margin-left:auto;margin-right:auto}.asset-item{width:100%;margin:48px 0 72px}.asset-item h2{width:min(1840px,calc(100% - 48px));margin:0 auto 16px}.svg-unbounded,.svg-structure{display:block;width:100%;height:auto;max-width:none}.raster-preview{display:block;width:auto;max-width:100%;height:auto;margin:0 auto}.structure-page{width:100%}@media(max-width:760px){.layout{display:block;width:calc(100% - 32px);padding:20px 0}.catalog-sidebar{position:static}aside{border-right:0;border-bottom:1px solid #d8dde5;padding:0 0 16px;margin-bottom:24px}.index{width:calc(100% - 32px);padding:28px 0}.document-list li,.path-list li{display:block}.document-list span,.path-list span{display:block;margin-top:3px}.asset-preview{display:block;margin-bottom:6px}.asset-gallery .catalog-nav,.asset-gallery h1,.asset-gallery>p,.asset-item h2{width:calc(100% - 32px)}}@media(min-width:1800px){body{font-size:17px}.layout{grid-template-columns:340px minmax(0,1fr)}.project-list{grid-template-columns:repeat(3,minmax(0,1fr))}}html{font-size:clamp(.9375rem,0.72vw,1.375rem)}body{font-size:1rem}header{padding:1.1rem 4vw}.layout{width:92vw;max-width:none;grid-template-columns:16vw minmax(0,1fr);gap:3vw;padding:2.4vw 0}.catalog-layout .index,.index{width:100%;max-width:none;padding:2.8vw 0}.catalog-sidebar{top:1.5rem}aside{border-right:.0625rem solid #d8dde5;padding-right:1.2vw}aside h2{font-size:1rem;margin-bottom:.7rem}nav a{padding:.35rem .55rem;border-radius:.25rem}.crumb{font-size:.8rem}h1{font-size:clamp(2rem,2.2vw,3.2rem)}h2{font-size:clamp(1.35rem,1.5vw,2.2rem);margin-top:2.1rem}h3{font-size:clamp(1.1rem,1.15vw,1.6rem);margin-top:1.5rem}.toc{padding:.8rem 1.1rem;margin:1.5rem 0}pre{padding:1rem;border-radius:.3rem}table{margin:1rem 0}th,td{padding:.5rem .65rem}.project-list{grid-template-columns:repeat(auto-fit,minmax(min(100%,24rem),1fr));gap:1rem}.project-list>li{border:.0625rem solid #d8dde5;border-radius:.35rem;padding:1rem}.catalog-nav{gap:.5rem;margin-bottom:1.5rem}.catalog-nav a{border:.0625rem solid #cbd4df;padding:.45rem .75rem;border-radius:.25rem}.document-list li,.path-list li{gap:1rem;padding:.75rem 0;border-bottom:.0625rem solid #d8dde5}.document-list span,.path-list span{font-size:.8rem}.path-group{margin:1.5rem 0}.feature-catalog>li{border:.0625rem solid #d8dde5;padding:.5rem 1rem;margin:.75rem 0}.asset-gallery .catalog-nav,.asset-gallery h1,.asset-gallery>p,.asset-item h2{width:92vw}.asset-item{margin:3vw 0 4vw}.asset-item h2{margin-bottom:1rem}.asset-preview{width:11rem;height:4.5rem;border:.0625rem solid #d8dde5;margin-right:.75rem;padding:.25rem}.asset-gallery{padding:2.5vw 0}@media(max-width:48rem){.layout{display:block;width:92vw;padding:1.5rem 0}.catalog-sidebar{position:static}aside{border-right:0;border-bottom:.0625rem solid #d8dde5;padding:0 0 1rem;margin-bottom:1.5rem}.index{width:100%;padding:1.5rem 0}.document-list li,.path-list li{display:block}.document-list span,.path-list span{display:block;margin-top:.25rem}.asset-preview{display:block;margin-bottom:.4rem}.asset-gallery .catalog-nav,.asset-gallery h1,.asset-gallery>p,.asset-item h2{width:92vw}}</style></head><body><header><a class="brand" href="index.html">MengtuV 文档</a></header>
+<div class="layout"><aside><h2>目录</h2><nav class="side-nav">
+<a href="index.html">总览</a>
+<a href="models-structure.html">Models 结构图</a>
+<a href="architecture.html">解决方案架构</a>
+<a class="current" href="development.html">开发与文档同步</a>
+<a href="overview.html">MengtuV 项目文档</a>
+<a href="Projects/Documentation.Driver/index.html">Documentation.Driver</a>
+<a href="services.html">可执行服务</a>
+</nav></aside><main>
+<p class="crumb">development.md</p>
+<section class="toc"><strong>目录</strong><ul>
+<li class="level-2"><a href="#新增项目">新增项目</a></li>
+<li class="level-2"><a href="#新增功能">新增功能</a></li>
+<li class="level-2"><a href="#写作约定">写作约定</a></li>
+<li class="level-2"><a href="#验证命令">验证命令</a></li>
+</ul></section>
+<h1 id="开发与文档同步">开发与文档同步</h1>
+<h2 id="新增项目">新增项目</h2>
+<ol>
+<li>在正确的物理目录下创建项目，目录名不要带数字。</li>
+<li>在 <code>MengtuV.slnx</code> 中把项目放入带数字的解决方案分组。</li>
+<li>在本目录更新 <code>architecture.md</code> 的分组或项目说明。</li>
+<li>如果项目有运行入口，再更新 <code>services.md</code> 和根目录 <code>AI_INDEX.md</code>。</li>
+<li>运行文档驱动，检查目录、HTML 和 <code>manifest.json</code>。</li>
+</ol>
+<p>项目和功能说明写入 <code>Documentation/Source/catalog.json</code>。每个项目使用以下字段：<code>id</code>、<code>name</code>、<code>path</code>、<code>summary</code>、<code>features</code>、<code>documents</code>；功能使用 <code>id</code>、<code>name</code>、<code>summary</code>，可选 <code>document</code> 或 <code>asset</code> 指向具体说明或资源。<code>path</code> 使用仓库相对路径，物理目录不带解决方案编号。</p>
+<p>项目文档统一放在 <code>Documentation/Source/Projects/&lt;project-id&gt;/</code> 下，入口文件命名为 <code>index.md</code>。<code>catalog.json</code> 中的 <code>documents</code> 必须指向这个入口文件；驱动会按该路径生成对应的站点目录。</p>
+<pre><code>
+{
+  &quot;projects&quot;: [
+    {
+      &quot;id&quot;: &quot;room-matching&quot;,
+      &quot;name&quot;: &quot;Room Matching&quot;,
+      &quot;path&quot;: &quot;Models/Room/RoomMatchings/Core/RoomMatching.Cli/RoomMatching.Cli.csproj&quot;,
+      &quot;summary&quot;: &quot;房型匹配主流程。&quot;,
+      &quot;features&quot;: [
+        { &quot;id&quot;: &quot;match&quot;, &quot;name&quot;: &quot;匹配&quot;, &quot;summary&quot;: &quot;执行 OTA 与供应商房型匹配。&quot;, &quot;document&quot;: &quot;room-matching.md&quot; }
+      ],
+      &quot;documents&quot;: [&quot;room-matching.md&quot;]
+    }
+  ]
+}
+</code></pre>
+<h2 id="新增功能">新增功能</h2>
+<p>功能完成后，在最接近的模块文档中补充用途、入口、关键数据流和验证方式。跨模块功能要同时更新架构依赖和服务清单；不能只把说明写在提交信息里。</p>
+<h2 id="写作约定">写作约定</h2>
+<ul>
+<li>每个源文件只有一个 <code>#</code> 标题，使用 <code>##</code>、<code>###</code> 表达层级。</li>
+<li>路径、类型名、命令和配置键使用反引号包裹。</li>
+<li>先写结论和边界，再写实现细节；避免只描述代码当前长什么样。</li>
+<li>变更行为时说明兼容性、失败处理和验证命令。</li>
+<li>面向 AI 的信息必须可定位到文件或项目；面向人的说明补充背景和操作上下文。</li>
+</ul>
+<h2 id="验证命令">验证命令</h2>
+<pre><code>
+dotnet build Documentation/Documentation.Driver/Documentation.Driver.csproj
+dotnet run --project Documentation/Documentation.Driver -- --clean
+</code></pre>
+<p>生成成功的标志是控制台显示文档数量，且 <code>Documentation/site/index.html</code>、各页面和 <code>manifest.json</code> 均存在。</p>
+</main></div>
+</body></html>

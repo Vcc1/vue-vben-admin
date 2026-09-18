@@ -9,8 +9,10 @@ public static class ServiceCollectionExtensions
     {
         ArgumentNullException.ThrowIfNull(services);
 
+        services.AddSingleton<HotelMappingRedisStore>();
+        services.AddSingleton<IHotelMappingRedisStore>(provider =>
+            provider.GetRequiredService<HotelMappingRedisStore>());
         services.AddSingleton<IHotelMatchCache, HotelMatchRedisCache>();
-        services.AddSingleton<IHotelMappingRedisStore, HotelMappingRedisStore>();
         return services;
     }
 }

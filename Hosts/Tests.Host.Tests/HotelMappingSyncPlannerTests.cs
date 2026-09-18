@@ -20,7 +20,6 @@ public sealed class HotelMappingSyncPlannerTests
 
         Assert.Equal(2, result.Count);
         var first = Assert.Single(result["MT100"]);
-        Assert.Equal("MT100", first.MTHotelCode);
         Assert.Equal(51, first.SupId);
         Assert.Equal("CN", first.SContryCode);
         Assert.Equal("SHA", first.SCityCode);
@@ -50,15 +49,15 @@ public sealed class HotelMappingSyncPlannerTests
     {
         var desired = new Dictionary<string, IReadOnlyList<SupHotelInfoDto>>(StringComparer.Ordinal)
         {
-            ["MT-A"] = [Hotel("MT-A", 51, "A")],
-            ["MT-B"] = [Hotel("MT-B", 51, "B"), Hotel("MT-B", 51, "B-NEW")],
-            ["MT-SAME"] = [Hotel("MT-SAME", 32, "SAME"), Hotel("MT-SAME", 51, "SAME")]
+            ["MT-A"] = [Hotel(51, "A")],
+            ["MT-B"] = [Hotel(51, "B"), Hotel(51, "B-NEW")],
+            ["MT-SAME"] = [Hotel(32, "SAME"), Hotel(51, "SAME")]
         };
         var current = new Dictionary<string, IReadOnlyList<SupHotelInfoDto>>(StringComparer.Ordinal)
         {
-            ["MT-B"] = [Hotel("MT-B", 51, "B")],
-            ["MT-C"] = [Hotel("MT-C", 51, "C")],
-            ["MT-SAME"] = [Hotel("MT-SAME", 51, "SAME"), Hotel("MT-SAME", 32, "SAME")]
+            ["MT-B"] = [Hotel(51, "B")],
+            ["MT-C"] = [Hotel(51, "C")],
+            ["MT-SAME"] = [Hotel(51, "SAME"), Hotel(32, "SAME")]
         };
 
         var plan = HotelMappingSyncPlanner.CreatePlan(desired, current);
@@ -82,11 +81,11 @@ public sealed class HotelMappingSyncPlannerTests
     {
         var desired = new Dictionary<string, IReadOnlyList<SupHotelInfoDto>>(StringComparer.Ordinal)
         {
-            ["MT-B"] = [Hotel("MT-B", 51, "H100")]
+            ["MT-B"] = [Hotel(51, "H100")]
         };
         var current = new Dictionary<string, IReadOnlyList<SupHotelInfoDto>>(StringComparer.Ordinal)
         {
-            ["MT-A"] = [Hotel("MT-A", 51, "H100")]
+            ["MT-A"] = [Hotel(51, "H100")]
         };
 
         var plan = HotelMappingSyncPlanner.CreatePlan(desired, current);
@@ -112,7 +111,6 @@ public sealed class HotelMappingSyncPlannerTests
     {
         var json = JsonSerializer.Serialize(new SupHotelInfoDto
         {
-            MTHotelCode = "MT100",
             SupId = 51,
             SContryCode = "CN",
             SCityCode = "SHA",
@@ -122,14 +120,13 @@ public sealed class HotelMappingSyncPlannerTests
         });
         using var document = JsonDocument.Parse(json);
 
-        Assert.Equal(["M", "I", "C1", "C2", "C3", "N", "LV"],
+        Assert.Equal(["I", "C1", "C2", "C3", "N", "LV"],
             document.RootElement.EnumerateObject().Select(property => property.Name));
     }
 
-    static SupHotelInfoDto Hotel(string mtHotelCode, int supId, string supplierHotelCode)
+    static SupHotelInfoDto Hotel(int supId, string supplierHotelCode)
         => new()
         {
-            MTHotelCode = mtHotelCode,
             SupId = supId,
             SHotelCode = supplierHotelCode
         };

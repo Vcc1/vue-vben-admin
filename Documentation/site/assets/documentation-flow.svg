@@ -1,0 +1,14 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 960 240" role="img" aria-labelledby="title desc">
+  <title id="title">Documentation flow</title>
+  <desc id="desc">Source files are scanned by the driver and published as a catalog.</desc>
+  <rect width="960" height="240" fill="#f6f7f9"/>
+  <g font-family="system-ui,Segoe UI,sans-serif" font-size="20" fill="#17202b" text-anchor="middle">
+    <rect x="40" y="70" width="220" height="100" rx="8" fill="#e9edf2" stroke="#6a7d91"/>
+    <text x="150" y="112">文档源</text><text x="150" y="142" font-size="15">Markdown / SVG / 其他</text>
+    <rect x="370" y="70" width="220" height="100" rx="8" fill="#dce9f4" stroke="#145da0"/>
+    <text x="480" y="112">Documentation.Driver</text><text x="480" y="142" font-size="15">扫描 / 建目录 / 渲染</text>
+    <rect x="700" y="70" width="220" height="100" rx="8" fill="#e6f0e7" stroke="#47754b"/>
+    <text x="810" y="112">项目目录</text><text x="810" y="142" font-size="15">HTML / manifest / 资源</text>
+  </g>
+  <g stroke="#6a7d91" stroke-width="3" fill="none"><path d="M260 120h100"/><path d="M590 120h100"/><path d="m345 110 15 10-15 10"/><path d="m675 110 15 10-15 10"/></g>
+</svg>

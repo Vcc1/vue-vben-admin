@@ -15,8 +15,8 @@ public sealed class HotelMappingSyncRunnerTests
         ]);
         var store = new FakeRedisStore(new Dictionary<string, IReadOnlyList<SupHotelInfoDto>>
         {
-            ["MT-B-NEW"] = [Hotel("MT-B-NEW", 51, "B-OLD")],
-            ["MT-C"] = [Hotel("MT-C", 51, "C")]
+            ["MT-B-NEW"] = [Hotel(51, "B-OLD")],
+            ["MT-C"] = [Hotel(51, "C")]
         });
         var runner = new HotelMappingSyncRunner(source, store);
 
@@ -74,7 +74,7 @@ public sealed class HotelMappingSyncRunnerTests
         [new HotelMappingSourceRow(51, "A", "MT-A")]);
         var store = new FakeRedisStore(new Dictionary<string, IReadOnlyList<SupHotelInfoDto>>
         {
-            ["MT-A"] = [Hotel("MT-A", 51, "A")]
+            ["MT-A"] = [Hotel(51, "A")]
         });
         var runner = new HotelMappingSyncRunner(source, store);
 
@@ -146,6 +146,13 @@ public sealed class HotelMappingSyncRunnerTests
             return Task.CompletedTask;
         }
 
+        public Task RemoveSupplierHotelAsync(
+            string mtHotelCode,
+            int supId,
+            string supplierHotelCode,
+            CancellationToken cancellationToken)
+            => throw new NotSupportedException();
+
         public string? RightPop()
         {
             if (PendingQueue.Count == 0)
@@ -160,10 +167,9 @@ public sealed class HotelMappingSyncRunnerTests
         }
     }
 
-    static SupHotelInfoDto Hotel(string mtHotelCode, int supId, string supplierHotelCode)
+    static SupHotelInfoDto Hotel(int supId, string supplierHotelCode)
         => new()
         {
-            MTHotelCode = mtHotelCode,
             SupId = supId,
             SHotelCode = supplierHotelCode
         };
