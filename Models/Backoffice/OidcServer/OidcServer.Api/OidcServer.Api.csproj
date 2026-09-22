@@ -14,6 +14,7 @@
   <ItemGroup>
     <ProjectReference Include="..\OidcServer.App\OidcServer.App.csproj" />
     <ProjectReference Include="..\..\AdminIdentity\AdminIdentity.App\AdminIdentity.App.csproj" />
+    <ProjectReference Include="..\..\..\..\Providers\Infrastructure.Sql.Admin\Infrastructure.Sql.Admin.csproj" />
   </ItemGroup>
 
 </Project>

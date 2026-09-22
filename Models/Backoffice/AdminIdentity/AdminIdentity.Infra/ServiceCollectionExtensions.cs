@@ -10,7 +10,9 @@ using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Options;
 using Microsoft.IdentityModel.Tokens;
+using OidcServer.Infra;
 
 namespace AdminIdentity.Infra;
 
@@ -83,6 +85,19 @@ public static class ServiceCollectionExtensions
                 options.SlidingExpiration = true;
                 options.Events.OnRedirectToLogin = context =>
                 {
+                    var path = context.Request.Path.Value ?? "";
+                    if (path.StartsWith("/connect/authorize", StringComparison.OrdinalIgnoreCase))
+                    {
+                        var oidcOptions = context.HttpContext.RequestServices
+                            .GetRequiredService<IOptions<OidcServerOptions>>().Value;
+                        // 登录页与授权端点不同源（前端 5101 / Admin.Host 5100），
+                        // 必须给绝对地址，否则前端 window.location.href 会按相对路径跳回自己域名。
+                        var request = context.Request;
+                        var returnUrl = $"{request.Scheme}://{request.Host}{request.Path}{request.QueryString}";
+                        var loginUrl = $"{oidcOptions.AdminLoginUrl}?returnUrl={Uri.EscapeDataString(returnUrl)}";
+                        context.Response.Redirect(loginUrl);
+                        return Task.CompletedTask;
+                    }
                     context.Response.StatusCode = StatusCodes.Status401Unauthorized;
                     return Task.CompletedTask;
                 };
@@ -143,8 +158,13 @@ public static class ServiceCollectionExtensions
         services.AddScoped<CurrentActorAccessor>();
         services.AddScoped<ICurrentActorAccessor>(provider => provider.GetRequiredService<CurrentActorAccessor>());
         services.AddScoped<AdminIdentityService>();
+        services.AddSingleton<RolePermissionCatalog>();
+        services.AddSingleton<IRolePermissionCatalog>(provider => provider.GetRequiredService<RolePermissionCatalog>());
+        services.AddHostedService<RolePermissionCacheRefresher>();
         services.AddScoped<IAdminAuthenticationService>(provider => provider.GetRequiredService<AdminIdentityService>());
         services.AddScoped<IAdminUserService>(provider => provider.GetRequiredService<AdminIdentityService>());
+        services.AddScoped<IAdminAccessManagementService, AdminAccessManagementService>();
+        services.AddScoped<IAdminAccessTransferService, AdminAccessTransferService>();
         services.AddScoped<IAdminApiKeyService>(provider => provider.GetRequiredService<AdminIdentityService>());
         services.AddHostedService<AdminIdentityBootstrapService>();
         return services;

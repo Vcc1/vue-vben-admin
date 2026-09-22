@@ -22,6 +22,9 @@
     <ProjectReference Include="..\..\Models\Backoffice\AdminIdentity\AdminIdentity.Api\AdminIdentity.Api.csproj" />
     <ProjectReference Include="..\..\Models\Backoffice\AdminIdentity\AdminIdentity.App\AdminIdentity.App.csproj" />
     <ProjectReference Include="..\..\Models\Backoffice\AdminIdentity\AdminIdentity.Infra\AdminIdentity.Infra.csproj" />
+    <ProjectReference Include="..\..\Models\Backoffice\Auditing\Auditing.App\Auditing.App.csproj" />
+    <ProjectReference Include="..\..\Models\Backoffice\Auditing\Auditing.Infra\Auditing.Infra.csproj" />
+    <ProjectReference Include="..\..\Models\Backoffice\Auditing\Auditing.Api\Auditing.Api.csproj" />
     <ProjectReference Include="..\..\Models\Backoffice\OidcServer\OidcServer.Api\OidcServer.Api.csproj" />
     <ProjectReference Include="..\..\Models\Backoffice\OidcServer\OidcServer.App\OidcServer.App.csproj" />
     <ProjectReference Include="..\..\Models\Backoffice\OidcServer\OidcServer.Infra\OidcServer.Infra.csproj" />

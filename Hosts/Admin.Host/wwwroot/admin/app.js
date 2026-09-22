@@ -41,6 +41,22 @@ function escapeHtml(value) {
 }
 
 function localTime(value) { return value ? new Date(value).toLocaleString('zh-CN', { hour12: false }) : '-'; }
+function maskEmail(email) {
+  if (!email) return '-';
+  const at = email.indexOf('@');
+  if (at < 0) return email;
+  const local = email.substring(0, at);
+  const domain = email.substring(at);
+  return (local.length <= 3 ? local : local.substring(0, 3)) + '***' + domain;
+}
+function maskPhone(phone) {
+  if (!phone) return '-';
+  const digits = phone.replace(/\D/g, '');
+  if (digits.length <= 5) return phone;
+  const head = digits.substring(0, 3);
+  const tail = digits.substring(digits.length - 3);
+  return head + '*****' + tail;
+}
 function passwordRuleError(password) {
   return password.length >= 10 && /\p{Lu}/u.test(password) && /\p{Ll}/u.test(password) && /\p{Nd}/u.test(password)
     ? null
@@ -82,8 +98,11 @@ async function initialize() {
 function showApp() {
   $('#loginView').hidden = true;
   $('#appView').hidden = false;
-  $('#accountName').textContent = state.user.displayName || state.user.userName;
+  $('#accountName').textContent = state.user.name || state.user.displayName || state.user.userName;
   $('#accountRoles').textContent = state.user.roles.join(', ');
+  const displayName = state.user.name || state.user.displayName || state.user.userName;
+  $('#topbarName').textContent = displayName;
+  $('#topbarAvatar').textContent = (displayName || '?').charAt(0).toUpperCase();
   document.querySelectorAll('.admin-only').forEach(x => x.hidden = !isAdmin());
   populateCatalog();
   navigate('tasks');
@@ -266,7 +285,7 @@ async function showAudit(task) {
 async function renderUsers() {
   const users = await request('/api/admin/users');
   $('#pageActions').innerHTML = '<button id="newUserButton" class="primary">新建用户</button>';
-  content.innerHTML = `<div class="table-frame"><table><thead><tr><th>用户</th><th>角色</th><th>状态</th><th>最近登录</th><th>操作</th></tr></thead><tbody>${users.map(user => `<tr><td><strong>${escapeHtml(user.displayName)}</strong><br>${escapeHtml(user.userName)}</td><td>${escapeHtml(user.roles.join(', '))}</td><td>${badge(user.isEnabled ? 'Enabled' : 'Disabled')}</td><td>${localTime(user.lastLoginAtUtc)}</td><td><div class="actions"><button data-user="toggle" data-id="${user.id}">${user.isEnabled ? '停用' : '启用'}</button><button data-user="role" data-id="${user.id}">角色</button><button data-user="password" data-id="${user.id}">重置密码</button></div></td></tr>`).join('')}</tbody></table></div>`;
+  content.innerHTML = `<div class="table-frame"><table><thead><tr><th>用户</th><th>角色</th><th>状态</th><th>最近登录</th><th>操作</th></tr></thead><tbody>${users.map(user => `<tr><td><strong>${escapeHtml(user.name)}</strong><br><span class="muted">${escapeHtml(user.displayName)}</span><br><code>${escapeHtml(user.userName)}</code></td><td>${escapeHtml(user.roles.join(', '))}</td><td>${badge(user.isEnabled ? 'Enabled' : 'Disabled')}</td><td>${localTime(user.lastLoginAtUtc)}</td><td><div class="actions"><button data-user="toggle" data-id="${user.id}">${user.isEnabled ? '停用' : '启用'}</button><button data-user="role" data-id="${user.id}">角色</button><button data-user="password" data-id="${user.id}">重置密码</button></div></td></tr>`).join('')}</tbody></table></div>`;
   $('#newUserButton').addEventListener('click', () => { $('#userForm').reset(); $('#userFormError').textContent = ''; $('#userDialog').showModal(); });
   content.querySelectorAll('[data-user]').forEach(button => button.addEventListener('click', () => userAction(button.dataset.user, button.dataset.id, users)));
 }
@@ -301,7 +320,7 @@ async function createUser(event) {
     return;
   }
   try {
-    await request('/api/admin/users', { method: 'POST', body: { userName: $('#newUserName').value.trim(), displayName: $('#newDisplayName').value.trim(), email: $('#newEmail').value.trim() || null, password: $('#newPassword').value, roles: [$('#newRole').value] } });
+    await request('/api/admin/users', { method: 'POST', body: { userName: $('#newUserName').value.trim(), displayName: $('#newDisplayName').value.trim(), name: $('#newName').value.trim(), email: $('#newEmail').value.trim() || null, password: $('#newPassword').value, roles: [$('#newRole').value] } });
     $('#userDialog').close(); showNotice('用户已创建'); await renderUsers();
   } catch (error) { $('#userFormError').textContent = error.message; }
 }
@@ -518,6 +537,75 @@ $('#loginForm').addEventListener('submit', async event => {
   } catch (error) { $('#loginError').textContent = error.message; }
 });
 $('#logoutButton').addEventListener('click', async () => { try { await request('/api/admin/auth/logout', { method: 'POST' }); } finally { showLogin(); } });
+
+// --- User dropdown menu ---
+$('#userMenuButton').addEventListener('click', event => {
+  event.stopPropagation();
+  $('#userDropdown').hidden = !$('#userDropdown').hidden;
+});
+document.addEventListener('click', () => { $('#userDropdown').hidden = true; });
+$('#userDropdown').addEventListener('click', async event => {
+  const btn = event.target.closest('[data-menu]');
+  if (!btn) return;
+  $('#userDropdown').hidden = true;
+  if (btn.dataset.menu === 'profile') openProfileDialog();
+  if (btn.dataset.menu === 'logout') { try { await request('/api/admin/auth/logout', { method: 'POST' }); } finally { showLogin(); } }
+});
+
+// --- Profile ---
+function openProfileDialog() {
+  $('#profileLoginName').textContent = state.user.userName;
+  $('#profileName').textContent = state.user.name || '-';
+  $('#profileEmail').textContent = maskEmail(state.user.email);
+  $('#profilePhone').textContent = maskPhone(state.user.phoneNumber);
+  $('#profileRoles').textContent = state.user.roles.join(', ');
+  $('#profileCreatedAt').textContent = localTime(state.user.createdAtUtc);
+  $('#profileDisplayName').value = state.user.displayName || '';
+  $('#profileFormError').textContent = '';
+  $('#profileDialog').showModal();
+}
+
+async function saveProfile(event) {
+  event.preventDefault();
+  $('#profileFormError').textContent = '';
+  try {
+    const updated = await request('/api/admin/auth/profile', {
+      method: 'PUT',
+      body: { displayName: $('#profileDisplayName').value.trim() }
+    });
+    state.user = updated;
+    $('#accountName').textContent = updated.name || updated.displayName || updated.userName;
+    const displayName = updated.name || updated.displayName || updated.userName;
+    $('#topbarName').textContent = displayName;
+    $('#topbarAvatar').textContent = (displayName || '?').charAt(0).toUpperCase();
+    $('#profileDialog').close();
+    showNotice('个人资料已更新');
+  } catch (error) { $('#profileFormError').textContent = error.message; }
+}
+
+// --- Change password ---
+function openChangePasswordDialog() {
+  $('#changePasswordForm').reset();
+  $('#changePasswordError').textContent = '';
+  $('#changePasswordDialog').showModal();
+}
+
+async function submitChangePassword(event) {
+  event.preventDefault();
+  $('#changePasswordError').textContent = '';
+  const newPwd = $('#newPwd').value;
+  const pwdError = passwordRuleError(newPwd);
+  if (pwdError) { $('#changePasswordError').textContent = pwdError; return; }
+  if (newPwd !== $('#confirmNewPwd').value) { $('#changePasswordError').textContent = '两次输入的密码不一致。'; return; }
+  try {
+    await request('/api/admin/auth/password', {
+      method: 'PUT',
+      body: { currentPassword: $('#currentPassword').value, newPassword: newPwd }
+    });
+    $('#changePasswordDialog').close();
+    showNotice('密码已修改');
+  } catch (error) { $('#changePasswordError').textContent = error.message; }
+}
 $('#navigation').addEventListener('click', event => { const button = event.target.closest('[data-view]'); if (button) { if (button.dataset.view === 'runs') state.runTaskId = null; navigate(button.dataset.view); } });
 $('#taskType').addEventListener('change', updateTaskTypeFields);
 $('#taskForm').addEventListener('submit', saveTask);
@@ -526,7 +614,10 @@ $('#passwordForm').addEventListener('submit', submitPasswordReset);
 $('#keyForm').addEventListener('submit', createKey);
 $('#oidcClientForm').addEventListener('submit', saveOidcClient);
 $('#oidcScopeForm').addEventListener('submit', saveOidcScope);
+$('#profileForm').addEventListener('submit', saveProfile);
+$('#changePasswordForm').addEventListener('submit', submitChangePassword);
 $('#closeDetail').addEventListener('click', () => { clearInterval(state.logTimer); $('#detailDialog').close(); });
+$('#openChangePasswordBtn').addEventListener('click', () => { $('#profileDialog').close(); openChangePasswordDialog(); });
 $('#detailDialog').addEventListener('close', () => clearInterval(state.logTimer));
 document.querySelectorAll('[data-close-dialog]').forEach(button => button.addEventListener('click', () => button.closest('dialog').close()));
 

@@ -6,6 +6,9 @@ using Admin.Host.OpenApi;
 using AdminIdentity.Api;
 using AdminIdentity.App;
 using AdminIdentity.Infra;
+using Auditing.Api;
+using Auditing.App;
+using Auditing.Infra;
 using OidcServer.Api;
 using OidcServer.App;
 using OidcServer.Infra;
@@ -36,6 +39,7 @@ using AgentPlatformOpenApi = AgentPlatform.Api.OpenApiMetadata;
 using BackofficeOpenApi = Backoffice.Api.OpenApiMetadata;
 using HotelMatchingOpenApi = HotelMatchingPipeline.Api.OpenApiMetadata;
 using GatewayOpenApi = ApiGateway.Api.OpenApiMetadata;
+using AuditingOpenApi = Auditing.Api.OpenApiMetadata;
 using AdminOpenApi = AdminIdentity.Api.OpenApiMetadata;
 
 var builder = WebApplication.CreateBuilder(args);
@@ -57,6 +61,8 @@ if (!builder.Configuration.GetValue<bool>("Connectmate:SkipRemoteConfiguration")
 builder.Services.AddAdminDatabase(builder.Configuration, "RoomMapping");
 builder.Services.AddAdminIdentityApplication();
 builder.Services.AddAdminIdentityInfrastructure(builder.Configuration);
+builder.Services.AddAuditingInfrastructure();
+builder.Services.AddOidcServerApplication();
 builder.Services.AddOidcServerInfrastructure(builder.Configuration);
 builder.Services.AddHotelMatchingServices(builder.Configuration);
 builder.Services.AddHotelMatchingInfrastructure(builder.Configuration);
@@ -73,6 +79,24 @@ builder.Services.AddTaskSchedulingApplication();
 builder.Services.AddTaskSchedulingInfrastructure(builder.Configuration);
 builder.Services.AddAntiforgery(options => options.HeaderName = "X-CSRF-TOKEN");
 builder.Services.AddProblemDetails();
+
+// 前端本地直连各服务端口（不再走 vite proxy），需允许跨域访问 OIDC 端点
+var corsOrigins = builder.Configuration.GetSection("Cors:AllowedOrigins").Get<string[]>()
+    ?? ["http://localhost:5101", "http://localhost:5201"];
+builder.Services.AddCors(options => options.AddDefaultPolicy(policy =>
+{
+    // "*" 走 SetIsOriginAllowed，因为 AllowCredentials 与 AllowAnyOrigin 互斥
+    if (corsOrigins.Contains("*"))
+    {
+        policy.SetIsOriginAllowed(_ => true);
+    }
+    else
+    {
+        policy.WithOrigins(corsOrigins);
+    }
+
+    policy.AllowAnyHeader().AllowAnyMethod().AllowCredentials();
+}));
 builder.Services.AddExceptionHandler<AdminApiExceptionHandler>();
 builder.Services
     .AddControllers()
@@ -90,7 +114,8 @@ builder.Services
     .AddHotelMatchingApi()
     .AddAgentPlatformApi()
     .AddBackofficeApi()
-    .AddApiGatewayApi();
+    .AddApiGatewayApi()
+    .AddAuditingApi();
 
 var openApiDocuments = new[]
 {
@@ -98,7 +123,8 @@ var openApiDocuments = new[]
     new { AgentPlatformOpenApi.DocumentName, AgentPlatformOpenApi.DisplayName },
     new { HotelMatchingOpenApi.DocumentName, HotelMatchingOpenApi.DisplayName },
     new { BackofficeOpenApi.DocumentName, BackofficeOpenApi.DisplayName },
-    new { GatewayOpenApi.DocumentName, GatewayOpenApi.DisplayName }
+    new { GatewayOpenApi.DocumentName, GatewayOpenApi.DisplayName },
+    new { AuditingOpenApi.DocumentName, AuditingOpenApi.DisplayName }
 };
 
 foreach (var document in openApiDocuments)
@@ -134,6 +160,8 @@ app.UseHttpsRedirection();
 
 app.UseDefaultFiles();
 app.UseStaticFiles();
+
+app.UseCors();
 
 app.UseAuthentication();
 

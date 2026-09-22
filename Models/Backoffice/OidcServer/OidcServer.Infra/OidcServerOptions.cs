@@ -5,8 +5,10 @@ public sealed class OidcServerOptions
     public const string SectionName = "OidcServer";
 
     public string Issuer { get; set; } = "https://admin.mengtu.com";
+    public string AdminLoginUrl { get; set; } = "http://localhost:6001/auth/login";
     public TokenLifetimeOptions TokenLifetime { get; set; } = new();
     public SigningKeyOptions SigningKey { get; set; } = new();
+    public EncryptionKeyOptions EncryptionKey { get; set; } = new();
 
     public sealed class TokenLifetimeOptions
     {
@@ -18,6 +20,13 @@ public sealed class OidcServerOptions
     public sealed class SigningKeyOptions
     {
         public string Type { get; set; } = "symmetric";
+        public string? Key { get; set; }
+        public string? PfxPath { get; set; }
+        public string? PfxPassword { get; set; }
+    }
+
+    public sealed class EncryptionKeyOptions
+    {
         public string? Key { get; set; }
         public string? PfxPath { get; set; }
         public string? PfxPassword { get; set; }

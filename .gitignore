@@ -150,3 +150,11 @@ tmp/
 .artifacts/
 .codex-build/
 Hosts/Agent.Host/App_Data/
+
+# OIDC 签名证书（私钥，勿提交）
+*.pfx
+*.p12
+Hosts/Admin.Host/data/oidc-keys/
+Hosts/Admin.Host/data/scheduler-logs/
+.tmp-sqlite/
+.tmp-compile/

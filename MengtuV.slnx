@@ -126,6 +126,11 @@
     <Project Path="Models/Backoffice/AdminIdentity/AdminIdentity.App/AdminIdentity.App.csproj" />
     <Project Path="Models/Backoffice/AdminIdentity/AdminIdentity.Infra/AdminIdentity.Infra.csproj" />
   </Folder>
+  <Folder Name="/Models/6.Data/Backoffice/Auditing/">
+    <Project Path="Models/Backoffice/Auditing/Auditing.Api/Auditing.Api.csproj" />
+    <Project Path="Models/Backoffice/Auditing/Auditing.App/Auditing.App.csproj" />
+    <Project Path="Models/Backoffice/Auditing/Auditing.Infra/Auditing.Infra.csproj" />
+  </Folder>
   <Folder Name="/Models/6.Data/Backoffice/TaskScheduling/">
     <Project Path="Models/Backoffice/TaskScheduling/TaskScheduling.Api/TaskScheduling.Api.csproj" />
     <Project Path="Models/Backoffice/TaskScheduling/TaskScheduling.App/TaskScheduling.App.csproj" />

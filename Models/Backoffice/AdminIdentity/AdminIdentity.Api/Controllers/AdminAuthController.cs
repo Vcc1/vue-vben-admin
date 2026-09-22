@@ -10,6 +10,8 @@ namespace AdminIdentity.Api.Controllers;
 [Route("api/admin/auth")]
 public sealed class AdminAuthController(
     IAdminAuthenticationService authenticationService,
+    IAdminUserService userService,
+    ICurrentActorAccessor actorAccessor,
     IAntiforgery antiforgery) : ControllerBase
 {
     [AllowAnonymous]
@@ -52,5 +54,29 @@ public sealed class AdminAuthController(
     {
         var tokens = antiforgery.GetAndStoreTokens(HttpContext);
         return Ok(new { token = tokens.RequestToken });
+    }
+
+    [Authorize]
+    [HttpPut("profile")]
+    public async Task<ActionResult<AdminUserItem>> UpdateProfileAsync(UpdateProfileRequest request, CancellationToken cancellationToken)
+    {
+        var userId = GetCurrentUserId();
+        var updated = await userService.UpdateProfileAsync(userId, request, cancellationToken);
+        return Ok(updated);
+    }
+
+    [Authorize]
+    [HttpPut("password")]
+    public async Task<IActionResult> ChangePasswordAsync(ChangePasswordRequest request, CancellationToken cancellationToken)
+    {
+        var userId = GetCurrentUserId();
+        await userService.ChangePasswordAsync(userId, request, cancellationToken);
+        return NoContent();
+    }
+
+    private Guid GetCurrentUserId()
+    {
+        var id = actorAccessor.Current.ActorId;
+        return Guid.TryParse(id, out var userId) ? userId : throw new UnauthorizedAccessException();
     }
 }

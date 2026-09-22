@@ -1,4 +1,5 @@
 using AdminIdentity.App;
+using Auditing.App;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 
@@ -7,6 +8,7 @@ namespace AdminIdentity.Api.Controllers;
 [ApiController]
 [ApiExplorerSettings(GroupName = OpenApiMetadata.DocumentName)]
 [Authorize(Policy = AdminPolicies.ManageUsers)]
+[RequestAudit(SensitivePaths = ["password", "newPassword"])]
 [Route("api/admin/users")]
 public sealed class AdminUsersController(IAdminUserService service) : ControllerBase
 {

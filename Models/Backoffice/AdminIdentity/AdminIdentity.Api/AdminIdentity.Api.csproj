@@ -12,6 +12,7 @@
 
   <ItemGroup>
     <ProjectReference Include="..\AdminIdentity.App\AdminIdentity.App.csproj" />
+    <ProjectReference Include="..\..\Auditing\Auditing.App\Auditing.App.csproj" />
   </ItemGroup>
 
 </Project>

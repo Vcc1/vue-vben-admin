@@ -1,4 +1,5 @@
 using ApiGateway.Domain;
+using Infrastructure.Sql.Admin.Auditing;
 using Infrastructure.Sql.Admin.Identity;
 using Infrastructure.Sql.Admin.Scheduling;
 using Microsoft.AspNetCore.Identity;
@@ -15,6 +16,8 @@ public sealed class AdminDbContext(
     public DbSet<AdminApiKey> ApiKeys => Set<AdminApiKey>();
     public DbSet<AdminRefreshToken> RefreshTokens => Set<AdminRefreshToken>();
     public DbSet<AdminUserAuditLog> UserAuditLogs => Set<AdminUserAuditLog>();
+    public DbSet<AdminPermission> Permissions => Set<AdminPermission>();
+    public DbSet<AdminRolePermission> RolePermissions => Set<AdminRolePermission>();
     public DbSet<ScheduledTaskEntity> ScheduledTasks => Set<ScheduledTaskEntity>();
     public DbSet<ScheduledTaskRunEntity> ScheduledTaskRuns => Set<ScheduledTaskRunEntity>();
     public DbSet<ScheduledTaskAuditEntity> ScheduledTaskAudits => Set<ScheduledTaskAuditEntity>();
@@ -27,6 +30,8 @@ public sealed class AdminDbContext(
     public DbSet<OidcScope> OidcScopes => Set<OidcScope>();
     public DbSet<OidcAuthorization> OidcAuthorizations => Set<OidcAuthorization>();
     public DbSet<OidcToken> OidcTokens => Set<OidcToken>();
+    public DbSet<SecurityEventLog> SecurityEvents => Set<SecurityEventLog>();
+    public DbSet<RequestAuditLog> RequestAuditLogs => Set<RequestAuditLog>();
 
     protected override void OnModelCreating(ModelBuilder builder)
     {
@@ -36,6 +41,7 @@ public sealed class AdminDbContext(
         ConfigureScheduling(builder);
         ConfigureOidc(builder);
         builder.ConfigureGateway();
+        builder.ConfigureAuditing();
     }
 
     private static void ConfigureIdentity(ModelBuilder builder)
@@ -44,6 +50,7 @@ public sealed class AdminDbContext(
         {
             entity.ToTable("Identity_Users", "dbo");
             entity.Property(x => x.DisplayName).HasMaxLength(100).IsRequired();
+            entity.Property(x => x.Name).HasMaxLength(100).IsRequired();
             entity.Property(x => x.CreatedAtUtc).HasPrecision(3);
             entity.Property(x => x.UpdatedAtUtc).HasPrecision(3);
             entity.Property(x => x.LastLoginAtUtc).HasPrecision(3);
@@ -98,6 +105,25 @@ public sealed class AdminDbContext(
             entity.Property(x => x.OccurredAtUtc).HasPrecision(3);
             entity.HasIndex(x => new { x.TargetUserId, x.OccurredAtUtc });
         });
+
+        builder.Entity<AdminPermission>(entity =>
+        {
+            entity.ToTable("Identity_Permissions", "dbo");
+            entity.HasKey(x => x.Code);
+            entity.Property(x => x.Code).HasMaxLength(100).IsRequired();
+            entity.Property(x => x.Name).HasMaxLength(200).IsRequired();
+            entity.Property(x => x.Description).HasMaxLength(500);
+            entity.Property(x => x.CreatedAtUtc).HasPrecision(3);
+            entity.Property(x => x.UpdatedAtUtc).HasPrecision(3);
+        });
+
+        builder.Entity<AdminRolePermission>(entity =>
+        {
+            entity.ToTable("Identity_RolePermissions", "dbo");
+            entity.HasKey(x => new { x.RoleName, x.PermissionCode });
+            entity.Property(x => x.RoleName).HasMaxLength(256).IsRequired();
+            entity.Property(x => x.PermissionCode).HasMaxLength(100).IsRequired();
+        });
     }
 
     private static void ConfigureOidc(ModelBuilder builder)
@@ -141,7 +167,9 @@ public sealed class AdminDbContext(
             entity.Property(x => x.Scopes).HasMaxLength(4000);
             entity.Property(x => x.Subject).HasMaxLength(200).IsRequired();
             entity.Property(x => x.Status).HasMaxLength(50).IsRequired();
+            entity.Property(x => x.Type).HasMaxLength(50);
             entity.Property(x => x.Properties).HasMaxLength(4000);
+            entity.Property(x => x.ConcurrencyToken).HasMaxLength(50).IsConcurrencyToken();
             entity.Property(x => x.CreationDate).HasPrecision(3);
             entity.HasOne(x => x.Application).WithMany(x => x.Authorizations)
                   .OnDelete(DeleteBehavior.Restrict);

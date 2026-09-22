@@ -1,10 +1,12 @@
 using System.IdentityModel.Tokens.Jwt;
 using System.Security.Claims;
 using System.Security.Cryptography;
+using System.Data;
 using System.Text;
 using System.Text.Encodings.Web;
 using System.Text.Json;
 using AdminIdentity.App;
+using Auditing.App;
 using Infrastructure.Sql.Admin;
 using Infrastructure.Sql.Admin.Identity;
 using Microsoft.AspNetCore.Identity;
@@ -17,9 +19,11 @@ namespace AdminIdentity.Infra;
 internal sealed class AdminIdentityService(
     UserManager<AdminUser> userManager,
     SignInManager<AdminUser> signInManager,
+    RoleManager<AdminRole> roleManager,
     AdminDbContext dbContext,
     IOptions<AdminIdentityOptions> options,
     ICurrentActorAccessor actorAccessor,
+    ISecurityEventLogger securityEvents,
     TimeProvider timeProvider)
     : IAdminAuthenticationService, IAdminUserService, IAdminApiKeyService
 {
@@ -53,14 +57,12 @@ internal sealed class AdminIdentityService(
         user.UpdatedAtUtc = now;
         await userManager.UpdateAsync(user);
 
+        await signInManager.SignInAsync(user, request.RememberMe);
+
         TokenPair? tokens = null;
         if (string.Equals(request.Mode, "token", StringComparison.OrdinalIgnoreCase))
         {
             tokens = await CreateTokenPairAsync(user, ipAddress, cancellationToken);
-        }
-        else
-        {
-            await signInManager.SignInAsync(user, request.RememberMe);
         }
 
         return new LoginResult(await MapUserAsync(user), tokens);
@@ -71,8 +73,38 @@ internal sealed class AdminIdentityService(
         var hash = HashSecret(refreshToken);
         var now = timeProvider.GetUtcNow().UtcDateTime;
         var stored = await dbContext.RefreshTokens.SingleOrDefaultAsync(x => x.TokenHash == hash, cancellationToken);
-        if (stored is null || stored.RevokedAtUtc is not null || stored.ExpiresAtUtc <= now)
+        if (stored is null || stored.ExpiresAtUtc <= now)
         {
+            return null;
+        }
+
+        // 重放检测：已吊销的 refresh token 被再次使用。
+        // 宽限窗口内视为并发竞态（如多页签一前一后刷新），仅拒绝本次刷新，不吊销令牌链；
+        // 超过窗口则判定为令牌泄露，记录安全事件并吊销整条链，强制该链上所有会话重新登录。
+        if (stored.RevokedAtUtc is not null)
+        {
+            var leeway = TimeSpan.FromSeconds(Math.Max(0, options.Value.Jwt.RefreshTokenReuseLeewaySeconds));
+            var revokedAge = now - stored.RevokedAtUtc.Value;
+            if (revokedAge > leeway)
+            {
+                await securityEvents.LogAsync(new SecurityEvent(
+                    "RefreshTokenReplay",
+                    "High",
+                    "已吊销的 refresh token 在宽限窗口外被重复使用，疑似令牌泄露，已吊销整条令牌链。",
+                    new
+                    {
+                        stored.UserId,
+                        RefreshTokenId = stored.Id,
+                        RevokedAtUtc = stored.RevokedAtUtc,
+                        AgeSeconds = (int)revokedAge.TotalSeconds,
+                        LeewaySeconds = (int)leeway.TotalSeconds,
+                        IpAddress = ipAddress
+                    },
+                    ActorId: stored.UserId.ToString()),
+                    cancellationToken);
+                await RevokeTokenChainAsync(stored, now, cancellationToken);
+            }
+
             return null;
         }
 
@@ -118,7 +150,7 @@ internal sealed class AdminIdentityService(
 
     public async Task<AdminUserItem> CreateAsync(CreateAdminUserRequest request, CancellationToken cancellationToken)
     {
-        ValidateRoles(request.Roles);
+        await ValidateRolesAsync(request.Roles);
         var actor = actorAccessor.Current;
         var now = timeProvider.GetUtcNow().UtcDateTime;
         var user = new AdminUser
@@ -127,6 +159,7 @@ internal sealed class AdminIdentityService(
             UserName = request.UserName.Trim(),
             Email = request.Email?.Trim(),
             DisplayName = request.DisplayName.Trim(),
+            Name = request.Name.Trim(),
             IsEnabled = true,
             CreatedAtUtc = now,
             UpdatedAtUtc = now
@@ -142,9 +175,11 @@ internal sealed class AdminIdentityService(
 
     public async Task SetEnabledAsync(Guid userId, bool isEnabled, CancellationToken cancellationToken)
     {
+        await using var transaction = await dbContext.Database.BeginTransactionAsync(IsolationLevel.Serializable, cancellationToken);
         var user = await RequiredUserAsync(userId);
         var before = MapAuditUser(user, await userManager.GetRolesAsync(user));
-        await using var transaction = await dbContext.Database.BeginTransactionAsync(cancellationToken);
+        if (!isEnabled && user.IsEnabled && await userManager.IsInRoleAsync(user, AdminRoles.Admin))
+            await EnsureAnotherAdministratorAsync(userId, cancellationToken);
         user.IsEnabled = isEnabled;
         user.UpdatedAtUtc = timeProvider.GetUtcNow().UtcDateTime;
         EnsureSucceeded(await userManager.UpdateAsync(user));
@@ -165,13 +200,42 @@ internal sealed class AdminIdentityService(
 
     public async Task SetRolesAsync(Guid userId, IReadOnlyList<string> roles, CancellationToken cancellationToken)
     {
-        ValidateRoles(roles);
+        await ValidateRolesAsync(roles);
+        await using var transaction = await dbContext.Database.BeginTransactionAsync(IsolationLevel.Serializable, cancellationToken);
         var user = await RequiredUserAsync(userId);
         var existing = await userManager.GetRolesAsync(user);
-        await using var transaction = await dbContext.Database.BeginTransactionAsync(cancellationToken);
+        if (user.IsEnabled && existing.Contains(AdminRoles.Admin, StringComparer.OrdinalIgnoreCase) &&
+            !roles.Contains(AdminRoles.Admin, StringComparer.OrdinalIgnoreCase))
+            await EnsureAnotherAdministratorAsync(userId, cancellationToken);
         EnsureSucceeded(await userManager.RemoveFromRolesAsync(user, existing));
         EnsureSucceeded(await userManager.AddToRolesAsync(user, roles.Distinct(StringComparer.OrdinalIgnoreCase)));
         await AddUserAuditAsync("SetRoles", userId, new { Roles = existing }, new { Roles = roles }, actorAccessor.Current, cancellationToken);
+        await transaction.CommitAsync(cancellationToken);
+    }
+
+    public async Task<AdminUserItem> UpdateProfileAsync(Guid userId, UpdateProfileRequest request, CancellationToken cancellationToken)
+    {
+        await using var transaction = await dbContext.Database.BeginTransactionAsync(cancellationToken);
+        var user = await RequiredUserAsync(userId);
+        var before = new { user.DisplayName };
+        user.DisplayName = request.DisplayName.Trim();
+        user.UpdatedAtUtc = timeProvider.GetUtcNow().UtcDateTime;
+        EnsureSucceeded(await userManager.UpdateAsync(user));
+        await AddUserAuditAsync("UpdateProfile", userId, before,
+            new { user.DisplayName }, actorAccessor.Current, cancellationToken);
+        await transaction.CommitAsync(cancellationToken);
+        return await MapUserAsync(user);
+    }
+
+    public async Task ChangePasswordAsync(Guid userId, ChangePasswordRequest request, CancellationToken cancellationToken)
+    {
+        var user = await RequiredUserAsync(userId);
+        if (!await userManager.CheckPasswordAsync(user, request.CurrentPassword))
+            throw new InvalidOperationException("当前密码不正确。");
+        await using var transaction = await dbContext.Database.BeginTransactionAsync(cancellationToken);
+        var token = await userManager.GeneratePasswordResetTokenAsync(user);
+        EnsureSucceeded(await userManager.ResetPasswordAsync(user, token, request.NewPassword));
+        await AddUserAuditAsync("ChangePassword", userId, null, new { user.Id, user.UserName }, actorAccessor.Current, cancellationToken);
         await transaction.CommitAsync(cancellationToken);
     }
 
@@ -226,8 +290,24 @@ internal sealed class AdminIdentityService(
         }
     }
 
-    private async Task<TokenPair> CreateTokenPairAsync(AdminUser user, string? ipAddress, CancellationToken cancellationToken)
+    private async Task RevokeTokenChainAsync(AdminRefreshToken start, DateTime now, CancellationToken cancellationToken)
     {
+        var visited = new HashSet<Guid> { start.Id };
+        var nextId = start.ReplacedByTokenId;
+        while (nextId is { } id && visited.Add(id))
+        {
+            var token = await dbContext.RefreshTokens.SingleOrDefaultAsync(x => x.Id == id, cancellationToken);
+            if (token is null)
+            {
+                break;
+            }
+            token.RevokedAtUtc ??= now;
+            nextId = token.ReplacedByTokenId;
+        }
+        await dbContext.SaveChangesAsync(cancellationToken);
+    }
+
+    private async Task<TokenPair> CreateTokenPairAsync(AdminUser user, string? ipAddress, CancellationToken cancellationToken)    {
         var jwtOptions = options.Value.Jwt;
         if (string.IsNullOrWhiteSpace(jwtOptions.SigningKey) || Encoding.UTF8.GetByteCount(jwtOptions.SigningKey) < 32)
         {
@@ -273,7 +353,9 @@ internal sealed class AdminIdentityService(
         user.Id,
         user.UserName ?? string.Empty,
         user.DisplayName,
+        user.Name,
         user.Email,
+        user.PhoneNumber,
         user.IsEnabled,
         (await userManager.GetRolesAsync(user)).ToArray(),
         user.CreatedAtUtc,
@@ -281,7 +363,7 @@ internal sealed class AdminIdentityService(
 
     private static object MapAuditUser(AdminUser user, IEnumerable<string> roles) => new
     {
-        user.Id, user.UserName, user.DisplayName, user.Email, user.IsEnabled, Roles = roles.ToArray()
+        user.Id, user.UserName, user.DisplayName, user.Name, user.Email, user.IsEnabled, Roles = roles.ToArray()
     };
 
     private async Task<AdminUser> RequiredUserAsync(Guid userId) =>
@@ -318,12 +400,29 @@ internal sealed class AdminIdentityService(
         }
     }
 
-    private static void ValidateRoles(IEnumerable<string> roles)
+    private async Task ValidateRolesAsync(IEnumerable<string> roles)
     {
-        var invalid = roles.Except(AdminRoles.All, StringComparer.OrdinalIgnoreCase).ToArray();
+        ArgumentNullException.ThrowIfNull(roles);
+        var existing = await roleManager.Roles.AsNoTracking()
+            .Where(x => x.Name != null).Select(x => x.Name!).ToListAsync();
+        var invalid = roles.Except(existing, StringComparer.OrdinalIgnoreCase).ToArray();
         if (invalid.Length != 0)
         {
             throw new ArgumentException($"Unknown roles: {string.Join(", ", invalid)}");
         }
+    }
+
+    private async Task EnsureAnotherAdministratorAsync(Guid userId, CancellationToken cancellationToken)
+    {
+        if (actorAccessor.Current.ActorId == userId.ToString())
+            throw new InvalidOperationException("不能停用自己的管理员账户或移除自己的管理员角色。");
+        var adminRoleId = await roleManager.Roles.Where(x => x.Name == AdminRoles.Admin)
+            .Select(x => x.Id).SingleAsync(cancellationToken);
+        var activeAdmins = await dbContext.UserRoles
+            .Join(dbContext.Users, link => link.UserId, user => user.Id,
+                (link, user) => new { link.RoleId, user.IsEnabled })
+            .CountAsync(x => x.RoleId == adminRoleId && x.IsEnabled, cancellationToken);
+        if (activeAdmins <= 1)
+            throw new InvalidOperationException("至少需要保留一个启用的管理员账户。");
     }
 }

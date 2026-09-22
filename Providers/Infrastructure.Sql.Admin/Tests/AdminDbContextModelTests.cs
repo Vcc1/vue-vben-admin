@@ -8,9 +8,20 @@ public sealed class AdminDbContextModelTests
 {
     private static readonly string[] ExpectedTables =
     [
+        "Gateway_Apis",
+        "Gateway_AuditLogs",
+        "Gateway_Endpoints",
+        "Gateway_Modules",
+        "Gateway_Permissions",
+        "IdentityOIDC_Applications",
+        "IdentityOIDC_Authorizations",
+        "IdentityOIDC_Scopes",
+        "IdentityOIDC_Tokens",
         "Identity_ApiKeys",
+        "Identity_Permissions",
         "Identity_RefreshTokens",
         "Identity_RoleClaims",
+        "Identity_RolePermissions",
         "Identity_Roles",
         "Identity_UserAuditLogs",
         "Identity_UserClaims",
@@ -30,10 +41,12 @@ public sealed class AdminDbContextModelTests
         var entityTypes = context.Model.GetEntityTypes().ToArray();
         var tables = entityTypes.Select(x => x.GetTableName()).Distinct().Order().ToArray();
 
-        Assert.Equal(ExpectedTables, tables);
+        Assert.Equal(ExpectedTables.Order(), tables);
         Assert.All(entityTypes, entityType => Assert.Equal("dbo", entityType.GetSchema()));
         Assert.All(tables, table => Assert.True(
             table!.StartsWith("Identity_", StringComparison.Ordinal)
+            || table.StartsWith("IdentityOIDC_", StringComparison.Ordinal)
+            || table.StartsWith("Gateway_", StringComparison.Ordinal)
             || table.StartsWith("Scheduler_", StringComparison.Ordinal),
             $"Unexpected table mapping: {table}"));
     }

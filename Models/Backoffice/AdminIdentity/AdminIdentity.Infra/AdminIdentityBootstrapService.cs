@@ -42,11 +42,13 @@ internal sealed class AdminIdentityBootstrapService(
         }
 
         var now = timeProvider.GetUtcNow().UtcDateTime;
+        var displayName = string.IsNullOrWhiteSpace(bootstrap.DisplayName) ? bootstrap.UserName.Trim() : bootstrap.DisplayName.Trim();
         var user = new AdminUser
         {
             Id = Guid.CreateVersion7(),
             UserName = bootstrap.UserName.Trim(),
-            DisplayName = string.IsNullOrWhiteSpace(bootstrap.DisplayName) ? bootstrap.UserName.Trim() : bootstrap.DisplayName.Trim(),
+            DisplayName = displayName,
+            Name = displayName,
             IsEnabled = true,
             CreatedAtUtc = now,
             UpdatedAtUtc = now

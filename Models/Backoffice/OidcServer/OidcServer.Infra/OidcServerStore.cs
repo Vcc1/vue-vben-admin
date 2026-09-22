@@ -206,6 +206,10 @@ internal sealed class OidcServerStore(AdminDbContext dbContext) : IOidcClientSto
                     permissions.Add("ept:token");
                     permissions.Add("gt:client_credentials");
                     break;
+                case "password":
+                    permissions.Add("ept:token");
+                    permissions.Add("gt:password");
+                    break;
                 case "refresh_token":
                     permissions.Add("ept:token");
                     permissions.Add("gt:refresh_token");
