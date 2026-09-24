@@ -67,6 +67,7 @@ public sealed record SetUserEnabledRequest(bool IsEnabled);
 public sealed record ResetPasswordRequest(string NewPassword);
 public sealed record SetUserRolesRequest(IReadOnlyList<string> Roles);
 public sealed record UpdateProfileRequest(string DisplayName);
+public sealed record UpdateUserRequest(string Name, string DisplayName, string? Email);
 public sealed record ChangePasswordRequest(string CurrentPassword, string NewPassword);
 public sealed record AdminRoleItem(string Name, bool IsSystem, int UserCount, IReadOnlyList<string> Permissions);
 public sealed record CreateAdminRoleRequest(string Name);
@@ -98,6 +99,7 @@ public interface IAdminUserService
     Task ResetPasswordAsync(Guid userId, string newPassword, CancellationToken cancellationToken);
     Task SetRolesAsync(Guid userId, IReadOnlyList<string> roles, CancellationToken cancellationToken);
     Task<AdminUserItem> UpdateProfileAsync(Guid userId, UpdateProfileRequest request, CancellationToken cancellationToken);
+    Task<AdminUserItem> UpdateUserAsync(Guid userId, UpdateUserRequest request, CancellationToken cancellationToken);
     Task ChangePasswordAsync(Guid userId, ChangePasswordRequest request, CancellationToken cancellationToken);
 }
 

@@ -23,6 +23,7 @@ public sealed class OidcServerOptions
         public string? Key { get; set; }
         public string? PfxPath { get; set; }
         public string? PfxPassword { get; set; }
+        public string? PfxBase64 { get; set; }
     }
 
     public sealed class EncryptionKeyOptions
@@ -30,5 +31,6 @@ public sealed class OidcServerOptions
         public string? Key { get; set; }
         public string? PfxPath { get; set; }
         public string? PfxPassword { get; set; }
+        public string? PfxBase64 { get; set; }
     }
 }

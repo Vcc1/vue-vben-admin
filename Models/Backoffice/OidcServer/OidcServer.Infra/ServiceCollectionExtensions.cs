@@ -206,6 +206,14 @@ public static class ServiceCollectionExtensions
         OpenIddictServerBuilder server,
         OidcServerOptions.SigningKeyOptions keyOptions)
     {
+        if (!string.IsNullOrWhiteSpace(keyOptions.PfxBase64))
+        {
+            var pfxBytes = Convert.FromBase64String(keyOptions.PfxBase64);
+            var certificate = X509CertificateLoader.LoadPkcs12(pfxBytes, keyOptions.PfxPassword);
+            server.AddSigningCertificate(certificate);
+            return;
+        }
+
         if (string.Equals(keyOptions.Type, "rsa-pfx", StringComparison.OrdinalIgnoreCase)
             && !string.IsNullOrWhiteSpace(keyOptions.PfxPath)
             && File.Exists(keyOptions.PfxPath))
@@ -213,14 +221,6 @@ public static class ServiceCollectionExtensions
             var certificate = X509CertificateLoader.LoadPkcs12FromFile(
                 keyOptions.PfxPath, keyOptions.PfxPassword);
             server.AddSigningCertificate(certificate);
-            return;
-        }
-
-        if (!string.IsNullOrWhiteSpace(keyOptions.Key)
-            && Encoding.UTF8.GetByteCount(keyOptions.Key) >= 32)
-        {
-            server.AddSigningKey(new SymmetricSecurityKey(
-                Encoding.UTF8.GetBytes(keyOptions.Key)));
             return;
         }
 
@@ -232,6 +232,14 @@ public static class ServiceCollectionExtensions
         OpenIddictServerBuilder server,
         OidcServerOptions.EncryptionKeyOptions keyOptions)
     {
+        if (!string.IsNullOrWhiteSpace(keyOptions.PfxBase64))
+        {
+            var pfxBytes = Convert.FromBase64String(keyOptions.PfxBase64);
+            var certificate = X509CertificateLoader.LoadPkcs12(pfxBytes, keyOptions.PfxPassword);
+            server.AddEncryptionCertificate(certificate);
+            return;
+        }
+
         if (!string.IsNullOrWhiteSpace(keyOptions.PfxPath)
             && File.Exists(keyOptions.PfxPath))
         {

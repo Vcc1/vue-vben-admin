@@ -102,6 +102,10 @@ public class RoomMappingDbContext : DbContext
     public DbSet<OtaRoomAiDecision> OtaRoomAiDecisions { get; set; }
     public DbSet<OtaRoomAiCreateFailure> OtaRoomAiCreateFailures { get; set; }
     public DbSet<SqllabSuperaggRoomMappingSt> SqllabSuperaggRoomMappingSts { get; set; }
+
+    public DbSet<RoomMatchEvalRun> RoomMatchEvalRuns { get; set; }
+    public DbSet<RoomMatchEvalResult> RoomMatchEvalResults { get; set; }
+    public DbSet<RoomMatchEvalDiff> RoomMatchEvalDiffs { get; set; }
 }
 
 

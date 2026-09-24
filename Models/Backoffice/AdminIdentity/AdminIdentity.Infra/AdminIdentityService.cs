@@ -227,6 +227,22 @@ internal sealed class AdminIdentityService(
         return await MapUserAsync(user);
     }
 
+    public async Task<AdminUserItem> UpdateUserAsync(Guid userId, UpdateUserRequest request, CancellationToken cancellationToken)
+    {
+        await using var transaction = await dbContext.Database.BeginTransactionAsync(cancellationToken);
+        var user = await RequiredUserAsync(userId);
+        var before = new { user.Name, user.DisplayName, user.Email };
+        user.Name = request.Name.Trim();
+        user.DisplayName = request.DisplayName.Trim();
+        user.Email = request.Email?.Trim();
+        user.UpdatedAtUtc = timeProvider.GetUtcNow().UtcDateTime;
+        EnsureSucceeded(await userManager.UpdateAsync(user));
+        await AddUserAuditAsync("UpdateUser", userId, before,
+            new { user.Name, user.DisplayName, user.Email }, actorAccessor.Current, cancellationToken);
+        await transaction.CommitAsync(cancellationToken);
+        return await MapUserAsync(user);
+    }
+
     public async Task ChangePasswordAsync(Guid userId, ChangePasswordRequest request, CancellationToken cancellationToken)
     {
         var user = await RequiredUserAsync(userId);

@@ -43,4 +43,11 @@ public sealed class AdminUsersController(IAdminUserService service) : Controller
         await service.SetRolesAsync(userId, request.Roles, cancellationToken);
         return NoContent();
     }
+
+    [HttpPut("{userId:guid}/profile")]
+    public async Task<ActionResult<AdminUserItem>> UpdateUserAsync(Guid userId, UpdateUserRequest request, CancellationToken cancellationToken)
+    {
+        var user = await service.UpdateUserAsync(userId, request, cancellationToken);
+        return Ok(user);
+    }
 }
