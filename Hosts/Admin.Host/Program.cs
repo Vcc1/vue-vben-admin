@@ -165,9 +165,21 @@ app.UseCors();
 
 app.UseAuthentication();
 
+// 登录前的匿名端点：调用方身份靠请求体里的凭据 / stepUpToken / refreshToken 自证，不读 cookie。
+// 浏览器却可能残留 AS 侧签发的 Identity cookie（OIDC 授权流程、上一次登录都会写入），
+// 此时 SmartScheme 在没有 Bearer 头时会回落到 cookie 方案，antiforgery 校验就会把
+// 新设备二次验证与令牌续期整条链路挡死，所以这些路径显式豁免。
+string[] preAuthPaths =
+[
+    "/api/admin/auth/login",
+    "/api/admin/auth/stepup",
+    "/api/admin/auth/refresh",
+];
+
 app.Use(async (context, next) =>
 {
-    var requiresValidation = context.Request.Path.StartsWithSegments("/api/admin")
+    var path = context.Request.Path;
+    var requiresValidation = path.StartsWithSegments("/api/admin")
         && (HttpMethods.IsPost(context.Request.Method)
             || HttpMethods.IsPut(context.Request.Method)
             || HttpMethods.IsPatch(context.Request.Method)
@@ -176,8 +188,8 @@ app.Use(async (context, next) =>
         context.User.Identity?.AuthenticationType,
         IdentityConstants.ApplicationScheme,
         StringComparison.Ordinal);
-    var isLogin = context.Request.Path.Equals("/api/admin/auth/login", StringComparison.OrdinalIgnoreCase);
-    if (requiresValidation && isCookie && !isLogin)
+    var isPreAuth = preAuthPaths.Any(p => path.StartsWithSegments(p, StringComparison.OrdinalIgnoreCase));
+    if (requiresValidation && isCookie && !isPreAuth)
     {
         var antiforgery = context.RequestServices.GetRequiredService<IAntiforgery>();
         await antiforgery.ValidateRequestAsync(context);
@@ -186,6 +198,9 @@ app.Use(async (context, next) =>
 });
 
 app.UseAuthorization();
+
+// 等级闸门必须在 UseAuthorization 之后：角色不足先返回 403，已授权的请求才进入会话等级校验。
+app.UseSessionLevelEnforcement();
 
 app.UseGatewayProxy();
 

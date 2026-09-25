@@ -1,6 +1,8 @@
 using System.Security.Claims;
 using System.Security.Cryptography.X509Certificates;
 using System.Text;
+using System.Text.Json;
+using AdminIdentity.App;
 using Infrastructure.Sql.Admin;
 using Infrastructure.Sql.Admin.Identity;
 using Infrastructure.Sql.Admin.Oidc;
@@ -15,6 +17,7 @@ using OpenIddict.Server;
 using OpenIddict.Server.AspNetCore;
 using static OpenIddict.Abstractions.OpenIddictConstants;
 using HandleTokenRequestContext = OpenIddict.Server.OpenIddictServerEvents.HandleTokenRequestContext;
+using HandleConfigurationRequestContext = OpenIddict.Server.OpenIddictServerEvents.HandleConfigurationRequestContext;
 
 namespace OidcServer.Infra;
 
@@ -102,6 +105,22 @@ public static class ServiceCollectionExtensions
                                     description: "The refresh token is invalid.");
                                 return;
                             }
+
+                            // 凭证被吊销后，客户端不能靠 refresh token 续命；标准错误码 invalid_grant，第三方无需定制。
+                            var sid = principal.FindFirstValue(SessionClaims.Sid);
+                            if (sid is not null)
+                            {
+                                var httpContext = context.Transaction.GetHttpRequest()!.HttpContext;
+                                var sessions = httpContext.RequestServices.GetRequiredService<ISessionService>();
+                                if (await sessions.IsRevokedAsync(sid, context.CancellationToken))
+                                {
+                                    context.Reject(
+                                        error: Errors.InvalidGrant,
+                                        description: "The login session has been revoked.");
+                                    return;
+                                }
+                            }
+
                             context.SignIn(principal);
                         }
                         else if (request.IsPasswordGrantType())
@@ -128,6 +147,27 @@ public static class ServiceCollectionExtensions
                                 return;
                             }
 
+                            // ROPC 也必须纳入会话治理，否则签出的 token 无法被吊销。
+                            var sessions = httpContext.RequestServices.GetRequiredService<ISessionService>();
+                            var now = DateTimeOffset.UtcNow;
+                            var sid = await sessions.CreateAsync(new CreateSessionContext(
+                                user.Id,
+                                DeviceId: null,
+                                DeviceInfoJson: null,
+                                SessionLoginMethods.Password,
+                                httpContext.Connection.RemoteIpAddress?.ToString(),
+                                httpContext.Request.Headers.UserAgent.ToString(),
+                                PasswordVerifiedAtUtc: now.UtcDateTime,
+                                StrongAuthAtUtc: null,
+                                StrongAuthMethod: null,
+                                TimeSpan.FromDays(lifetime.RefreshTokenDays)),
+                                context.CancellationToken);
+
+                            if (request.ClientId is { } ropcClientId)
+                            {
+                                await sessions.RecordClientAsync(sid, ropcClientId, context.CancellationToken);
+                            }
+
                             var identity = new ClaimsIdentity(
                                 OpenIddictServerAspNetCoreDefaults.AuthenticationScheme,
                                 Claims.Name, Claims.Role);
@@ -135,6 +175,21 @@ public static class ServiceCollectionExtensions
                             identity.AddClaim(new Claim(Claims.Subject, user.Id.ToString()));
                             identity.AddClaim(new Claim(Claims.Name, user.UserName!));
                             identity.AddClaim(new Claim(Claims.PreferredUsername, user.UserName!));
+                            identity.AddClaim(new Claim(SessionClaims.Sid, sid));
+                            identity.AddClaim(new Claim(SessionClaims.Acr, SessionLevels.ToAcr(SessionLevels.L2)));
+                            identity.AddClaim(new Claim(SessionClaims.Amr, "pwd"));
+                            identity.AddClaim(new Claim(
+                                SessionClaims.AuthTime, now.ToUnixTimeSeconds().ToString()));
+
+                            // 显式声明目标，确保 sid 进入 access token，吊销时 refresh 闸门才判得到。
+                            foreach (var claim in identity.Claims)
+                            {
+                                if (claim.Type is SessionClaims.Sid or SessionClaims.Acr
+                                    or SessionClaims.Amr or SessionClaims.AuthTime)
+                                {
+                                    claim.SetDestinations(Destinations.AccessToken);
+                                }
+                            }
 
                             if (!string.IsNullOrEmpty(user.DisplayName))
                             {
@@ -181,6 +236,24 @@ public static class ServiceCollectionExtensions
                         }
                     }));
 
+                // 第三方靠发现文档判断本 AS 的能力边界，这些都是标准元数据字段。
+                // frontchannel_logout_supported 显式为 false：生产是 HTTP，隐藏 iframe 跨站注销不可靠，只推后通道。
+                options.AddEventHandler<HandleConfigurationRequestContext>(builder =>
+                    builder.UseInlineHandler(context =>
+                    {
+                        context.Metadata["backchannel_logout_supported"] = ToJson(true);
+                        context.Metadata["backchannel_logout_session_supported"] = ToJson(true);
+                        context.Metadata["frontchannel_logout_supported"] = ToJson(false);
+                        context.Metadata["acr_values_supported"] = ToJson(SessionLevels.SupportedAcrValues);
+
+                        foreach (var claim in new[] { SessionClaims.Sid, SessionClaims.Acr, SessionClaims.Amr, SessionClaims.AuthTime })
+                        {
+                            context.Claims.Add(claim);
+                        }
+
+                        return default;
+                    }));
+
                 options.UseAspNetCore()
                        .EnableAuthorizationEndpointPassthrough()
                        .EnableEndSessionEndpointPassthrough()
@@ -202,24 +275,15 @@ public static class ServiceCollectionExtensions
         return services;
     }
 
+    private static JsonElement ToJson(object value) => JsonSerializer.SerializeToElement(value);
+
     private static void ConfigureSigningKey(
         OpenIddictServerBuilder server,
         OidcServerOptions.SigningKeyOptions keyOptions)
     {
-        if (!string.IsNullOrWhiteSpace(keyOptions.PfxBase64))
+        var certificate = OidcSigningKeyResolver.ResolveCertificate(keyOptions);
+        if (certificate is not null)
         {
-            var pfxBytes = Convert.FromBase64String(keyOptions.PfxBase64);
-            var certificate = X509CertificateLoader.LoadPkcs12(pfxBytes, keyOptions.PfxPassword);
-            server.AddSigningCertificate(certificate);
-            return;
-        }
-
-        if (string.Equals(keyOptions.Type, "rsa-pfx", StringComparison.OrdinalIgnoreCase)
-            && !string.IsNullOrWhiteSpace(keyOptions.PfxPath)
-            && File.Exists(keyOptions.PfxPath))
-        {
-            var certificate = X509CertificateLoader.LoadPkcs12FromFile(
-                keyOptions.PfxPath, keyOptions.PfxPassword);
             server.AddSigningCertificate(certificate);
             return;
         }

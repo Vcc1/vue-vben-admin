@@ -54,6 +54,14 @@ internal sealed class OidcServerBootstrapService(
             $"IF COL_LENGTH(N'dbo.IdentityOIDC_Authorizations', N'Type') IS NULL ALTER TABLE [dbo].[IdentityOIDC_Authorizations] ADD [Type] nvarchar(50) NULL",
             cancellationToken);
 
+        await db.Database.ExecuteSqlAsync(
+            $"IF COL_LENGTH(N'dbo.IdentityOIDC_Applications', N'BackChannelLogoutUri') IS NULL ALTER TABLE [dbo].[IdentityOIDC_Applications] ADD [BackChannelLogoutUri] nvarchar(400) NULL",
+            cancellationToken);
+
+        await db.Database.ExecuteSqlAsync(
+            $"IF COL_LENGTH(N'dbo.IdentityOIDC_Applications', N'RequiredSessionLevel') IS NULL ALTER TABLE [dbo].[IdentityOIDC_Applications] ADD [RequiredSessionLevel] int NOT NULL CONSTRAINT [DF_IdentityOIDC_Applications_Level] DEFAULT(1)",
+            cancellationToken);
+
         logger.LogInformation("OIDC schema check completed.");
     }
 

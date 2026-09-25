@@ -15,6 +15,8 @@ public sealed class AdminDbContext(
 {
     public DbSet<AdminApiKey> ApiKeys => Set<AdminApiKey>();
     public DbSet<AdminRefreshToken> RefreshTokens => Set<AdminRefreshToken>();
+    public DbSet<AdminSession> Sessions => Set<AdminSession>();
+    public DbSet<AdminTrustedDevice> TrustedDevices => Set<AdminTrustedDevice>();
     public DbSet<AdminUserAuditLog> UserAuditLogs => Set<AdminUserAuditLog>();
     public DbSet<AdminPermission> Permissions => Set<AdminPermission>();
     public DbSet<AdminRolePermission> RolePermissions => Set<AdminRolePermission>();
@@ -83,10 +85,54 @@ public sealed class AdminDbContext(
             entity.HasKey(x => x.Id);
             entity.Property(x => x.TokenHash).HasMaxLength(64).IsUnicode(false).IsRequired();
             entity.Property(x => x.CreatedByIp).HasMaxLength(64);
+            entity.Property(x => x.Sid).HasMaxLength(64).IsUnicode(false);
+            entity.Property(x => x.DeviceId).HasMaxLength(64);
+            entity.Property(x => x.UserAgent).HasMaxLength(512);
             entity.Property(x => x.CreatedAtUtc).HasPrecision(3);
             entity.Property(x => x.ExpiresAtUtc).HasPrecision(3);
             entity.Property(x => x.RevokedAtUtc).HasPrecision(3);
             entity.HasIndex(x => x.TokenHash).IsUnique();
+            entity.HasIndex(x => x.Sid);
+            entity.HasOne(x => x.User).WithMany().HasForeignKey(x => x.UserId).OnDelete(DeleteBehavior.Cascade);
+        });
+
+        builder.Entity<AdminSession>(entity =>
+        {
+            entity.ToTable("Identity_Sessions", "dbo");
+            entity.HasKey(x => x.Sid);
+            entity.Property(x => x.Sid).HasMaxLength(64).IsUnicode(false).IsRequired();
+            entity.Property(x => x.DeviceId).HasMaxLength(64);
+            entity.Property(x => x.LoginMethod).HasMaxLength(20).IsUnicode(false).IsRequired();
+            entity.Property(x => x.StrongAuthMethod).HasMaxLength(20).IsUnicode(false);
+            entity.Property(x => x.RevokedReason).HasMaxLength(200);
+            entity.Property(x => x.RevokedByActorId).HasMaxLength(100);
+            entity.Property(x => x.RevokedByActorName).HasMaxLength(100);
+            entity.Property(x => x.CreatedByIp).HasMaxLength(64);
+            entity.Property(x => x.UserAgent).HasMaxLength(512);
+            entity.Property(x => x.PasswordVerifiedAtUtc).HasPrecision(3);
+            entity.Property(x => x.StrongAuthAtUtc).HasPrecision(3);
+            entity.Property(x => x.CreatedAtUtc).HasPrecision(3);
+            entity.Property(x => x.LastActivityAtUtc).HasPrecision(3);
+            entity.Property(x => x.ExpiresAtUtc).HasPrecision(3);
+            entity.Property(x => x.RevokedAtUtc).HasPrecision(3);
+            entity.HasIndex(x => new { x.UserId, x.RevokedAtUtc });
+            entity.HasIndex(x => x.DeviceId);
+            entity.HasIndex(x => x.LastActivityAtUtc);
+        });
+
+        builder.Entity<AdminTrustedDevice>(entity =>
+        {
+            entity.ToTable("Identity_TrustedDevices", "dbo");
+            entity.HasKey(x => x.Id);
+            entity.Property(x => x.DeviceId).HasMaxLength(64).IsRequired();
+            entity.Property(x => x.Status).HasMaxLength(20).IsUnicode(false).IsRequired();
+            entity.Property(x => x.LastLoginSid).HasMaxLength(64).IsUnicode(false);
+            entity.Property(x => x.RevokedReason).HasMaxLength(200);
+            entity.Property(x => x.RevokedByActorId).HasMaxLength(100);
+            entity.Property(x => x.FirstSeenUtc).HasPrecision(3);
+            entity.Property(x => x.LastSeenUtc).HasPrecision(3);
+            entity.Property(x => x.RevokedAtUtc).HasPrecision(3);
+            entity.HasIndex(x => new { x.UserId, x.DeviceId }).IsUnique();
             entity.HasOne(x => x.User).WithMany().HasForeignKey(x => x.UserId).OnDelete(DeleteBehavior.Cascade);
         });
 
@@ -143,6 +189,7 @@ public sealed class AdminDbContext(
             entity.Property(x => x.Permissions).HasMaxLength(4000);
             entity.Property(x => x.Requirements).HasMaxLength(400);
             entity.Property(x => x.Properties).HasMaxLength(4000);
+            entity.Property(x => x.BackChannelLogoutUri).HasMaxLength(400);
             entity.Property(x => x.ConcurrencyToken).HasMaxLength(50).IsConcurrencyToken();
             entity.HasIndex(x => x.ClientId).IsUnique();
         });

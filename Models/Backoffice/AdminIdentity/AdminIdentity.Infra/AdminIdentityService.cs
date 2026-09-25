@@ -9,6 +9,8 @@ using AdminIdentity.App;
 using Auditing.App;
 using Infrastructure.Sql.Admin;
 using Infrastructure.Sql.Admin.Identity;
+using Microsoft.AspNetCore.Authentication;
+using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Options;
@@ -24,6 +26,10 @@ internal sealed class AdminIdentityService(
     IOptions<AdminIdentityOptions> options,
     ICurrentActorAccessor actorAccessor,
     ISecurityEventLogger securityEvents,
+    ISessionService sessionService,
+    IDeviceTrustService deviceTrust,
+    IStepUpService stepUpService,
+    IHttpContextAccessor httpContextAccessor,
     TimeProvider timeProvider)
     : IAdminAuthenticationService, IAdminUserService, IAdminApiKeyService
 {
@@ -57,13 +63,95 @@ internal sealed class AdminIdentityService(
         user.UpdatedAtUtc = now;
         await userManager.UpdateAsync(user);
 
-        await signInManager.SignInAsync(user, request.RememberMe);
+        var deviceInfoJson = SerializeDeviceInfo(request.DeviceInfo);
+
+        // deviceId 优先取 AS 侧 cookie（首次登录会自动下发）；
+        // 请求体里的 deviceId 只作为原生客户端等非浏览器场景的显式覆盖。
+        var deviceId = string.IsNullOrWhiteSpace(request.DeviceId)
+            ? DeviceCookie.Ensure(httpContextAccessor.HttpContext)
+            : request.DeviceId.Trim();
+
+        // 受信设备只需密码；新设备与被踢设备必须再走一次强认证（HTTP 428）。
+        var trust = await deviceTrust.EvaluateAsync(user.Id, deviceId, cancellationToken);
+        if (!trust.IsTrusted)
+        {
+            var challenge = await stepUpService.CreateLoginChallengeAsync(user.Id, deviceId, deviceInfoJson, trust.Reason, cancellationToken);
+            await securityEvents.LogAsync(new SecurityEvent(
+                "LoginStepUpRequired", "Low", "密码校验通过但设备不受信，要求二次验证。",
+                new { user.Id, DeviceId = deviceId, trust.Reason, IpAddress = ipAddress },
+                ActorId: user.Id.ToString(), ActorName: user.UserName), cancellationToken);
+            return new LoginResult(await MapUserAsync(user), null, challenge);
+        }
+
+        return await EstablishSessionAsync(
+            user, deviceId, deviceInfoJson, SessionLoginMethods.Password,
+            strongAuthMethod: null, request.Mode, request.RememberMe, ipAddress, trustDevice: false, cancellationToken);
+    }
+
+    public async Task<LoginResult> CompleteStepUpLoginAsync(
+        StepUpVerification verification, string mode, bool rememberMe, string? ipAddress, CancellationToken cancellationToken)
+    {
+        var user = await userManager.FindByIdAsync(verification.UserId.ToString())
+            ?? throw new KeyNotFoundException("User was not found.");
+        if (!user.IsEnabled)
+        {
+            throw new InvalidOperationException("该账号已停用。");
+        }
+
+        // 设备信息在 428 往返中被封存在 stepUpToken 里，二次验证通过时随结果带回。
+        return await EstablishSessionAsync(
+            user, verification.DeviceId, verification.DeviceInfoJson, SessionLoginMethods.Otp,
+            strongAuthMethod: verification.Channel, mode, rememberMe, ipAddress, trustDevice: true, cancellationToken);
+    }
+
+    /// <summary>创建 sid、签入 cookie（带 sid 与等级 claim）、按需签发 token。</summary>
+    private async Task<LoginResult> EstablishSessionAsync(
+        AdminUser user,
+        string? deviceId,
+        string? deviceInfoJson,
+        string loginMethod,
+        string? strongAuthMethod,
+        string mode,
+        bool rememberMe,
+        string? ipAddress,
+        bool trustDevice,
+        CancellationToken cancellationToken)
+    {
+        var now = timeProvider.GetUtcNow().UtcDateTime;
+        var strongAuthAt = strongAuthMethod is null ? (DateTime?)null : now;
+
+        var sid = await sessionService.CreateAsync(new CreateSessionContext(
+            user.Id,
+            deviceId,
+            deviceInfoJson,
+            loginMethod,
+            ipAddress,
+            actorAccessor.Current.UserAgent,
+            PasswordVerifiedAtUtc: now,
+            StrongAuthAtUtc: strongAuthAt,
+            strongAuthMethod,
+            TimeSpan.FromDays(Math.Clamp(options.Value.Jwt.RefreshTokenDays, 1, 365))),
+            cancellationToken);
+
+        if (trustDevice && deviceId is not null)
+        {
+            await deviceTrust.MarkTrustedAsync(user.Id, deviceId, deviceInfoJson, sid, cancellationToken);
+        }
+
+        var facts = new SessionFacts(sid, deviceId, loginMethod, now, now, strongAuthAt, strongAuthMethod);
+
+        await SignInWithSessionAsync(user, facts, rememberMe);
 
         TokenPair? tokens = null;
-        if (string.Equals(request.Mode, "token", StringComparison.OrdinalIgnoreCase))
+        if (string.Equals(mode, "token", StringComparison.OrdinalIgnoreCase))
         {
-            tokens = await CreateTokenPairAsync(user, ipAddress, cancellationToken);
+            tokens = await CreateTokenPairAsync(user, facts, ipAddress, now, cancellationToken);
         }
+
+        await securityEvents.LogAsync(new SecurityEvent(
+            "LoginSuccess", "Low", $"登录成功（{loginMethod}）。",
+            new { Sid = sid, user.Id, DeviceId = deviceId, LoginMethod = loginMethod, IpAddress = ipAddress },
+            ActorId: user.Id.ToString(), ActorName: user.UserName), cancellationToken);
 
         return new LoginResult(await MapUserAsync(user), tokens);
     }
@@ -114,7 +202,32 @@ internal sealed class AdminIdentityService(
             return null;
         }
 
-        var replacement = await CreateTokenPairAsync(user, ipAddress, cancellationToken);
+        // 凭证级吊销：refresh token 所属 sid 被踢后，续期必须被拒绝。
+        if (stored.Sid is not null && await sessionService.IsRevokedAsync(stored.Sid, cancellationToken))
+        {
+            await securityEvents.LogAsync(new SecurityEvent(
+                "RefreshDenied", "Medium", "refresh token 所属会话已被吊销，拒绝续期。",
+                new { stored.UserId, Sid = stored.Sid, IpAddress = ipAddress },
+                ActorId: stored.UserId.ToString()),
+                cancellationToken);
+            return null;
+        }
+
+        var session = stored.Sid is null
+            ? null
+            : await sessionService.GetStateAsync(stored.Sid, cancellationToken);
+
+        var facts = new SessionFacts(
+            stored.Sid,
+            stored.DeviceId ?? session?.DeviceId,
+            session?.LoginMethod ?? SessionLoginMethods.Password,
+            session?.PasswordVerifiedAtUtc ?? now,
+            session?.PasswordVerifiedAtUtc,
+            session?.StrongAuthAtUtc,
+            session?.StrongAuthMethod);
+
+        var replacement = await CreateTokenPairAsync(user, facts, ipAddress, now, cancellationToken);
+
         var replacementEntity = await dbContext.RefreshTokens.SingleAsync(
             x => x.TokenHash == HashSecret(replacement.RefreshToken), cancellationToken);
         stored.RevokedAtUtc = now;
@@ -123,7 +236,51 @@ internal sealed class AdminIdentityService(
         return replacement;
     }
 
-    public Task LogoutAsync(CancellationToken cancellationToken) => signInManager.SignOutAsync();
+    public Task LogoutAsync(CancellationToken cancellationToken) => LogoutAsync(null, cancellationToken);
+
+    public async Task LogoutAsync(string? sid, CancellationToken cancellationToken)
+    {
+        if (!string.IsNullOrWhiteSpace(sid))
+        {
+            await sessionService.RevokeAsync(sid, "self-logout", cancellationToken);
+        }
+        await signInManager.SignOutAsync();
+    }
+
+    public async Task<LoginResult?> ReissueAsync(string? sid, string mode, string? ipAddress, CancellationToken cancellationToken)
+    {
+        var state = await sessionService.GetStateAsync(sid, cancellationToken);
+        if (state is null || state.RevokedAtUtc is not null || state.ExpiresAtUtc <= timeProvider.GetUtcNow().UtcDateTime)
+        {
+            return null;
+        }
+
+        var user = await userManager.FindByIdAsync(state.UserId.ToString());
+        if (user is null || !user.IsEnabled)
+        {
+            return null;
+        }
+
+        var now = timeProvider.GetUtcNow().UtcDateTime;
+        var facts = new SessionFacts(
+            state.Sid,
+            state.DeviceId,
+            state.LoginMethod,
+            state.PasswordVerifiedAtUtc ?? now,
+            state.PasswordVerifiedAtUtc,
+            state.StrongAuthAtUtc,
+            state.StrongAuthMethod);
+
+        await SignInWithSessionAsync(user, facts, rememberMe: true);
+
+        TokenPair? tokens = null;
+        if (string.Equals(mode, "token", StringComparison.OrdinalIgnoreCase))
+        {
+            tokens = await CreateTokenPairAsync(user, facts, ipAddress, now, cancellationToken);
+        }
+
+        return new LoginResult(await MapUserAsync(user), tokens);
+    }
 
     public async Task<AdminUserItem?> GetCurrentUserAsync(CancellationToken cancellationToken)
     {
@@ -323,14 +480,15 @@ internal sealed class AdminIdentityService(
         await dbContext.SaveChangesAsync(cancellationToken);
     }
 
-    private async Task<TokenPair> CreateTokenPairAsync(AdminUser user, string? ipAddress, CancellationToken cancellationToken)    {
+    private async Task<TokenPair> CreateTokenPairAsync(
+        AdminUser user, SessionFacts facts, string? ipAddress, DateTime now, CancellationToken cancellationToken)
+    {
         var jwtOptions = options.Value.Jwt;
         if (string.IsNullOrWhiteSpace(jwtOptions.SigningKey) || Encoding.UTF8.GetByteCount(jwtOptions.SigningKey) < 32)
         {
             throw new InvalidOperationException("AdminIdentity:Jwt:SigningKey must contain at least 32 bytes.");
         }
 
-        var now = timeProvider.GetUtcNow().UtcDateTime;
         var accessExpires = now.AddMinutes(Math.Clamp(jwtOptions.AccessTokenMinutes, 1, 1440));
         var roles = await userManager.GetRolesAsync(user);
         var claims = new List<Claim>
@@ -342,6 +500,7 @@ internal sealed class AdminIdentityService(
             new(JwtRegisteredClaimNames.Jti, Guid.CreateVersion7().ToString())
         };
         claims.AddRange(roles.Select(role => new Claim(ClaimTypes.Role, role)));
+        claims.AddRange(BuildSessionClaims(facts, now));
 
         var credentials = new SigningCredentials(
             new SymmetricSecurityKey(Encoding.UTF8.GetBytes(jwtOptions.SigningKey)),
@@ -356,6 +515,9 @@ internal sealed class AdminIdentityService(
             Id = Guid.CreateVersion7(),
             UserId = user.Id,
             TokenHash = HashSecret(refreshToken),
+            Sid = facts.Sid,
+            DeviceId = facts.DeviceId,
+            UserAgent = actorAccessor.Current.UserAgent,
             CreatedAtUtc = now,
             ExpiresAtUtc = refreshExpires,
             CreatedByIp = ipAddress
@@ -364,6 +526,114 @@ internal sealed class AdminIdentityService(
 
         return new TokenPair(accessToken, accessExpires, refreshToken, refreshExpires);
     }
+
+    /// <summary>签入 cookie，并把 sid / 等级事实写进 principal，供中间件与授权策略读取。</summary>
+    private async Task SignInWithSessionAsync(AdminUser user, SessionFacts facts, bool rememberMe)
+    {
+        var context = httpContextAccessor.HttpContext
+            ?? throw new InvalidOperationException("当前请求没有 HttpContext，无法签入 cookie。");
+
+        var principal = await signInManager.CreateUserPrincipalAsync(user);
+        var identity = (ClaimsIdentity)principal.Identity!;
+        var now = timeProvider.GetUtcNow().UtcDateTime;
+        foreach (var claim in BuildSessionClaims(facts, now))
+        {
+            identity.AddClaim(claim);
+        }
+
+        await context.SignInAsync(
+            IdentityConstants.ApplicationScheme,
+            principal,
+            new AuthenticationProperties { IsPersistent = rememberMe });
+    }
+
+    /// <summary>
+    /// 会话相关 claim。acr 只是签发时刻的快照：token 生命周期内等级可能因掉窗而降低，
+    /// 实时等级以 userinfo 或服务端会话校验为准。
+    /// </summary>
+    private IEnumerable<Claim> BuildSessionClaims(SessionFacts facts, DateTime now)
+    {
+        var level = SessionLevels.Evaluate(
+            now, facts.PasswordVerifiedAtUtc, facts.StrongAuthAtUtc, now, PasswordGapWindow, StrongAuthWindow);
+
+        yield return new Claim(SessionClaims.Acr, SessionLevels.ToAcr(level));
+        yield return new Claim(SessionClaims.AuthTime, ToUnixSeconds(facts.AuthTimeUtc), ClaimValueTypes.Integer64);
+
+        if (facts.Sid is not null)
+        {
+            yield return new Claim(SessionClaims.Sid, facts.Sid);
+        }
+        if (facts.DeviceId is not null)
+        {
+            yield return new Claim(SessionClaims.DeviceId, facts.DeviceId);
+        }
+        if (facts.PasswordVerifiedAtUtc is { } passwordVerifiedAt)
+        {
+            yield return new Claim(SessionClaims.PasswordVerifiedAt, ToUnixSeconds(passwordVerifiedAt), ClaimValueTypes.Integer64);
+        }
+        if (facts.StrongAuthAtUtc is { } strongAuthAt)
+        {
+            yield return new Claim(SessionClaims.StrongAuthAt, ToUnixSeconds(strongAuthAt), ClaimValueTypes.Integer64);
+        }
+        foreach (var method in AmrValues(facts))
+        {
+            yield return new Claim(SessionClaims.Amr, method);
+        }
+    }
+
+    private static IEnumerable<string> AmrValues(SessionFacts facts)
+    {
+        var values = new List<string>
+        {
+            facts.LoginMethod switch
+            {
+                SessionLoginMethods.Otp => "otp",
+                SessionLoginMethods.Sso => "sso",
+                _ => "pwd"
+            }
+        };
+
+        if (facts.StrongAuthAtUtc is not null)
+        {
+            values.Add("mfa");
+            if (string.Equals(facts.StrongAuthMethod, StepUpChannels.Totp, StringComparison.OrdinalIgnoreCase))
+            {
+                values.Add("totp");
+            }
+        }
+
+        return values.Distinct(StringComparer.Ordinal);
+    }
+
+    private TimeSpan PasswordGapWindow =>
+        TimeSpan.FromMinutes(Math.Max(1, options.Value.Session.PasswordActivityGapMinutes));
+
+    private TimeSpan StrongAuthWindow =>
+        TimeSpan.FromMinutes(Math.Max(1, options.Value.Session.StrongAuthWindowMinutes));
+
+    private static string ToUnixSeconds(DateTime value) =>
+        new DateTimeOffset(DateTime.SpecifyKind(value, DateTimeKind.Utc)).ToUnixTimeSeconds().ToString();
+
+    private static string? SerializeDeviceInfo(JsonElement? deviceInfo)
+    {
+        if (deviceInfo is not { } info || info.ValueKind is JsonValueKind.Undefined or JsonValueKind.Null)
+        {
+            return null;
+        }
+
+        var json = info.GetRawText();
+        return json.Length <= 2000 ? json : json[..2000];
+    }
+
+    /// <summary>签发 cookie / token 时使用的会话事实快照。</summary>
+    private sealed record SessionFacts(
+        string? Sid,
+        string? DeviceId,
+        string LoginMethod,
+        DateTime AuthTimeUtc,
+        DateTime? PasswordVerifiedAtUtc,
+        DateTime? StrongAuthAtUtc,
+        string? StrongAuthMethod);
 
     private async Task<AdminUserItem> MapUserAsync(AdminUser user) => new(
         user.Id,

@@ -111,7 +111,9 @@ public static class ServiceCollectionExtensions
                     var userManager = context.HttpContext.RequestServices.GetRequiredService<UserManager<AdminUser>>();
                     var userId = context.Principal?.FindFirstValue(ClaimTypes.NameIdentifier);
                     var user = userId is null ? null : await userManager.FindByIdAsync(userId);
-                    if (user?.IsEnabled == true) return;
+                    var sessionValid = await ValidateSessionAsync(
+                        context.HttpContext, context.Principal?.FindFirstValue(SessionClaims.Sid));
+                    if (user?.IsEnabled == true && sessionValid) return;
                     context.RejectPrincipal();
                     await context.HttpContext.SignOutAsync(IdentityConstants.ApplicationScheme);
                 };
@@ -142,7 +144,15 @@ public static class ServiceCollectionExtensions
                         var userManager = context.HttpContext.RequestServices.GetRequiredService<UserManager<AdminUser>>();
                         var userId = context.Principal?.FindFirstValue(ClaimTypes.NameIdentifier);
                         var user = userId is null ? null : await userManager.FindByIdAsync(userId);
-                        if (user?.IsEnabled != true) context.Fail("The administrator account is disabled.");
+                        if (user?.IsEnabled != true)
+                        {
+                            context.Fail("The administrator account is disabled.");
+                            return;
+                        }
+                        if (!await ValidateSessionAsync(context.HttpContext, context.Principal?.FindFirstValue(SessionClaims.Sid)))
+                        {
+                            context.Fail("The login session has been revoked.");
+                        }
                     }
                 };
             })
@@ -153,7 +163,8 @@ public static class ServiceCollectionExtensions
             .AddPolicy(AdminPolicies.View, policy => policy.RequireRole(AdminRoles.Admin, AdminRoles.Operator, AdminRoles.Viewer))
             .AddPolicy(AdminPolicies.Operate, policy => policy.RequireRole(AdminRoles.Admin, AdminRoles.Operator))
             .AddPolicy(AdminPolicies.ManageTasks, policy => policy.RequireRole(AdminRoles.Admin))
-            .AddPolicy(AdminPolicies.ManageUsers, policy => policy.RequireRole(AdminRoles.Admin));
+            .AddPolicy(AdminPolicies.ManageUsers, policy => policy.RequireRole(AdminRoles.Admin))
+            .AddPolicy(AdminPolicies.ManageSessions, policy => policy.RequireRole(AdminRoles.Admin));
 
         services.AddScoped<CurrentActorAccessor>();
         services.AddScoped<ICurrentActorAccessor>(provider => provider.GetRequiredService<CurrentActorAccessor>());
@@ -166,7 +177,34 @@ public static class ServiceCollectionExtensions
         services.AddScoped<IAdminAccessManagementService, AdminAccessManagementService>();
         services.AddScoped<IAdminAccessTransferService, AdminAccessTransferService>();
         services.AddScoped<IAdminApiKeyService>(provider => provider.GetRequiredService<AdminIdentityService>());
+
+        services.AddScoped<SessionService>();
+        services.AddScoped<ISessionService>(provider => provider.GetRequiredService<SessionService>());
+        services.AddScoped<IDeviceTrustService>(provider => provider.GetRequiredService<SessionService>());
+        services.AddScoped<IStepUpService, StepUpService>();
+        services.AddScoped<IOtpDeliveryChannel, EmailOtpDeliveryChannel>();
+        services.AddScoped<IBackChannelLogoutNotifier, BackChannelLogoutNotifier>();
+        services.AddHttpClient(BackChannelLogoutNotifier.HttpClientName);
+
         services.AddHostedService<AdminIdentityBootstrapService>();
         return services;
+    }
+
+    /// <summary>
+    /// 校验 sid 是否仍有效，并把本次请求的实时等级缓存到 HttpContext，
+    /// 供 <see cref="SessionLevelMiddleware"/> 复用，避免同一请求内二次查库。
+    /// sid 为空表示改造前签发的旧凭据，退回原有的账号启用校验。
+    /// </summary>
+    private static async Task<bool> ValidateSessionAsync(HttpContext httpContext, string? sid)
+    {
+        if (string.IsNullOrWhiteSpace(sid))
+        {
+            return true;
+        }
+
+        var sessions = httpContext.RequestServices.GetRequiredService<ISessionService>();
+        var level = await sessions.ValidateAndTouchAsync(sid, httpContext.RequestAborted);
+        SessionContext.Set(httpContext, sid, level);
+        return level is not null;
     }
 }

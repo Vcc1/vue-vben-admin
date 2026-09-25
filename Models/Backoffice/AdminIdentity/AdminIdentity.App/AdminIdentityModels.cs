@@ -15,6 +15,7 @@ public static class AdminPolicies
     public const string Operate = "Admin.Operate";
     public const string ManageTasks = "Admin.ManageTasks";
     public const string ManageUsers = "Admin.ManageUsers";
+    public const string ManageSessions = "Admin.ManageSessions";
 }
 
 public sealed record CurrentActor(
@@ -42,11 +43,19 @@ public sealed record AdminUserItem(
     DateTime CreatedAtUtc,
     DateTime? LastLoginAtUtc);
 
+/// <summary>
+/// 登录请求。
+/// <paramref name="DeviceId"/> 留空时由服务端从 AS 侧 cookie 读取（首次登录自动下发），
+/// 只有原生客户端等拿不到 cookie 的场景才需要显式传值。
+/// <paramref name="DeviceInfo"/> 是浏览器上报的展示信息（平台、系统等），仅用于列表页可读性。
+/// </summary>
 public sealed record LoginRequest(
     string UserName,
     string Password,
     string Mode = "cookie",
-    bool RememberMe = false);
+    bool RememberMe = false,
+    string? DeviceId = null,
+    System.Text.Json.JsonElement? DeviceInfo = null);
 
 public sealed record TokenPair(
     string AccessToken,
@@ -54,7 +63,8 @@ public sealed record TokenPair(
     string RefreshToken,
     DateTime RefreshTokenExpiresAtUtc);
 
-public sealed record LoginResult(AdminUserItem User, TokenPair? Tokens);
+/// <summary>登录结果。StepUp 非空表示密码已通过但设备不受信，需二次验证（HTTP 428）。sid 不下发给前端。</summary>
+public sealed record LoginResult(AdminUserItem User, TokenPair? Tokens, StepUpChallenge? StepUp = null);
 public sealed record RefreshTokenRequest(string RefreshToken);
 public sealed record CreateAdminUserRequest(
     string UserName,
@@ -89,6 +99,16 @@ public interface IAdminAuthenticationService
     Task<TokenPair?> RefreshAsync(string refreshToken, string? ipAddress, CancellationToken cancellationToken);
     Task LogoutAsync(CancellationToken cancellationToken);
     Task<AdminUserItem?> GetCurrentUserAsync(CancellationToken cancellationToken);
+
+    /// <summary>登出并吊销指定凭证（sid 为空时仅签出 cookie，兼容旧调用）。</summary>
+    Task LogoutAsync(string? sid, CancellationToken cancellationToken);
+
+    /// <summary>二次验证通过后完成登录：创建会话、签入 cookie、按 mode 签发 token，并把设备标记为受信。</summary>
+    Task<LoginResult> CompleteStepUpLoginAsync(
+        StepUpVerification verification, string mode, bool rememberMe, string? ipAddress, CancellationToken cancellationToken);
+
+    /// <summary>会话内 step-up 成功后重发 token，并用最新等级事实刷新 cookie claim。</summary>
+    Task<LoginResult?> ReissueAsync(string? sid, string mode, string? ipAddress, CancellationToken cancellationToken);
 }
 
 public interface IAdminUserService

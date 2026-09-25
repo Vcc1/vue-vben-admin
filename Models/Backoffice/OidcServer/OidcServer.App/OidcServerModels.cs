@@ -1,5 +1,10 @@
 namespace OidcServer.App;
 
+/// <summary>
+/// OIDC 客户端配置。
+/// <paramref name="BackChannelLogoutUri"/> 为 OIDC Back-Channel Logout 1.0 的接收端点，留空表示不接受推送；
+/// <paramref name="RequiredSessionLevel"/> 是 authorize 入口的最低会话等级闸门（1/2/3）。
+/// </summary>
 public sealed record OidcClientItem(
     Guid Id,
     string ClientId,
@@ -11,6 +16,8 @@ public sealed record OidcClientItem(
     IReadOnlyList<string> GrantTypes,
     IReadOnlyList<string> Scopes,
     bool HasClientSecret,
+    string? BackChannelLogoutUri,
+    int RequiredSessionLevel,
     DateTime CreatedAtUtc);
 
 public sealed record CreateOidcClientRequest(
@@ -22,7 +29,9 @@ public sealed record CreateOidcClientRequest(
     IReadOnlyList<string> PostLogoutRedirectUris,
     IReadOnlyList<string> GrantTypes,
     IReadOnlyList<string> Scopes,
-    string? ClientSecret);
+    string? ClientSecret,
+    string? BackChannelLogoutUri = null,
+    int RequiredSessionLevel = 1);
 
 public sealed record UpdateOidcClientRequest(
     string DisplayName,
@@ -30,7 +39,9 @@ public sealed record UpdateOidcClientRequest(
     IReadOnlyList<string> RedirectUris,
     IReadOnlyList<string> PostLogoutRedirectUris,
     IReadOnlyList<string> GrantTypes,
-    IReadOnlyList<string> Scopes);
+    IReadOnlyList<string> Scopes,
+    string? BackChannelLogoutUri = null,
+    int RequiredSessionLevel = 1);
 
 public sealed record OidcScopeItem(
     Guid Id,

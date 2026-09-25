@@ -1,6 +1,7 @@
 using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
+using AdminIdentity.App;
 using Infrastructure.Sql.Admin;
 using Infrastructure.Sql.Admin.Oidc;
 using Microsoft.EntityFrameworkCore;
@@ -25,6 +26,8 @@ internal sealed class OidcServerStore(AdminDbContext dbContext) : IOidcClientSto
                 ExtractGrantTypes(x.Permissions),
                 ExtractScopes(x.Permissions),
                 !string.IsNullOrEmpty(x.ClientSecret),
+                x.BackChannelLogoutUri,
+                x.RequiredSessionLevel,
                 DateTime.UtcNow))
             .ToListAsync(cancellationToken);
     }
@@ -45,6 +48,8 @@ internal sealed class OidcServerStore(AdminDbContext dbContext) : IOidcClientSto
             ExtractGrantTypes(app.Permissions),
             ExtractScopes(app.Permissions),
             !string.IsNullOrEmpty(app.ClientSecret),
+            app.BackChannelLogoutUri,
+            app.RequiredSessionLevel,
             DateTime.UtcNow);
     }
 
@@ -62,7 +67,9 @@ internal sealed class OidcServerStore(AdminDbContext dbContext) : IOidcClientSto
             PostLogoutRedirectUris = SerializeList(request.PostLogoutRedirectUris),
             Permissions = SerializeList(permissions),
             Requirements = "[]",
-            Properties = "{}"
+            Properties = "{}",
+            BackChannelLogoutUri = NormalizeLogoutUri(request.BackChannelLogoutUri),
+            RequiredSessionLevel = NormalizeLevel(request.RequiredSessionLevel)
         };
 
         if (!string.IsNullOrWhiteSpace(request.ClientSecret))
@@ -73,13 +80,7 @@ internal sealed class OidcServerStore(AdminDbContext dbContext) : IOidcClientSto
         dbContext.OidcApplications.Add(app);
         await dbContext.SaveChangesAsync(cancellationToken);
 
-        return new OidcClientItem(
-            app.Id, app.ClientId ?? string.Empty, app.DisplayName ?? app.ClientId ?? string.Empty,
-            app.ClientType ?? string.Empty, app.ConsentType ?? string.Empty,
-            request.RedirectUris, request.PostLogoutRedirectUris,
-            request.GrantTypes, request.Scopes,
-            !string.IsNullOrEmpty(app.ClientSecret),
-            DateTime.UtcNow);
+        return ToItem(app, request.RedirectUris, request.PostLogoutRedirectUris, request.GrantTypes, request.Scopes);
     }
 
     public async Task<OidcClientItem> UpdateAsync(Guid id, UpdateOidcClientRequest request, CancellationToken cancellationToken)
@@ -94,17 +95,27 @@ internal sealed class OidcServerStore(AdminDbContext dbContext) : IOidcClientSto
         app.RedirectUris = SerializeList(request.RedirectUris);
         app.PostLogoutRedirectUris = SerializeList(request.PostLogoutRedirectUris);
         app.Permissions = SerializeList(permissions);
+        app.BackChannelLogoutUri = NormalizeLogoutUri(request.BackChannelLogoutUri);
+        app.RequiredSessionLevel = NormalizeLevel(request.RequiredSessionLevel);
 
         await dbContext.SaveChangesAsync(cancellationToken);
 
-        return new OidcClientItem(
+        return ToItem(app, request.RedirectUris, request.PostLogoutRedirectUris, request.GrantTypes, request.Scopes);
+    }
+
+    private static OidcClientItem ToItem(
+        OidcApplication app,
+        IReadOnlyList<string> redirectUris,
+        IReadOnlyList<string> postLogoutRedirectUris,
+        IReadOnlyList<string> grantTypes,
+        IReadOnlyList<string> scopes) => new(
             app.Id, app.ClientId ?? string.Empty, app.DisplayName ?? app.ClientId ?? string.Empty,
             app.ClientType ?? string.Empty, app.ConsentType ?? string.Empty,
-            request.RedirectUris, request.PostLogoutRedirectUris,
-            request.GrantTypes, request.Scopes,
+            redirectUris, postLogoutRedirectUris, grantTypes, scopes,
             !string.IsNullOrEmpty(app.ClientSecret),
+            app.BackChannelLogoutUri,
+            app.RequiredSessionLevel,
             DateTime.UtcNow);
-    }
 
     public async Task DeleteAsync(Guid id, CancellationToken cancellationToken)
     {
@@ -168,6 +179,34 @@ internal sealed class OidcServerStore(AdminDbContext dbContext) : IOidcClientSto
 
     private static string SerializeList(IReadOnlyList<string> items) =>
         JsonSerializer.Serialize(items);
+
+    /// <summary>
+    /// logout_token 会带上 sid 与 sub，推到攻击者控制的地址等于泄露会话标识，
+    /// 因此只接受绝对 http/https 地址；生产为内网 HTTP，由运维在后台逐项确认后录入。
+    /// </summary>
+    private static string? NormalizeLogoutUri(string? uri)
+    {
+        if (string.IsNullOrWhiteSpace(uri))
+        {
+            return null;
+        }
+
+        var trimmed = uri.Trim();
+        if (!Uri.TryCreate(trimmed, UriKind.Absolute, out var parsed)
+            || (parsed.Scheme != Uri.UriSchemeHttp && parsed.Scheme != Uri.UriSchemeHttps))
+        {
+            throw new ArgumentException("Back-channel logout URI 必须是绝对的 http/https 地址。", nameof(uri));
+        }
+
+        if (trimmed.Length > 400)
+        {
+            throw new ArgumentException("Back-channel logout URI 过长。", nameof(uri));
+        }
+
+        return trimmed;
+    }
+
+    private static int NormalizeLevel(int level) => level <= 0 ? SessionLevels.L1 : SessionLevels.Clamp(level);
 
     private static IReadOnlyList<string> DeserializeList(string? json)
     {
