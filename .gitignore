@@ -49,6 +49,8 @@ bld/
 *.snupkg
 **/[Pp]ackages/*
 !**/[Pp]ackages/build/
+# 前端 monorepo（UI/）的源码包目录，与 NuGet packages 无关
+!UI/packages/*
 *.nuget.props
 *.nuget.targets
 
