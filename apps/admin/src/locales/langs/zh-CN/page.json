@@ -1,0 +1,49 @@
+{
+  "auth": {
+    "login": "登录",
+    "register": "注册",
+    "codeLogin": "验证码登录",
+    "qrcodeLogin": "二维码登录",
+    "forgetPassword": "忘记密码",
+    "profile": "个人中心"
+  },
+  "dashboard": {
+    "title": "概览",
+    "analytics": "分析页",
+    "workspace": "工作台"
+  },
+  "oidc": {
+    "title": "OIDC 管理",
+    "clients": "客户端",
+    "scopes": "作用域"
+  },
+  "session": {
+    "title": "会话与设备",
+    "all": "会话管理",
+    "myDevices": "我的设备与会话"
+  },
+  "scheduling": {
+    "title": "定时任务",
+    "tasks": "任务列表"
+  },
+  "system": {
+    "title": "系统设置"
+  },
+  "auditing": {
+    "title": "审计日志",
+    "security": "安全审计",
+    "operations": "操作审计"
+  },
+  "access": {
+    "title": "用户与权限",
+    "users": "用户列表",
+    "roles": "角色管理",
+    "permissions": "权限管理"
+  },
+  "notification": {
+    "title": "通知管理",
+    "center": "消息中心",
+    "types": "类型管理",
+    "publish": "发布通知"
+  }
+}

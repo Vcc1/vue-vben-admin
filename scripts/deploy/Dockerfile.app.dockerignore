@@ -1,0 +1,18 @@
+# 仅作用于 Dockerfile.app 的构建上下文过滤（BuildKit 优先读取 <Dockerfile>.dockerignore）
+# 关键：排除所有层级的 node_modules / dist / 缓存，容器内会重新 pnpm install
+**/node_modules
+**/dist
+**/.turbo
+**/.turbo/**
+**/.cache
+**/.vite
+**/*.log
+.git
+**/.git
+.gitignore
+**/.gitignore
+*.md
+dist.zip
+**/dist.zip
+**/.DS_Store
+**/coverage
