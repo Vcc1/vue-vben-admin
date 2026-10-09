@@ -11,6 +11,7 @@ public static class ServiceCollectionExtensions
         ArgumentNullException.ThrowIfNull(services);
 
         services.TryAddSingleton(TimeProvider.System);
+        services.AddHostedService<AuditingSchemaBootstrapService>();
         services.AddScoped<ISecurityEventLogger, SecurityEventLogger>();
         services.AddScoped<IRequestAuditStore, RequestAuditStore>();
         services.AddScoped<IAuditQueryService, AuditQueryService>();

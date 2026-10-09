@@ -8,6 +8,8 @@ public sealed class AdminDbContextModelTests
 {
     private static readonly string[] ExpectedTables =
     [
+        "Auditing_RequestLogs",
+        "Auditing_SecurityEvents",
         "Gateway_Apis",
         "Gateway_AuditLogs",
         "Gateway_Endpoints",
@@ -23,6 +25,8 @@ public sealed class AdminDbContextModelTests
         "Identity_RoleClaims",
         "Identity_RolePermissions",
         "Identity_Roles",
+        "Identity_Sessions",
+        "Identity_TrustedDevices",
         "Identity_UserAuditLogs",
         "Identity_UserClaims",
         "Identity_UserLogins",
@@ -44,7 +48,8 @@ public sealed class AdminDbContextModelTests
         Assert.Equal(ExpectedTables.Order(), tables);
         Assert.All(entityTypes, entityType => Assert.Equal("dbo", entityType.GetSchema()));
         Assert.All(tables, table => Assert.True(
-            table!.StartsWith("Identity_", StringComparison.Ordinal)
+            table!.StartsWith("Auditing_", StringComparison.Ordinal)
+            || table.StartsWith("Identity_", StringComparison.Ordinal)
             || table.StartsWith("IdentityOIDC_", StringComparison.Ordinal)
             || table.StartsWith("Gateway_", StringComparison.Ordinal)
             || table.StartsWith("Scheduler_", StringComparison.Ordinal),

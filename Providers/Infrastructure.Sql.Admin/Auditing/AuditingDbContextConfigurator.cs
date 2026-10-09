@@ -42,9 +42,12 @@ public static class AuditingDbContextConfigurator
             entity.Property(x => x.QueryString).HasMaxLength(1000);
             entity.Property(x => x.ControllerName).HasMaxLength(100);
             entity.Property(x => x.ActionName).HasMaxLength(100);
+            entity.Property(x => x.FeatureName).HasMaxLength(100);
+            entity.Property(x => x.OperationName).HasMaxLength(100);
             entity.Property(x => x.OccurredAtUtc).HasPrecision(3);
             entity.HasIndex(x => x.OccurredAtUtc);
             entity.HasIndex(x => new { x.ActorId, x.OccurredAtUtc });
+            entity.HasIndex(x => new { x.FeatureName, x.OccurredAtUtc });
         });
     }
 }

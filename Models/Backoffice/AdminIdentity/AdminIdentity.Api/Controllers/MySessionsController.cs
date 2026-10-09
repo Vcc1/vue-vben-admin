@@ -13,18 +13,20 @@ namespace AdminIdentity.Api.Controllers;
 [ApiController]
 [ApiExplorerSettings(GroupName = OpenApiMetadata.DocumentName)]
 [Authorize]
-[RequestAudit]
+[RequestAudit(Feature = "个人中心")]
 [Route("api/admin/my")]
 public sealed class MySessionsController(
     ISessionService sessionService,
     IDeviceTrustService deviceTrust,
     ICurrentActorAccessor actorAccessor) : ControllerBase
 {
+    [AuditOperation("查看我的会话")]
     [HttpGet("sessions")]
     public async Task<ActionResult<IReadOnlyList<SessionItem>>> ListSessionsAsync(
         [FromQuery] bool includeRevoked, CancellationToken cancellationToken) =>
         Ok(await sessionService.ListAsync(GetCurrentUserId(), includeRevoked, CurrentSid, cancellationToken));
 
+    [AuditOperation("退出会话")]
     [HttpPost("sessions/{sid}/revoke")]
     public async Task<IActionResult> RevokeSessionAsync(string sid, RevokeRequest request, CancellationToken cancellationToken)
     {
@@ -34,6 +36,7 @@ public sealed class MySessionsController(
         return NoContent();
     }
 
+    [AuditOperation("查看我的设备")]
     [HttpGet("devices")]
     public async Task<ActionResult<IReadOnlyList<DeviceItem>>> ListDevicesAsync(CancellationToken cancellationToken)
     {
@@ -41,6 +44,7 @@ public sealed class MySessionsController(
         return Ok(await deviceTrust.ListDevicesAsync(userId, CurrentDeviceId, CurrentSid, cancellationToken));
     }
 
+    [AuditOperation("移除受信设备")]
     [HttpPost("devices/{deviceId}/revoke")]
     public async Task<IActionResult> RevokeDeviceAsync(string deviceId, RevokeRequest request, CancellationToken cancellationToken)
     {

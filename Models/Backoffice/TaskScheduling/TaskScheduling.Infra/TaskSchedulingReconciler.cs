@@ -107,7 +107,10 @@ internal sealed class TaskSchedulingReconciler(
     private async Task CleanupLogsAsync(AdminDbContext db, CancellationToken cancellationToken)
     {
         var settings = options.Value;
-        var files = new DirectoryInfo(logStore.Root).EnumerateFiles("*.ndjson", SearchOption.AllDirectories)
+        var root = new DirectoryInfo(logStore.Root);
+        var files = root.EnumerateFiles("*", SearchOption.AllDirectories)
+            .Where(f => f.Name.EndsWith(".ndjson", StringComparison.OrdinalIgnoreCase)
+                     || f.Name.EndsWith(".ndjson.gz", StringComparison.OrdinalIgnoreCase))
             .OrderByDescending(x => x.LastWriteTimeUtc).ToList();
         var cutoff = timeProvider.GetUtcNow().UtcDateTime.AddDays(-Math.Max(1, settings.LogRetentionDays));
         long retained = 0;

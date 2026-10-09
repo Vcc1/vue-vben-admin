@@ -18,6 +18,8 @@ public interface ISecurityEventLogger
 
 /// <summary>
 /// 一次被审计请求的快照。actor 信息与发生时间由存储层补全。
+/// FeatureName / OperationName 是给运营看的中文功能名与操作名，由控制器上的
+/// <see cref="RequestAuditAttribute.Feature"/> 与 action 上的 <see cref="AuditOperationAttribute"/> 声明。
 /// </summary>
 public sealed record RequestAuditEntry(
     string HttpMethod,
@@ -25,12 +27,25 @@ public sealed record RequestAuditEntry(
     string? QueryString,
     string? ControllerName,
     string? ActionName,
+    string? FeatureName,
+    string? OperationName,
     int StatusCode,
     long DurationMs,
     string? RequestBody,
     bool IsRequestBodyTruncated,
     string? ResponseBody,
     bool IsResponseBodyTruncated);
+
+/// <summary>
+/// 声明某个 action 在操作审计里显示的操作名（如"强制下线"）。
+/// 刻意不做成 filter：[RequestAudit] 在控制器级已经注册了过滤器，
+/// action 上再挂一个同类过滤器会导致同一请求写两条审计。
+/// </summary>
+[AttributeUsage(AttributeTargets.Class | AttributeTargets.Method, AllowMultiple = false, Inherited = true)]
+public sealed class AuditOperationAttribute(string name) : Attribute
+{
+    public string Name { get; } = name;
+}
 
 public interface IRequestAuditStore
 {
@@ -46,6 +61,7 @@ public sealed record AuditQueryFilter(
     string? HttpMethod = null,
     string? EventType = null,
     string? Severity = null,
+    string? Feature = null,
     DateTime? FromUtc = null,
     DateTime? ToUtc = null,
     int Take = 100);
@@ -64,6 +80,8 @@ public sealed record RequestAuditLogItem(
     string? QueryString,
     string? ControllerName,
     string? ActionName,
+    string? FeatureName,
+    string? OperationName,
     int StatusCode,
     long DurationMs,
     string? RequestBody,

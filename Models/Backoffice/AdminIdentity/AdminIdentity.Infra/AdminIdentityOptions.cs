@@ -1,3 +1,5 @@
+using AdminIdentity.App;
+
 namespace AdminIdentity.Infra;
 
 public sealed class AdminIdentityOptions
@@ -51,10 +53,24 @@ public sealed class AdminIdentityOptions
 
         /// <summary>受信设备多少天未登录后降级为需要 step-up。</summary>
         public int TrustedDeviceDecayDays { get; set; } = 90;
+
+        /// <summary>
+        /// 一次登录要把设备记为"受信"，该登录自身至少要达到的等级（<see cref="SessionLevels"/>）。
+        /// 2 = 密码核验通过即可记住设备；3 = 必须走过强认证（邮箱/短信/TOTP）才记住。
+        /// 只影响是否授予信任，不影响已受信设备的"最近使用"刷新。
+        /// </summary>
+        public int TrustDeviceMinLevel { get; set; } = SessionLevels.L2;
     }
 
     public sealed class StepUpOptions
     {
+        /// <summary>
+        /// 全局是否启用"比密码更强的登录凭证"（邮箱/短信/TOTP 二次验证）。
+        /// 关闭时密码就是最高凭证：新设备用密码登录直接纳入受信设备，不下发 428 挑战。
+        /// 开启后新设备必须通过强认证才会被记住；账号没有可用通道时降级为密码登录但不标记受信。
+        /// </summary>
+        public bool Enabled { get; set; }
+
         /// <summary>stepUpToken 有效期（分钟）。</summary>
         public int ChallengeMinutes { get; set; } = 10;
 

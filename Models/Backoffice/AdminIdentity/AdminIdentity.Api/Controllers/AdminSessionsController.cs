@@ -10,7 +10,7 @@ namespace AdminIdentity.Api.Controllers;
 [ApiController]
 [ApiExplorerSettings(GroupName = OpenApiMetadata.DocumentName)]
 [Authorize(Policy = AdminPolicies.ManageSessions)]
-[RequestAudit]
+[RequestAudit(Feature = "会话管理")]
 [Route("api/admin")]
 public sealed class AdminSessionsController(
     ISessionService sessionService,
@@ -18,6 +18,7 @@ public sealed class AdminSessionsController(
 {
     /// <summary>踢人是不可逆操作，要求会话达到 L2（近期密码核验）。</summary>
     [RequireSessionLevel(SessionLevels.L2)]
+    [AuditOperation("查询会话列表")]
     [HttpGet("sessions")]
     public async Task<ActionResult<IReadOnlyList<SessionItem>>> ListSessionsAsync(
         [FromQuery] Guid? userId,
@@ -26,6 +27,7 @@ public sealed class AdminSessionsController(
         Ok(await sessionService.ListAsync(userId, includeRevoked, CurrentSid, cancellationToken));
 
     [RequireSessionLevel(SessionLevels.L2)]
+    [AuditOperation("强制下线")]
     [HttpPost("sessions/{sid}/revoke")]
     public async Task<IActionResult> RevokeSessionAsync(string sid, RevokeRequest request, CancellationToken cancellationToken)
     {
@@ -34,6 +36,7 @@ public sealed class AdminSessionsController(
     }
 
     [RequireSessionLevel(SessionLevels.L2)]
+    [AuditOperation("吊销用户全部凭证")]
     [HttpPost("users/{userId:guid}/sessions/revoke")]
     public async Task<ActionResult<int>> RevokeUserSessionsAsync(Guid userId, RevokeRequest request, CancellationToken cancellationToken)
     {
@@ -42,12 +45,22 @@ public sealed class AdminSessionsController(
     }
 
     [RequireSessionLevel(SessionLevels.L2)]
+    [AuditOperation("查询设备列表")]
     [HttpGet("devices")]
     public async Task<ActionResult<IReadOnlyList<DeviceItem>>> ListDevicesAsync(
         [FromQuery] Guid userId, CancellationToken cancellationToken) =>
         Ok(await deviceTrust.ListDevicesAsync(userId, null, CurrentSid, cancellationToken));
 
+    /// <summary>按设备反查：这台设备被哪些用户登录过。含已被踢出受信表的记录，踢除不会抹掉历史。</summary>
     [RequireSessionLevel(SessionLevels.L2)]
+    [AuditOperation("按设备反查登录用户")]
+    [HttpGet("devices/{deviceId}/usage")]
+    public async Task<ActionResult<IReadOnlyList<DeviceUsageItem>>> ListDeviceUsageAsync(
+        string deviceId, CancellationToken cancellationToken) =>
+        Ok(await deviceTrust.ListDeviceUsageAsync(deviceId, cancellationToken));
+
+    [RequireSessionLevel(SessionLevels.L2)]
+    [AuditOperation("踢除受信设备")]
     [HttpPost("users/{userId:guid}/devices/{deviceId}/revoke")]
     public async Task<IActionResult> RevokeDeviceAsync(Guid userId, string deviceId, RevokeRequest request, CancellationToken cancellationToken)
     {

@@ -13,6 +13,7 @@
     <ProjectReference Include="..\RoomMatch.Domain\RoomMatch.Domain.csproj" />
     <ProjectReference Include="..\..\..\..\Base\Shared\OTA.Domain\OTA.Domain.csproj" />
     <ProjectReference Include="..\RoomMatch.Core.App\RoomMatch.Core.App.csproj" />
+    <ProjectReference Include="..\RoomMatch.App\RoomMatch.App.csproj" />
     <ProjectReference Include="..\..\..\..\..\Providers\Infrastructure.HTTP.SupStaticData\Infrastructure.HTTP.SupStaticData.csproj" />
     <ProjectReference Include="..\..\..\..\..\Providers\Infrastructure.Redis.RoomMatchingRedis\Infrastructure.Redis.RoomMatchingRedis.csproj" />
     <ProjectReference Include="..\..\..\..\..\Providers\Infrastructure.Redis.SupRoomInfo.DirectPriceDiscovery\Infrastructure.Redis.SupRoomInfo.DirectPriceDiscovery.csproj" />

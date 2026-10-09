@@ -1,6 +1,7 @@
 using ApiGateway.Domain;
 using Infrastructure.Sql.Admin.Auditing;
 using Infrastructure.Sql.Admin.Identity;
+using Infrastructure.Sql.Admin.Notification;
 using Infrastructure.Sql.Admin.Scheduling;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.Identity.EntityFrameworkCore;
@@ -34,6 +35,10 @@ public sealed class AdminDbContext(
     public DbSet<OidcToken> OidcTokens => Set<OidcToken>();
     public DbSet<SecurityEventLog> SecurityEvents => Set<SecurityEventLog>();
     public DbSet<RequestAuditLog> RequestAuditLogs => Set<RequestAuditLog>();
+    public DbSet<NotificationTypeEntity> NotificationTypes => Set<NotificationTypeEntity>();
+    public DbSet<NotificationEntity> Notifications => Set<NotificationEntity>();
+    public DbSet<NotificationRecipientEntity> NotificationRecipients => Set<NotificationRecipientEntity>();
+    public DbSet<UserNotificationPreferenceEntity> UserNotificationPreferences => Set<UserNotificationPreferenceEntity>();
 
     protected override void OnModelCreating(ModelBuilder builder)
     {
@@ -41,6 +46,7 @@ public sealed class AdminDbContext(
 
         ConfigureIdentity(builder);
         ConfigureScheduling(builder);
+        ConfigureNotification(builder);
         ConfigureOidc(builder);
         builder.ConfigureGateway();
         builder.ConfigureAuditing();
@@ -308,6 +314,70 @@ public sealed class AdminDbContext(
             entity.Property(x => x.OccurredAtUtc).HasPrecision(3);
             entity.HasIndex(x => new { x.TaskId, x.OccurredAtUtc });
             entity.HasIndex(x => x.RunId);
+        });
+    }
+
+    private static void ConfigureNotification(ModelBuilder builder)
+    {
+        builder.Entity<NotificationTypeEntity>(entity =>
+        {
+            entity.ToTable("Notify_Types", "dbo");
+            entity.HasKey(x => x.Id);
+            entity.Property(x => x.TypeCode).HasMaxLength(50).IsUnicode(false).IsRequired();
+            entity.Property(x => x.DisplayName).HasMaxLength(100).IsRequired();
+            entity.Property(x => x.Description).HasMaxLength(500);
+            entity.Property(x => x.AllowedChannelsJson).HasMaxLength(500).IsRequired();
+            entity.Property(x => x.CreatedByActorId).HasMaxLength(100).IsRequired();
+            entity.Property(x => x.UpdatedByActorId).HasMaxLength(100).IsRequired();
+            entity.Property(x => x.CreatedAtUtc).HasPrecision(3);
+            entity.Property(x => x.UpdatedAtUtc).HasPrecision(3);
+            entity.Property(x => x.RowVersion).IsRowVersion();
+            entity.HasIndex(x => x.TypeCode).IsUnique().HasFilter("[IsDeleted] = 0");
+            entity.HasIndex(x => new { x.IsEnabled, x.IsDeleted });
+        });
+
+        builder.Entity<NotificationEntity>(entity =>
+        {
+            entity.ToTable("Notify_Notifications", "dbo");
+            entity.HasKey(x => x.Id);
+            entity.Property(x => x.Title).HasMaxLength(200).IsRequired();
+            entity.Property(x => x.Summary).HasMaxLength(500).IsRequired();
+            entity.Property(x => x.ContentJson).IsRequired();
+            entity.Property(x => x.LinkUrl).HasMaxLength(500);
+            entity.Property(x => x.Scope).HasMaxLength(20).IsUnicode(false).IsRequired();
+            entity.Property(x => x.TargetIdsJson).HasMaxLength(4000).IsRequired();
+            entity.Property(x => x.Source).HasMaxLength(20).IsUnicode(false).IsRequired();
+            entity.Property(x => x.SourceModule).HasMaxLength(100);
+            entity.Property(x => x.SourceEventKey).HasMaxLength(200);
+            entity.Property(x => x.CreatedByActorId).HasMaxLength(100).IsRequired();
+            entity.Property(x => x.CreatedByActorName).HasMaxLength(100).IsRequired();
+            entity.Property(x => x.CreatedAtUtc).HasPrecision(3);
+            entity.Property(x => x.ExpiresAtUtc).HasPrecision(3);
+            entity.HasOne(x => x.NotificationType).WithMany().HasForeignKey(x => x.NotificationTypeId).OnDelete(DeleteBehavior.Restrict);
+            entity.HasIndex(x => x.CreatedAtUtc);
+            entity.HasIndex(x => new { x.SourceModule, x.SourceEventKey });
+        });
+
+        builder.Entity<NotificationRecipientEntity>(entity =>
+        {
+            entity.ToTable("Notify_Recipients", "dbo");
+            entity.HasKey(x => x.Id);
+            entity.Property(x => x.DeliveredChannelsJson).HasMaxLength(200).IsRequired();
+            entity.Property(x => x.CreatedAtUtc).HasPrecision(3);
+            entity.Property(x => x.ReadAtUtc).HasPrecision(3);
+            entity.HasOne(x => x.Notification).WithMany().HasForeignKey(x => x.NotificationId).OnDelete(DeleteBehavior.Cascade);
+            entity.HasIndex(x => new { x.NotificationId, x.UserId }).IsUnique();
+            entity.HasIndex(x => new { x.UserId, x.IsRead, x.CreatedAtUtc });
+        });
+
+        builder.Entity<UserNotificationPreferenceEntity>(entity =>
+        {
+            entity.ToTable("Notify_UserPreferences", "dbo");
+            entity.HasKey(x => x.Id);
+            entity.Property(x => x.EnabledChannelsJson).HasMaxLength(200).IsRequired();
+            entity.Property(x => x.UpdatedAtUtc).HasPrecision(3);
+            entity.HasOne(x => x.NotificationType).WithMany().HasForeignKey(x => x.NotificationTypeId).OnDelete(DeleteBehavior.Restrict);
+            entity.HasIndex(x => new { x.UserId, x.NotificationTypeId }).IsUnique();
         });
     }
 }

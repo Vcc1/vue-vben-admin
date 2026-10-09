@@ -130,4 +130,35 @@ public sealed record RunRequest(string? Reason = null);
 public sealed record SetTaskEnabledRequest(bool IsEnabled, string RowVersion);
 public sealed record UpdateScheduledTaskRequest(ScheduledTaskInput Task, string RowVersion);
 
+public sealed record TaskLogFilterRule(string CategoryPrefix, string MinLevel);
+
+public sealed record TaskLogFilter(IReadOnlyList<TaskLogFilterRule> Rules);
+
+public static class TaskLogFilterParser
+{
+    public static TaskLogFilter? Parse(JsonElement configuration)
+    {
+        if (configuration.ValueKind != JsonValueKind.Object
+            || !configuration.TryGetProperty("logFilter", out var filter)
+            || filter.ValueKind != JsonValueKind.Object
+            || !filter.TryGetProperty("rules", out var rules)
+            || rules.ValueKind != JsonValueKind.Array)
+            return null;
+
+        var parsed = new List<TaskLogFilterRule>();
+        foreach (var rule in rules.EnumerateArray())
+        {
+            if (rule.ValueKind != JsonValueKind.Object) continue;
+            var prefix = rule.TryGetProperty("categoryPrefix", out var p) && p.ValueKind == JsonValueKind.String
+                ? p.GetString() : null;
+            var level = rule.TryGetProperty("minLevel", out var m) && m.ValueKind == JsonValueKind.String
+                ? m.GetString() : null;
+            if (string.IsNullOrEmpty(prefix) || string.IsNullOrEmpty(level)) continue;
+            parsed.Add(new TaskLogFilterRule(prefix, level));
+        }
+
+        return parsed.Count > 0 ? new TaskLogFilter(parsed) : null;
+    }
+}
+
 public sealed record QueuedRun(Guid RunId);

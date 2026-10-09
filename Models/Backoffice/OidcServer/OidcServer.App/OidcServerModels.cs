@@ -40,6 +40,7 @@ public sealed record UpdateOidcClientRequest(
     IReadOnlyList<string> PostLogoutRedirectUris,
     IReadOnlyList<string> GrantTypes,
     IReadOnlyList<string> Scopes,
+    string? ClientType = null,
     string? BackChannelLogoutUri = null,
     int RequiredSessionLevel = 1);
 

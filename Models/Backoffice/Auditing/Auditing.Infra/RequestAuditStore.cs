@@ -30,6 +30,8 @@ internal sealed class RequestAuditStore(
             QueryString = entry.QueryString,
             ControllerName = entry.ControllerName,
             ActionName = entry.ActionName,
+            FeatureName = entry.FeatureName,
+            OperationName = entry.OperationName,
             StatusCode = entry.StatusCode,
             DurationMs = entry.DurationMs,
             RequestBody = entry.RequestBody,

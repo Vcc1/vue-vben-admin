@@ -70,13 +70,59 @@ SET XACT_ABORT ON;
 -- 注意：上面新增 Description 列的 ALTER 必须与下面引用它的 DML 用 GO 分批，否则同批编译会报“列名无效”。
 DECLARE @perm TABLE (Code nvarchar(100), Name nvarchar(200), Description nvarchar(500));
 INSERT INTO @perm(Code, Name, Description) VALUES
+    -- paycardhub 权限
     (N'paycardhub:cards:read',             N'虚拟卡查看',       N'查看虚拟卡'),
     (N'paycardhub:transactions:read',      N'交易查看',         N'查看交易记录'),
     (N'paycardhub:transactions:raw-query', N'原始交易查询',     N'查询供应商原始交易'),
     (N'paycardhub:transactions:backfill',  N'交易回填',         N'回填历史交易'),
     (N'paycardhub:cardholders:read',       N'持卡人查看',       N'查看持卡人'),
     (N'paycardhub:provider-accounts:read', N'供应商账户查看',   N'查看供应商账户'),
-    (N'paycardhub:api-clients:read',       N'API客户端查看',    N'查看 API 客户端');
+    (N'paycardhub:api-clients:read',       N'API客户端查看',    N'查看 API 客户端'),
+    -- admin 用户管理
+    (N'admin:users:read',                  N'用户查看',         N'查看用户列表和详情'),
+    (N'admin:users:create',                N'用户创建',         N'创建新用户'),
+    (N'admin:users:update',                N'用户编辑',         N'编辑用户信息'),
+    (N'admin:users:delete',                N'用户删除',         N'删除用户'),
+    -- admin 角色管理
+    (N'admin:roles:read',                  N'角色查看',         N'查看角色列表'),
+    (N'admin:roles:create',                N'角色创建',         N'创建新角色'),
+    (N'admin:roles:update',                N'角色编辑',         N'编辑角色信息'),
+    (N'admin:roles:delete',                N'角色删除',         N'删除角色'),
+    (N'admin:roles:assign',                N'角色授权',         N'给角色分配权限'),
+    -- admin 权限管理
+    (N'admin:permissions:read',            N'权限查看',         N'查看权限列表'),
+    (N'admin:permissions:create',          N'权限创建',         N'创建新权限'),
+    (N'admin:permissions:update',          N'权限编辑',         N'编辑权限信息'),
+    (N'admin:permissions:delete',          N'权限删除',         N'删除权限'),
+    -- admin 会话管理
+    (N'admin:sessions:read',               N'会话查看',         N'查看在线会话'),
+    (N'admin:sessions:revoke',             N'会话吊销',         N'吊销用户会话'),
+    -- admin OIDC 客户端管理
+    (N'admin:oidc:clients:read',           N'OIDC客户端查看',   N'查看OIDC客户端列表'),
+    (N'admin:oidc:clients:create',         N'OIDC客户端创建',   N'创建OIDC客户端'),
+    (N'admin:oidc:clients:update',         N'OIDC客户端编辑',   N'编辑OIDC客户端'),
+    (N'admin:oidc:clients:delete',         N'OIDC客户端删除',   N'删除OIDC客户端'),
+    -- admin OIDC 作用域管理
+    (N'admin:oidc:scopes:read',            N'OIDC作用域查看',   N'查看OIDC作用域列表'),
+    (N'admin:oidc:scopes:create',          N'OIDC作用域创建',   N'创建OIDC作用域'),
+    (N'admin:oidc:scopes:update',          N'OIDC作用域编辑',   N'编辑OIDC作用域'),
+    (N'admin:oidc:scopes:delete',          N'OIDC作用域删除',   N'删除OIDC作用域'),
+    -- admin 定时任务管理
+    (N'admin:scheduling:read',             N'任务查看',         N'查看定时任务列表'),
+    (N'admin:scheduling:create',           N'任务创建',         N'创建定时任务'),
+    (N'admin:scheduling:update',           N'任务编辑',         N'编辑定时任务'),
+    (N'admin:scheduling:delete',           N'任务删除',         N'删除定时任务'),
+    (N'admin:scheduling:trigger',          N'任务触发',         N'手动触发定时任务'),
+    -- admin 审计日志
+    (N'admin:audit:read',                  N'审计日志查看',     N'查看安全和操作审计日志'),
+    -- admin 通知管理
+    (N'admin:notification:read',           N'通知查看',         N'查看通知列表'),
+    (N'admin:notification:create',         N'通知创建',         N'创建通知'),
+    (N'admin:notification:update',         N'通知编辑',         N'编辑通知'),
+    (N'admin:notification:delete',         N'通知删除',         N'删除通知'),
+    (N'admin:notification:publish',        N'通知发布',         N'发布通知'),
+    -- admin 指标查看
+    (N'admin:observability:read',          N'指标查看',         N'查看服务器指标和日志');
 
 INSERT INTO dbo.Identity_Permissions(Code, Name, Description)
 SELECT v.Code, v.Name, v.Description
@@ -94,13 +140,39 @@ WHERE p.Name <> v.Name OR ISNULL(p.Description, N'') <> ISNULL(v.Description, N'
 INSERT INTO dbo.Identity_RolePermissions(RoleName, PermissionCode)
 SELECT v.RoleName, v.PermissionCode
 FROM (VALUES
+    -- Admin 拥有所有权限
     (N'Admin',    N'*'),
+    -- Operator: paycardhub 基础权限 + admin 查看+部分操作权限
     (N'Operator', N'paycardhub:cards:read'),
     (N'Operator', N'paycardhub:transactions:read'),
     (N'Operator', N'paycardhub:cardholders:read'),
     (N'Operator', N'paycardhub:provider-accounts:read'),
+    (N'Operator', N'admin:users:read'),
+    (N'Operator', N'admin:roles:read'),
+    (N'Operator', N'admin:permissions:read'),
+    (N'Operator', N'admin:sessions:read'),
+    (N'Operator', N'admin:sessions:revoke'),
+    (N'Operator', N'admin:oidc:clients:read'),
+    (N'Operator', N'admin:oidc:scopes:read'),
+    (N'Operator', N'admin:scheduling:read'),
+    (N'Operator', N'admin:scheduling:trigger'),
+    (N'Operator', N'admin:audit:read'),
+    (N'Operator', N'admin:notification:read'),
+    (N'Operator', N'admin:notification:publish'),
+    (N'Operator', N'admin:observability:read'),
+    -- Viewer: paycardhub 只读 + admin 全部只读权限
     (N'Viewer',   N'paycardhub:cards:read'),
-    (N'Viewer',   N'paycardhub:transactions:read')
+    (N'Viewer',   N'paycardhub:transactions:read'),
+    (N'Viewer',   N'admin:users:read'),
+    (N'Viewer',   N'admin:roles:read'),
+    (N'Viewer',   N'admin:permissions:read'),
+    (N'Viewer',   N'admin:sessions:read'),
+    (N'Viewer',   N'admin:oidc:clients:read'),
+    (N'Viewer',   N'admin:oidc:scopes:read'),
+    (N'Viewer',   N'admin:scheduling:read'),
+    (N'Viewer',   N'admin:audit:read'),
+    (N'Viewer',   N'admin:notification:read'),
+    (N'Viewer',   N'admin:observability:read')
 ) AS v(RoleName, PermissionCode)
 WHERE NOT EXISTS (
     SELECT 1 FROM dbo.Identity_RolePermissions rp

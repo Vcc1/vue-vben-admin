@@ -81,7 +81,7 @@ public static class ServiceCollectionExtensions
                 options.Cookie.Name = "MengtuV.Admin.Auth";
                 options.Cookie.HttpOnly = true;
                 options.Cookie.SameSite = SameSiteMode.Lax;
-                options.ExpireTimeSpan = TimeSpan.FromHours(8);
+                options.ExpireTimeSpan = TimeSpan.FromDays(identityOptions.Session.LifetimeDays);
                 options.SlidingExpiration = true;
                 options.Events.OnRedirectToLogin = context =>
                 {
@@ -90,11 +90,12 @@ public static class ServiceCollectionExtensions
                     {
                         var oidcOptions = context.HttpContext.RequestServices
                             .GetRequiredService<IOptions<OidcServerOptions>>().Value;
-                        // 登录页与授权端点不同源（前端 5101 / Admin.Host 5100），
-                        // 必须给绝对地址，否则前端 window.location.href 会按相对路径跳回自己域名。
+                        // 使用配置的 Issuer 构建 returnUrl，避免反向代理导致的 scheme/host 不正确
                         var request = context.Request;
-                        var returnUrl = $"{request.Scheme}://{request.Host}{request.Path}{request.QueryString}";
-                        var loginUrl = $"{oidcOptions.AdminLoginUrl}?returnUrl={Uri.EscapeDataString(returnUrl)}";
+                        var issuer = oidcOptions.Issuer.TrimEnd('/');
+                        var returnUrl = $"{issuer}{request.Path}{request.QueryString}";
+                        // 添加 error 参数让前端知道是 OIDC 流程失败，避免无限循环
+                        var loginUrl = $"{oidcOptions.AdminLoginUrl}?error=oidc_auth_failed&returnUrl={Uri.EscapeDataString(returnUrl)}";
                         context.Response.Redirect(loginUrl);
                         return Task.CompletedTask;
                     }
@@ -178,6 +179,26 @@ public static class ServiceCollectionExtensions
         services.AddScoped<IAdminAccessTransferService, AdminAccessTransferService>();
         services.AddScoped<IAdminApiKeyService>(provider => provider.GetRequiredService<AdminIdentityService>());
 
+        // Redis 可选：配了连接串就由它承载会话热路径与二次验证状态（跨副本共享、重启不丢）；
+        // 没配则退回每请求直查数据库 + 进程内存，功能不受影响，只是多副本下验证码不能跨实例使用。
+        if (AdminIdentityRedisContext.IsConfigured(configuration))
+        {
+            services.AddSingleton<AdminIdentityRedisContext>();
+            services.AddSingleton<ISessionStateCache, RedisSessionStateCache>();
+            services.AddSingleton<IStepUpStateStore, RedisStepUpStateStore>();
+            services.AddSingleton<ICaptchaFailureCounter, RedisCaptchaFailureCounter>();
+            services.AddSingleton<ICaptchaTokenStore, RedisCaptchaTokenStore>();
+            services.AddSingleton<IImageCaptchaAnswerStore, RedisImageCaptchaAnswerStore>();
+        }
+        else
+        {
+            services.AddSingleton<ISessionStateCache, NullSessionStateCache>();
+            services.AddSingleton<IStepUpStateStore, MemoryStepUpStateStore>();
+            services.AddSingleton<ICaptchaFailureCounter, MemoryCaptchaFailureCounter>();
+            services.AddSingleton<ICaptchaTokenStore, MemoryCaptchaTokenStore>();
+            services.AddSingleton<IImageCaptchaAnswerStore, MemoryImageCaptchaAnswerStore>();
+        }
+
         services.AddScoped<SessionService>();
         services.AddScoped<ISessionService>(provider => provider.GetRequiredService<SessionService>());
         services.AddScoped<IDeviceTrustService>(provider => provider.GetRequiredService<SessionService>());
@@ -185,6 +206,10 @@ public static class ServiceCollectionExtensions
         services.AddScoped<IOtpDeliveryChannel, EmailOtpDeliveryChannel>();
         services.AddScoped<IBackChannelLogoutNotifier, BackChannelLogoutNotifier>();
         services.AddHttpClient(BackChannelLogoutNotifier.HttpClientName);
+
+        services.AddScoped<CaptchaService>();
+        services.AddScoped<ICaptchaService>(provider => provider.GetRequiredService<CaptchaService>());
+        services.AddSingleton<CaptchaImageGenerator>();
 
         services.AddHostedService<AdminIdentityBootstrapService>();
         return services;

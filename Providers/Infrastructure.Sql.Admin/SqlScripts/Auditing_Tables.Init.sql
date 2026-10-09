@@ -48,6 +48,8 @@ BEGIN
         QueryString nvarchar(1000) NULL,
         ControllerName nvarchar(100) NULL,
         ActionName nvarchar(100) NULL,
+        FeatureName nvarchar(100) NULL,
+        OperationName nvarchar(100) NULL,
         StatusCode int NOT NULL,
         DurationMs bigint NOT NULL,
         RequestBody nvarchar(max) NULL,
@@ -60,6 +62,8 @@ BEGIN
         ON dbo.Auditing_RequestLogs(OccurredAtUtc DESC);
     CREATE INDEX IX_Auditing_RequestLogs_Actor_Time
         ON dbo.Auditing_RequestLogs(ActorId, OccurredAtUtc DESC);
+    CREATE INDEX IX_Auditing_RequestLogs_Feature_Occurred
+        ON dbo.Auditing_RequestLogs(FeatureName, OccurredAtUtc);
 END;
 
 COMMIT TRANSACTION;

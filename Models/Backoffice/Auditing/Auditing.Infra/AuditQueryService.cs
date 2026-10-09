@@ -17,6 +17,8 @@ internal sealed class AuditQueryService(AdminDbContext db) : IAuditQueryService
             query = query.Where(l => l.Path.Contains(filter.Path));
         if (!string.IsNullOrWhiteSpace(filter.HttpMethod))
             query = query.Where(l => l.HttpMethod == filter.HttpMethod);
+        if (!string.IsNullOrWhiteSpace(filter.Feature))
+            query = query.Where(l => l.FeatureName != null && l.FeatureName.Contains(filter.Feature));
         if (filter.FromUtc.HasValue)
             query = query.Where(l => l.OccurredAtUtc >= filter.FromUtc.Value);
         if (filter.ToUtc.HasValue)
@@ -29,6 +31,7 @@ internal sealed class AuditQueryService(AdminDbContext db) : IAuditQueryService
                 l.Id, l.ActorType, l.ActorId, l.ActorName, l.AuthenticationType,
                 l.IpAddress, l.UserAgent, l.CorrelationId,
                 l.HttpMethod, l.Path, l.QueryString, l.ControllerName, l.ActionName,
+                l.FeatureName, l.OperationName,
                 l.StatusCode, l.DurationMs,
                 l.RequestBody, l.IsRequestBodyTruncated,
                 l.ResponseBody, l.IsResponseBodyTruncated,

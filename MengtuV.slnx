@@ -67,10 +67,18 @@
   <Folder Name="/Models/2.Room/RoomMatchings/" />
   <Folder Name="/Models/2.Room/RoomMatchings/Core/">
     <Project Path="Models/Room/RoomMatchings/Core/OTARoomInfoCompletion.Cli/OTARoomInfoCompletion.Cli.csproj" />
+    <Project Path="Models/Room/RoomMatchings/Core/RoomMatch.Api/RoomMatch.Api.csproj" />
+    <Project Path="Models/Room/RoomMatchings/Core/RoomMatch.App/RoomMatch.App.csproj" />
     <Project Path="Models/Room/RoomMatchings/Core/RoomMatch.Core.App/RoomMatch.Core.App.csproj" />
     <Project Path="Models/Room/RoomMatchings/Core/RoomMatch.Domain/RoomMatch.Domain.csproj" />
     <Project Path="Models/Room/RoomMatchings/Core/RoomMatch.Infra/RoomMatch.Infra.csproj" />
     <Project Path="Models/Room/RoomMatchings/Core/RoomMatching.Cli/RoomMatching.Cli.csproj" Id="ab3a3ec8-11a5-4429-a37f-bbc4d7bb04bc" />
+  </Folder>
+  <Folder Name="/Models/2.Room/RoomMatchings/Admin/">
+    <Project Path="Models/Room/RoomMatchings/Admin/RoomMatch.Admin.Api/RoomMatch.Admin.Api.csproj" />
+    <Project Path="Models/Room/RoomMatchings/Admin/RoomMatch.Admin.App/RoomMatch.Admin.App.csproj" />
+    <Project Path="Models/Room/RoomMatchings/Admin/RoomMatch.Admin.Contracts/RoomMatch.Admin.Contracts.csproj" />
+    <Project Path="Models/Room/RoomMatchings/Admin/RoomMatch.Admin.Infra/RoomMatch.Admin.Infra.csproj" />
   </Folder>
   <Folder Name="/Models/2.Room/RoomMatchings/OTARoomBuilder/">
     <Project Path="Models/Room/RoomMatchings/OTARoomBuilder/OTARoomBuilder.App/OTARoomBuilder.App.csproj" />
@@ -147,6 +155,12 @@
     <Project Path="Models/Backoffice/ApiGateway/ApiGateway.App/ApiGateway.App.csproj" />
     <Project Path="Models/Backoffice/ApiGateway/ApiGateway.Domain/ApiGateway.Domain.csproj" />
     <Project Path="Models/Backoffice/ApiGateway/ApiGateway.Infra/ApiGateway.Infra.csproj" />
+  </Folder>
+  <Folder Name="/Models/6.Data/Backoffice/Notification/">
+    <Project Path="Models/Backoffice/Notification/Notification.Api/Notification.Api.csproj" />
+    <Project Path="Models/Backoffice/Notification/Notification.App/Notification.App.csproj" />
+    <Project Path="Models/Backoffice/Notification/Notification.Contracts/Notification.Contracts.csproj" />
+    <Project Path="Models/Backoffice/Notification/Notification.Infra/Notification.Infra.csproj" />
   </Folder>
   <Folder Name="/7.Documentation/">
     <Project Path="Documentation/Documentation.Driver/Documentation.Driver.csproj" />

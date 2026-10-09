@@ -716,8 +716,10 @@ IF COL_LENGTH(N'dbo.Identity_RefreshTokens', N'UserAgent') IS NULL
 
 IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = N'IX_Identity_RefreshTokens_Sid'
                AND object_id = OBJECT_ID(N'dbo.Identity_RefreshTokens'))
-    CREATE INDEX IX_Identity_RefreshTokens_Sid
-        ON dbo.Identity_RefreshTokens(Sid) WHERE Sid IS NOT NULL;
+    -- 动态 SQL：Sid 列是上面刚加的，同一批次里直接写会在编译期报 "列名 'Sid' 无效"。
+    -- 这里不能用 GO 分批，本脚本的事务与变量需要跨整段保持有效。
+    EXEC(N'CREATE INDEX IX_Identity_RefreshTokens_Sid
+               ON dbo.Identity_RefreshTokens(Sid) WHERE Sid IS NOT NULL');
 
 IF OBJECT_ID(N'dbo.IdentityOIDC_Applications', N'U') IS NOT NULL
 BEGIN

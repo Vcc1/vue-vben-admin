@@ -1,4 +1,5 @@
 using System.Diagnostics;
+using System.Reflection;
 using System.Text.Json;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
@@ -29,6 +30,9 @@ public sealed class RequestAuditAttribute : Attribute, IAsyncActionFilter, IAsyn
 
     /// <summary>需脱敏的敏感字段 path。无内置默认词——未声明的字段会原样记录，处理密码/密钥的接口务必显式声明。</summary>
     public string[] SensitivePaths { get; set; } = [];
+
+    /// <summary>功能名称，展示在操作审计列表里（如"会话管理"）。通常声明在控制器上。</summary>
+    public string Feature { get; set; } = string.Empty;
 
     public Task OnActionExecutionAsync(ActionExecutingContext context, ActionExecutionDelegate next)
     {
@@ -90,6 +94,8 @@ public sealed class RequestAuditAttribute : Attribute, IAsyncActionFilter, IAsyn
             Truncate(http.Request.QueryString.Value, 1000),
             descriptor?.ControllerName,
             descriptor?.ActionName,
+            NullIfEmpty(Feature),
+            ResolveOperationName(descriptor),
             http.Response.StatusCode,
             duration.Milliseconds,
             state.RequestBody,
@@ -136,6 +142,21 @@ public sealed class RequestAuditAttribute : Attribute, IAsyncActionFilter, IAsyn
 
     private static string? Truncate(string? value, int maxLength) =>
         value is { Length: > 0 } && value.Length > maxLength ? value[..maxLength] : value;
+
+    private static string? NullIfEmpty(string value) => string.IsNullOrWhiteSpace(value) ? null : value.Trim();
+
+    /// <summary>action 上的声明优先于控制器上的，取最具体的那个。</summary>
+    private static string? ResolveOperationName(ControllerActionDescriptor? descriptor)
+    {
+        if (descriptor is null)
+        {
+            return null;
+        }
+
+        var attribute = descriptor.MethodInfo.GetCustomAttribute<AuditOperationAttribute>()
+            ?? descriptor.ControllerTypeInfo.GetCustomAttribute<AuditOperationAttribute>();
+        return attribute is null ? null : NullIfEmpty(attribute.Name);
+    }
 
     private sealed class AuditState
     {

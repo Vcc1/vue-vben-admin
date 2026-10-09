@@ -5,6 +5,7 @@ using Infrastructure.Sql.MengTuAPI;
 using Infrastructure.Sql.RoomMapping;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
+using RoomMatch.App;
 using RoomMatch.Core.RoomDictionary;
 
 namespace RoomMatch.Core;
@@ -28,6 +29,9 @@ public static class RoomMatchInfrastructureServiceCollectionExtensions
                 typeof(SupRoomInfoDBContext).Assembly,
                 typeof(RoomDictionarySingleton).Assembly
             ]);
+
+        services.AddScoped<IRoomMappingQuery, Infra.RoomMappingQueryRepository>();
+        services.AddScoped<IRoomMappingCache, Infra.RoomMappingCacheAdapter>();
 
         return services;
     }

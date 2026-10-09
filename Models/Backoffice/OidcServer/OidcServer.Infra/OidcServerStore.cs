@@ -1,15 +1,15 @@
 using System.Security.Cryptography;
-using System.Text;
 using System.Text.Json;
 using AdminIdentity.App;
 using Infrastructure.Sql.Admin;
 using Infrastructure.Sql.Admin.Oidc;
+using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
 using OidcServer.App;
 
 namespace OidcServer.Infra;
 
-internal sealed class OidcServerStore(AdminDbContext dbContext) : IOidcClientStore, IOidcScopeStore
+internal sealed class OidcServerStore(AdminDbContext dbContext, IPasswordHasher<object> passwordHasher) : IOidcClientStore, IOidcScopeStore
 {
     public async Task<IReadOnlyList<OidcClientItem>> ListAsync(CancellationToken cancellationToken)
     {
@@ -74,7 +74,7 @@ internal sealed class OidcServerStore(AdminDbContext dbContext) : IOidcClientSto
 
         if (!string.IsNullOrWhiteSpace(request.ClientSecret))
         {
-            app.ClientSecret = HashClientSecret(request.ClientSecret);
+            app.ClientSecret = passwordHasher.HashPassword(null!, request.ClientSecret);
         }
 
         dbContext.OidcApplications.Add(app);
@@ -91,6 +91,8 @@ internal sealed class OidcServerStore(AdminDbContext dbContext) : IOidcClientSto
         var permissions = BuildPermissions(request.GrantTypes, request.Scopes);
 
         app.DisplayName = request.DisplayName.Trim();
+        if (!string.IsNullOrWhiteSpace(request.ClientType))
+            app.ClientType = request.ClientType;
         app.ConsentType = request.ConsentType;
         app.RedirectUris = SerializeList(request.RedirectUris);
         app.PostLogoutRedirectUris = SerializeList(request.PostLogoutRedirectUris);
@@ -133,7 +135,7 @@ internal sealed class OidcServerStore(AdminDbContext dbContext) : IOidcClientSto
 
         var rawSecret = Convert.ToBase64String(RandomNumberGenerator.GetBytes(48))
             .Replace('+', '-').Replace('/', '_').TrimEnd('=');
-        app.ClientSecret = HashClientSecret(rawSecret);
+        app.ClientSecret = passwordHasher.HashPassword(null!, rawSecret);
         await dbContext.SaveChangesAsync(cancellationToken);
         return rawSecret;
     }
@@ -239,7 +241,9 @@ internal sealed class OidcServerStore(AdminDbContext dbContext) : IOidcClientSto
             {
                 case "authorization_code":
                     permissions.Add("ept:authorization");
+                    permissions.Add("ept:token");
                     permissions.Add("gt:authorization_code");
+                    permissions.Add("rst:code");
                     break;
                 case "client_credentials":
                     permissions.Add("ept:token");
@@ -248,6 +252,7 @@ internal sealed class OidcServerStore(AdminDbContext dbContext) : IOidcClientSto
                 case "password":
                     permissions.Add("ept:token");
                     permissions.Add("gt:password");
+                    permissions.Add("rst:token");
                     break;
                 case "refresh_token":
                     permissions.Add("ept:token");
@@ -283,9 +288,4 @@ internal sealed class OidcServerStore(AdminDbContext dbContext) : IOidcClientSto
             .ToList();
     }
 
-    private static string HashClientSecret(string secret)
-    {
-        var hash = SHA256.HashData(Encoding.UTF8.GetBytes(secret));
-        return Convert.ToHexString(hash).ToLowerInvariant();
-    }
 }

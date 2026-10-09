@@ -1,4 +1,5 @@
 using System.Collections.Concurrent;
+using System.IO.Compression;
 using System.Text;
 using System.Text.Json;
 using Infrastructure.Sql.Admin;
@@ -9,17 +10,17 @@ using TaskScheduling.App;
 
 namespace TaskScheduling.Infra;
 
-internal sealed record ScheduledRunLogContext(Guid RunId, string RelativePath);
+internal sealed record ScheduledRunLogContext(Guid RunId, string RelativePath, TaskLogFilter? LogFilter);
 
 internal sealed class ScheduledRunContextAccessor
 {
     private readonly AsyncLocal<ScheduledRunLogContext?> _current = new();
     public ScheduledRunLogContext? Current => _current.Value;
 
-    public IDisposable Push(Guid runId, string relativePath)
+    public IDisposable Push(Guid runId, string relativePath, TaskLogFilter? logFilter = null)
     {
         var previous = _current.Value;
-        _current.Value = new ScheduledRunLogContext(runId, relativePath);
+        _current.Value = new ScheduledRunLogContext(runId, relativePath, logFilter);
         return new PopWhenDisposed(() => _current.Value = previous);
     }
 
@@ -90,6 +91,18 @@ internal sealed class RunFileLogStore(IOptions<TaskSchedulingOptions> options)
         return (length, length >= _maxRunBytes);
     }
 
+    public async Task CompressAsync(string relativePath)
+    {
+        var path = Resolve(relativePath);
+        if (!File.Exists(path) || path.EndsWith(".gz", StringComparison.OrdinalIgnoreCase)) return;
+        var compressed = path + ".gz";
+        await using var source = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.Read);
+        await using var target = new FileStream(compressed, FileMode.Create, FileAccess.Write);
+        await using var gzip = new GZipStream(target, CompressionLevel.SmallestSize);
+        await source.CopyToAsync(gzip);
+        File.Delete(path);
+    }
+
     public string Root => _root;
 
     private static string PrepareRoot(string value)
@@ -110,7 +123,26 @@ internal sealed class ScheduledRunLoggerProvider(
     private sealed class Logger(string category, ScheduledRunContextAccessor accessor, RunFileLogStore store) : ILogger
     {
         public IDisposable? BeginScope<TState>(TState state) where TState : notnull => null;
-        public bool IsEnabled(LogLevel logLevel) => logLevel >= LogLevel.Information;
+
+        public bool IsEnabled(LogLevel logLevel)
+        {
+            if (logLevel < LogLevel.Information) return false;
+            var filter = accessor.Current?.LogFilter;
+            if (filter is null) return true;
+            var minLevel = ResolveMinLevel(category, filter);
+            return logLevel >= minLevel;
+        }
+
+        private static LogLevel ResolveMinLevel(string category, TaskLogFilter filter)
+        {
+            foreach (var rule in filter.Rules)
+            {
+                if (category.StartsWith(rule.CategoryPrefix, StringComparison.Ordinal)
+                    && Enum.TryParse<LogLevel>(rule.MinLevel, true, out var level))
+                    return level;
+            }
+            return LogLevel.Information;
+        }
 
         public void Log<TState>(LogLevel logLevel, EventId eventId, TState state, Exception? exception,
             Func<TState, Exception?, string> formatter)
@@ -144,8 +176,10 @@ internal sealed class ScheduledTaskLogReader(
         if (!File.Exists(path)) return new ScheduledTaskLogPage(runId, [], afterSequence, IsComplete(run.Status), false);
 
         var items = new List<ScheduledTaskLogEntry>();
-        await using var stream = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.ReadWrite | FileShare.Delete);
-        using var reader = new StreamReader(stream, Encoding.UTF8);
+        var isCompressed = path.EndsWith(".gz", StringComparison.OrdinalIgnoreCase);
+        await using var fileStream = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.Read);
+        await using var decompress = isCompressed ? new GZipStream(fileStream, CompressionMode.Decompress) : null;
+        using var reader = new StreamReader((Stream?)decompress ?? fileStream, Encoding.UTF8);
         while (items.Count < take && await reader.ReadLineAsync(cancellationToken) is { } line)
         {
             RunLogLine? entry;

@@ -1,5 +1,3 @@
-using System.Collections.Concurrent;
-using System.Security.Claims;
 using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
@@ -15,14 +13,16 @@ namespace AdminIdentity.Infra;
 
 /// <summary>
 /// 二次验证（step-up）挑战的签发与校验。
-/// stepUpToken 由 DataProtection 加密签名、自带过期时间，因此挑战本身无需落库；
-/// 验证码只以 SHA256 形式短暂驻留进程内存，明文既不进数据库也不进日志。
+/// stepUpToken 由 DataProtection 加密签名、自带过期时间；挑战与验证码状态放 <see cref="IStepUpStateStore"/>，
+/// 这样发码与验码落到不同副本、或进程重启，用户都不会被卡在流程中间。
+/// 验证码只以 SHA256 形式存放，明文既不进数据库也不进日志。
 /// </summary>
 internal sealed class StepUpService(
     IDataProtectionProvider dataProtection,
     ISessionService sessions,
     UserManager<AdminUser> userManager,
     IEnumerable<IOtpDeliveryChannel> deliveryChannels,
+    IStepUpStateStore stateStore,
     IOptions<AdminIdentityOptions> options,
     ISecurityEventLogger securityEvents,
     TimeProvider timeProvider,
@@ -32,7 +32,6 @@ internal sealed class StepUpService(
     private const string ProtectionPurpose = "MengtuV.Admin.StepUp.v1";
     private const string SessionKeyPrefix = "s:";
 
-    private static readonly ConcurrentDictionary<string, ChallengeState> Store = new(StringComparer.Ordinal);
     private static readonly JsonSerializerOptions JsonOptions = new(JsonSerializerDefaults.Web);
 
     private readonly Dictionary<string, IOtpDeliveryChannel> channels =
@@ -40,14 +39,14 @@ internal sealed class StepUpService(
 
     private IDataProtector Protector => dataProtection.CreateProtector(ProtectionPurpose);
 
-    public async Task<StepUpChallenge> CreateLoginChallengeAsync(
+    public async Task<StepUpChallenge?> TryCreateLoginChallengeAsync(
         Guid userId, string? deviceId, string? deviceInfoJson, string reason, CancellationToken cancellationToken)
     {
         var now = timeProvider.GetUtcNow().UtcDateTime;
         var expires = now.AddMinutes(Math.Max(1, options.Value.StepUp.ChallengeMinutes));
         var jti = Guid.CreateVersion7().ToString("N");
 
-        var state = new ChallengeState
+        var state = new StepUpChallengeState
         {
             UserId = userId,
             DeviceId = deviceId,
@@ -73,11 +72,10 @@ internal sealed class StepUpService(
         {
             await AuditAsync("StepupUnavailable", "Medium", userId,
                 new { Reason = reason, Detail = "没有可用的强认证通道" }, cancellationToken);
-            throw new StepUpException(StepUpException.NeedBindEmail, "该账号未绑定可用的验证方式，请联系管理员绑定邮箱后重试。");
+            return null;
         }
 
-        Store[jti] = state;
-        Purge(now);
+        await stateStore.SetAsync(jti, state, expires - now, cancellationToken);
 
         return new StepUpChallenge(
             Protect(new StepUpTokenPayload(jti, userId, deviceId, deviceInfoJson, now, expires)),
@@ -90,7 +88,7 @@ internal sealed class StepUpService(
     public async Task SendCodeAsync(string stepUpToken, string channel, CancellationToken cancellationToken)
     {
         var payload = Unprotect(stepUpToken);
-        var state = Require(payload);
+        var state = await RequireAsync(payload.Jti, payload.ExpiresAtUtc, cancellationToken);
         var now = timeProvider.GetUtcNow().UtcDateTime;
 
         if (!state.Destinations.TryGetValue(channel, out var destination))
@@ -129,6 +127,7 @@ internal sealed class StepUpService(
         state.LastSentAtUtc = now;
         state.SentCount++;
 
+        await stateStore.SetAsync(payload.Jti, state, state.ExpiresAtUtc - now, cancellationToken);
         await delivery.SendAsync(destination, code, cancellationToken);
         await AuditAsync("StepupSent", "Low", state.UserId, new { state.DeviceId, Channel = channel, Target = Mask(destination) }, cancellationToken);
     }
@@ -137,9 +136,9 @@ internal sealed class StepUpService(
         string stepUpToken, string channel, string credential, CancellationToken cancellationToken)
     {
         var payload = Unprotect(stepUpToken);
-        var state = Require(payload);
+        var state = await RequireAsync(payload.Jti, payload.ExpiresAtUtc, cancellationToken);
 
-        var matched = MatchCode(state, channel, credential, timeProvider.GetUtcNow().UtcDateTime);
+        var matched = await MatchCodeAsync(payload.Jti, state, channel, credential, cancellationToken);
         if (!matched)
         {
             await AuditAsync("StepupFailed", "Medium", state.UserId,
@@ -147,13 +146,13 @@ internal sealed class StepUpService(
 
             if (state.Attempts >= Math.Max(1, options.Value.StepUp.MaxVerifyAttempts))
             {
-                Store.TryRemove(payload.Jti, out _);
+                await stateStore.RemoveAsync(payload.Jti, cancellationToken);
                 throw new StepUpException(StepUpException.TooManyAttempts, "验证失败次数过多，请重新登录。");
             }
             throw new StepUpException(StepUpException.InvalidCode, "验证码不正确或已过期。");
         }
 
-        Store.TryRemove(payload.Jti, out _);
+        await stateStore.RemoveAsync(payload.Jti, cancellationToken);
         await AuditAsync("StepupSuccess", "Low", state.UserId, new { state.DeviceId, Channel = channel, Purpose = "login" }, cancellationToken);
         logger.LogInformation("用户 {UserId} 通过 {Channel} 完成登录二次验证。", state.UserId, channel);
 
@@ -172,7 +171,7 @@ internal sealed class StepUpService(
         }
 
         var expires = now.AddMinutes(Math.Max(1, options.Value.StepUp.ChallengeMinutes));
-        var state = new ChallengeState
+        var state = new StepUpChallengeState
         {
             UserId = session.UserId,
             DeviceId = session.DeviceId,
@@ -190,8 +189,8 @@ internal sealed class StepUpService(
         state.LastSentAtUtc = now;
         state.SentCount = 1;
 
-        Store[SessionKeyPrefix + sid] = state;
-        Purge(now);
+        var key = SessionKeyPrefix + sid;
+        await stateStore.SetAsync(key, state, expires - now, cancellationToken);
 
         await delivery.SendAsync(destination, code, cancellationToken);
         await AuditAsync("StepupSent", "Low", session.UserId, new { Sid = sid, Channel = channel, Target = Mask(destination) }, cancellationToken);
@@ -220,25 +219,27 @@ internal sealed class StepUpService(
             return new StepUpVerification(session.UserId, session.DeviceId, StepUpChannels.Password, null);
         }
 
+        var key = SessionKeyPrefix + sid;
         var now = timeProvider.GetUtcNow().UtcDateTime;
-        if (!Store.TryGetValue(SessionKeyPrefix + sid, out var state) || state.ExpiresAtUtc <= now)
+        var state = await stateStore.GetAsync(key, cancellationToken);
+        if (state is null || state.ExpiresAtUtc <= now)
         {
-            Store.TryRemove(SessionKeyPrefix + sid, out _);
+            await stateStore.RemoveAsync(key, cancellationToken);
             throw new StepUpException(StepUpException.Expired, "验证码已过期，请重新获取。");
         }
 
-        if (!MatchCode(state, channel, request.Credential ?? string.Empty, now))
+        if (!await MatchCodeAsync(key, state, channel, request.Credential ?? string.Empty, cancellationToken))
         {
             await AuditAsync("StepupFailed", "Medium", session.UserId, new { Sid = sid, Channel = channel, state.Attempts }, cancellationToken);
             if (state.Attempts >= Math.Max(1, options.Value.StepUp.MaxVerifyAttempts))
             {
-                Store.TryRemove(SessionKeyPrefix + sid, out _);
+                await stateStore.RemoveAsync(key, cancellationToken);
                 throw new StepUpException(StepUpException.TooManyAttempts, "验证失败次数过多，请重新获取验证码。");
             }
             throw new StepUpException(StepUpException.InvalidCode, "验证码不正确或已过期。");
         }
 
-        Store.TryRemove(SessionKeyPrefix + sid, out _);
+        await stateStore.RemoveAsync(key, cancellationToken);
         await sessions.GrantStrongAuthAsync(sid, channel, cancellationToken);
         await AuditAsync("StepupSuccess", "Low", session.UserId, new { Sid = sid, Channel = channel, Level = SessionLevels.L3 }, cancellationToken);
 
@@ -257,37 +258,38 @@ internal sealed class StepUpService(
         return state;
     }
 
-    private bool MatchCode(ChallengeState state, string channel, string credential, DateTime now)
+    /// <summary>校验并落库尝试次数：失败计数必须持久化，否则多副本下能无限次试码。</summary>
+    private async Task<bool> MatchCodeAsync(
+        string key, StepUpChallengeState state, string channel, string credential, CancellationToken cancellationToken)
     {
+        var now = timeProvider.GetUtcNow().UtcDateTime;
         state.Attempts++;
 
-        if (state.CodeHash is null
-            || !string.Equals(state.CodeChannel, channel, StringComparison.OrdinalIgnoreCase)
-            || state.CodeExpiresAtUtc <= now)
-        {
-            return false;
-        }
-
-        var matched = CryptographicOperations.FixedTimeEquals(
-            Encoding.UTF8.GetBytes(state.CodeHash),
-            Encoding.UTF8.GetBytes(Hash(credential?.Trim() ?? string.Empty)));
+        var matched = state.CodeHash is not null
+            && string.Equals(state.CodeChannel, channel, StringComparison.OrdinalIgnoreCase)
+            && state.CodeExpiresAtUtc > now
+            && CryptographicOperations.FixedTimeEquals(
+                Encoding.UTF8.GetBytes(state.CodeHash),
+                Encoding.UTF8.GetBytes(Hash(credential?.Trim() ?? string.Empty)));
 
         if (matched)
         {
             // 验证码一次性：命中即失效，避免同一码被重复使用。
             state.CodeHash = null;
         }
+
+        await stateStore.SetAsync(key, state, state.ExpiresAtUtc - now, cancellationToken);
         return matched;
     }
 
-    private ChallengeState Require(StepUpTokenPayload payload)
+    private async Task<StepUpChallengeState> RequireAsync(string jti, DateTime expiresAtUtc, CancellationToken cancellationToken)
     {
         var now = timeProvider.GetUtcNow().UtcDateTime;
-        if (payload.ExpiresAtUtc <= now)
+        if (expiresAtUtc <= now)
         {
             throw new StepUpException(StepUpException.Expired, "验证已超时，请重新登录。");
         }
-        if (!Store.TryGetValue(payload.Jti, out var state))
+        if (await stateStore.GetAsync(jti, cancellationToken) is not { } state)
         {
             throw new StepUpException(StepUpException.Consumed, "该验证已使用或已失效，请重新登录。");
         }
@@ -325,17 +327,6 @@ internal sealed class StepUpService(
     private Task AuditAsync(string eventType, string severity, Guid userId, object detail, CancellationToken cancellationToken) =>
         securityEvents.LogAsync(new SecurityEvent(eventType, severity, null, detail, ActorId: userId.ToString()), cancellationToken);
 
-    private void Purge(DateTime now)
-    {
-        foreach (var entry in Store)
-        {
-            if (entry.Value.ExpiresAtUtc <= now)
-            {
-                Store.TryRemove(entry.Key, out _);
-            }
-        }
-    }
-
     private static string Hash(string value) =>
         Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(value))).ToLowerInvariant();
 
@@ -351,24 +342,4 @@ internal sealed class StepUpService(
 
     private sealed record StepUpTokenPayload(
         string Jti, Guid UserId, string? DeviceId, string? DeviceInfoJson, DateTime IssuedAtUtc, DateTime ExpiresAtUtc);
-
-    private sealed class ChallengeState
-    {
-        public Guid UserId { get; init; }
-        public string? DeviceId { get; init; }
-        public string? DeviceInfoJson { get; init; }
-        public string? Sid { get; init; }
-        public DateTime? PasswordVerifiedAtUtc { get; init; }
-        public DateTime ExpiresAtUtc { get; init; }
-        public string Reason { get; init; } = string.Empty;
-        public Dictionary<string, string> Destinations { get; } = new(StringComparer.OrdinalIgnoreCase);
-
-        public string? CodeHash { get; set; }
-        public string? CodeChannel { get; set; }
-        public DateTime CodeExpiresAtUtc { get; set; }
-        public int Attempts { get; set; }
-        public DateTime? LastSentAtUtc { get; set; }
-        public int SentCount { get; set; }
-        public DateTime SentWindowStartUtc { get; set; }
-    }
 }

@@ -125,6 +125,9 @@ public static class TrustedDeviceStatus
 {
     public const string Trusted = "trusted";
     public const string Revoked = "revoked";
+
+    /// <summary>该设备有过登录会话，但从未写入受信表（例如降级密码登录）。</summary>
+    public const string NeverTrusted = "never_trusted";
 }
 
 /// <summary>deviceInfo 开放 JSON 的展示摘要，只解析已知字段，未知字段保留在原始 JSON 中。</summary>
@@ -221,12 +224,43 @@ public sealed record DeviceItem(
     bool IsTrusted,
     int ActiveSessionCount,
     IReadOnlyList<SessionItem> Sessions,
-    bool IsCurrentDevice);
+    bool IsCurrentDevice,
+    string Status,
+    DateTime? RevokedAtUtc,
+    string? RevokedReason);
+
+/// <summary>
+/// 按设备反查：这台设备被哪些用户登录过。跨用户，且包含已被踢出受信表的记录——
+/// 排查共享设备或凭证泄露时要看得到完整历史，踢除动作不能把痕迹一起抹掉。
+/// </summary>
+public sealed record DeviceUsageItem(
+    string DeviceId,
+    Guid UserId,
+    string UserName,
+    string DisplayName,
+    string Status,
+    DateTime FirstSeenUtc,
+    DateTime LastSeenUtc,
+    DateTime? RevokedAtUtc,
+    string? RevokedReason,
+    int SessionCount,
+    DateTime? LastSessionAtUtc,
+    bool IsOnline);
+
+/// <summary><see cref="DeviceTrust.Reason"/> 的取值。会写进安全事件，改动等于改审计语义。</summary>
+public static class DeviceTrustReasons
+{
+    public const string DeviceIdMissing = "device_id_missing";
+    public const string DeviceNew = "device_new";
+    public const string DeviceRevoked = "device_revoked";
+    public const string DeviceTrustExpired = "device_trust_expired";
+    public const string DeviceTrusted = "device_trusted";
+}
 
 /// <summary>登录时的设备信任判定结果。</summary>
 public sealed record DeviceTrust(bool IsKnown, bool IsTrusted, string Reason)
 {
-    public static DeviceTrust Unknown { get; } = new(false, false, "device_unknown");
+    public static DeviceTrust Unknown { get; } = new(false, false, DeviceTrustReasons.DeviceIdMissing);
 }
 
 /// <summary>428 响应体：告知前端需要哪种额外验证。</summary>
@@ -282,7 +316,6 @@ public sealed class StepUpException(string code, string message) : Exception(mes
     public const string Expired = "expired";
     public const string Consumed = "consumed";
     public const string ChannelUnavailable = "channel_unavailable";
-    public const string NeedBindEmail = "need_bind_email";
     public const string RateLimited = "rate_limited";
     public const string InvalidCode = "invalid_code";
     public const string InvalidPassword = "invalid_password";
@@ -313,6 +346,14 @@ public interface ISessionService
     Task RevokeAsync(string sid, string reason, CancellationToken cancellationToken);
     Task<int> RevokeAllForUserAsync(Guid userId, string reason, CancellationToken cancellationToken);
     Task<int> RevokeAllForDeviceAsync(Guid userId, string deviceId, string reason, CancellationToken cancellationToken);
+
+    /// <summary>
+    /// 吊销指定用户在指定设备上的所有活跃会话，但排除 <paramref name="excludeSid"/>（通常是刚创建的新会话）。
+    /// 不触碰 TrustedDevices 表——仅清会话，不影响设备受信状态。
+    /// 用于"同设备只保留最后一次登录"策略。
+    /// </summary>
+    Task<int> RevokePriorSessionsForDeviceAsync(Guid userId, string? deviceId, string excludeSid, string reason, CancellationToken cancellationToken);
+
     Task<IReadOnlyList<SessionItem>> ListAsync(Guid? userId, bool includeRevoked, string? currentSid, CancellationToken cancellationToken);
     Task RecordClientAsync(string sid, string clientId, CancellationToken cancellationToken);
     Task GrantPasswordVerifiedAsync(string sid, CancellationToken cancellationToken);
@@ -322,15 +363,30 @@ public interface ISessionService
 public interface IDeviceTrustService
 {
     Task<DeviceTrust> EvaluateAsync(Guid userId, string? deviceId, CancellationToken cancellationToken);
-    Task MarkTrustedAsync(Guid userId, string deviceId, string? deviceInfoJson, string? sid, CancellationToken cancellationToken);
+
+    /// <summary>
+    /// 记录一次设备登录：始终刷新"最近使用"与设备信息，但只有 <paramref name="grantTrust"/> 为真时才授予/恢复受信状态。
+    /// 拆成两件事是因为它们条件不同——已受信设备用密码登录也要刷新最近使用时间，
+    /// 而被管理员踢除过的设备即使这次登录达标也不能自动复活。
+    /// 设备在受信表里还没有行且本次不授予信任时，不新建行（未受信设备由会话记录合成展示）。
+    /// </summary>
+    Task RecordDeviceLoginAsync(
+        Guid userId, string deviceId, string? deviceInfoJson, string? sid, bool grantTrust, CancellationToken cancellationToken);
     Task<IReadOnlyList<DeviceItem>> ListDevicesAsync(Guid userId, string? currentDeviceId, string? currentSid, CancellationToken cancellationToken);
     Task RevokeDeviceAsync(Guid userId, string deviceId, string reason, CancellationToken cancellationToken);
+
+    /// <summary>反查某台设备被哪些用户登录过（跨用户，含已踢除与从未受信的设备）。</summary>
+    Task<IReadOnlyList<DeviceUsageItem>> ListDeviceUsageAsync(string deviceId, CancellationToken cancellationToken);
 }
 
 public interface IStepUpService
 {
-    /// <summary>密码校验通过但设备不受信时创建挑战。</summary>
-    Task<StepUpChallenge> CreateLoginChallengeAsync(
+    /// <summary>
+    /// 密码校验通过但设备不受信时创建挑战。
+    /// 返回 null 表示该账号没有任何可用的强认证通道（未绑定邮箱/手机），
+    /// 调用方需要自行决定降级策略，不要把用户直接锁在门外。
+    /// </summary>
+    Task<StepUpChallenge?> TryCreateLoginChallengeAsync(
         Guid userId, string? deviceId, string? deviceInfoJson, string reason, CancellationToken cancellationToken);
 
     Task SendCodeAsync(string stepUpToken, string channel, CancellationToken cancellationToken);

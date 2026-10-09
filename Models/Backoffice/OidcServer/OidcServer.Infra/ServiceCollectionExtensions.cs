@@ -10,6 +10,7 @@ using Microsoft.AspNetCore;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.DependencyInjection.Extensions;
 using Microsoft.IdentityModel.Tokens;
 using OidcServer.App;
 using OpenIddict.Abstractions;
@@ -179,7 +180,7 @@ public static class ServiceCollectionExtensions
                             identity.AddClaim(new Claim(SessionClaims.Acr, SessionLevels.ToAcr(SessionLevels.L2)));
                             identity.AddClaim(new Claim(SessionClaims.Amr, "pwd"));
                             identity.AddClaim(new Claim(
-                                SessionClaims.AuthTime, now.ToUnixTimeSeconds().ToString()));
+                                SessionClaims.AuthTime, now.ToUnixTimeSeconds().ToString(), ClaimValueTypes.Integer64));
 
                             // 显式声明目标，确保 sid 进入 access token，吊销时 refresh 闸门才判得到。
                             foreach (var claim in identity.Claims)
@@ -267,6 +268,7 @@ public static class ServiceCollectionExtensions
                 options.UseAspNetCore();
             });
 
+        services.TryAddScoped<IPasswordHasher<object>, PasswordHasher<object>>();
         services.AddScoped<OidcServerStore>();
         services.AddScoped<IOidcClientStore>(sp => sp.GetRequiredService<OidcServerStore>());
         services.AddScoped<IOidcScopeStore>(sp => sp.GetRequiredService<OidcServerStore>());

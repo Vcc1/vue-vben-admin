@@ -1,3 +1,4 @@
+using AdminIdentity.App;
 using Microsoft.AspNetCore.Http;
 
 namespace AdminIdentity.Infra;
@@ -10,12 +11,10 @@ namespace AdminIdentity.Infra;
 /// </summary>
 internal static class DeviceCookie
 {
-    public const string Name = "MengtuV.Admin.DeviceId";
-
     private static readonly TimeSpan Lifetime = TimeSpan.FromDays(3650);
 
     public static string? Read(HttpContext? context) =>
-        context?.Request.Cookies.TryGetValue(Name, out var value) == true && !string.IsNullOrWhiteSpace(value)
+        context?.Request.Cookies.TryGetValue(DeviceCookieName.Value, out var value) == true && !string.IsNullOrWhiteSpace(value)
             ? value.Trim()
             : null;
 
@@ -33,7 +32,7 @@ internal static class DeviceCookie
         }
 
         var deviceId = "dev_" + Convert.ToHexString(System.Security.Cryptography.RandomNumberGenerator.GetBytes(12)).ToLowerInvariant();
-        context.Response.Cookies.Append(Name, deviceId, new CookieOptions
+        context.Response.Cookies.Append(DeviceCookieName.Value, deviceId, new CookieOptions
         {
             HttpOnly = false,
             SameSite = SameSiteMode.Lax,

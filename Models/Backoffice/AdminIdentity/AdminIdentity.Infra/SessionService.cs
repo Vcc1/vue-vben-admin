@@ -12,8 +12,8 @@ using Microsoft.Extensions.Options;
 namespace AdminIdentity.Infra;
 
 /// <summary>
-/// 会话（sid）与设备信任的权威实现。数据落 <c>Identity_Sessions</c> / <c>Identity_TrustedDevices</c>，
-/// 进程内仅保留活跃时间的写节流缓存；多副本部署时需要把节流缓存换成共享存储。
+/// 会话（sid）与设备信任的权威实现。数据落 <c>Identity_Sessions</c> / <c>Identity_TrustedDevices</c>；
+/// 每请求的等级判定优先走 <see cref="ISessionStateCache"/>（Redis），未命中或缓存故障时直查数据库。
 /// </summary>
 internal sealed class SessionService(
     AdminDbContext dbContext,
@@ -21,6 +21,7 @@ internal sealed class SessionService(
     ICurrentActorAccessor actorAccessor,
     ISecurityEventLogger securityEvents,
     IBackChannelLogoutNotifier logoutNotifier,
+    ISessionStateCache stateCache,
     TimeProvider timeProvider,
     ILogger<SessionService> logger)
     : ISessionService, IDeviceTrustService
@@ -57,6 +58,11 @@ internal sealed class SessionService(
 
         dbContext.Sessions.Add(session);
         await dbContext.SaveChangesAsync(cancellationToken);
+
+        // 预热缓存：登录后第一个请求就会走等级判定，省掉一次数据库往返。
+        var state = ToState(session);
+        await stateCache.SetAsync(state, CacheTtl(state, now), cancellationToken);
+
         return session.Sid;
     }
 
@@ -141,44 +147,55 @@ internal sealed class SessionService(
             return null;
         }
 
-        var session = await dbContext.Sessions.FirstOrDefaultAsync(x => x.Sid == normalized, cancellationToken);
-        if (session is null)
+        // 吊销标记先查：它只写不删，即使事实缓存被并发请求回填过也拦得住，秒踢因此不依赖缓存新鲜度。
+        if (await stateCache.IsRevokedAsync(normalized, cancellationToken))
+        {
+            return null;
+        }
+
+        // 热路径：命中缓存就完全不碰数据库；未命中（含 Redis 故障）退回权威表。
+        var cached = await stateCache.TryGetAsync(normalized, cancellationToken);
+        var state = cached ?? await GetStateAsync(normalized, cancellationToken);
+        if (state is null)
         {
             return null;
         }
 
         var now = timeProvider.GetUtcNow().UtcDateTime;
-        if (session.RevokedAtUtc is not null || session.ExpiresAtUtc <= now)
+        if (state.RevokedAtUtc is not null || state.ExpiresAtUtc <= now)
         {
             return null;
         }
 
-        var gap = now - session.LastActivityAtUtc;
+        var gap = now - state.LastActivityAtUtc;
         var passwordGap = PasswordGapWindow;
+        var throttle = TimeSpan.FromSeconds(Math.Max(1, options.Value.Session.ActivityWriteThrottleSeconds));
 
         // 掉窗粘性：间隔超过 L2 窗口就清除密码核验事实，且不会因为后续活动自动恢复。
-        var droppedLevel = false;
-        if (gap > passwordGap && session.PasswordVerifiedAtUtc is not null)
-        {
-            session.PasswordVerifiedAtUtc = null;
-            droppedLevel = true;
-        }
-
-        var throttle = TimeSpan.FromSeconds(Math.Max(1, options.Value.Session.ActivityWriteThrottleSeconds));
+        var droppedLevel = gap > passwordGap && state.PasswordVerifiedAtUtc is not null;
         if (droppedLevel || gap > throttle)
         {
-            session.LastActivityAtUtc = now;
-            await dbContext.SaveChangesAsync(cancellationToken);
+            state = state with
+            {
+                PasswordVerifiedAtUtc = droppedLevel ? null : state.PasswordVerifiedAtUtc,
+                LastActivityAtUtc = now,
+            };
+            await WriteActivityAsync(normalized, state, cancellationToken);
 
             if (droppedLevel)
             {
                 logger.LogInformation("会话 {Sid} 活跃间隔 {GapMinutes} 分钟超过 L2 窗口，已降级为 L1。",
-                    session.Sid, (int)gap.TotalMinutes);
+                    normalized, (int)gap.TotalMinutes);
             }
         }
 
+        if (cached is null || droppedLevel || gap > throttle)
+        {
+            await stateCache.SetAsync(state, CacheTtl(state, now), cancellationToken);
+        }
+
         return SessionLevels.Evaluate(
-            now, session.PasswordVerifiedAtUtc, session.StrongAuthAtUtc, session.LastActivityAtUtc,
+            now, state.PasswordVerifiedAtUtc, state.StrongAuthAtUtc, state.LastActivityAtUtc,
             passwordGap, StrongAuthWindow);
     }
 
@@ -210,6 +227,10 @@ internal sealed class SessionService(
 
         await RevokeRefreshTokensAsync(normalized, now, cancellationToken);
         await dbContext.SaveChangesAsync(cancellationToken);
+
+        // 先写吊销标记、再清事实缓存：顺序反了会留一个窗口，让并发的读请求把"未吊销"的事实回填进来。
+        await stateCache.MarkRevokedAsync(normalized, session.ExpiresAtUtc - now, cancellationToken);
+        await stateCache.RemoveAsync(normalized, cancellationToken);
 
         await logoutNotifier.NotifyAsync(normalized, session.UserId, ParseClients(session.ClientIdsJson), cancellationToken);
         await securityEvents.LogAsync(new SecurityEvent(
@@ -262,6 +283,32 @@ internal sealed class SessionService(
             device.RevokedAtUtc = timeProvider.GetUtcNow().UtcDateTime;
             device.RevokedByActorId = actorAccessor.Current.ActorId;
             await dbContext.SaveChangesAsync(cancellationToken);
+        }
+
+        return sids.Count;
+    }
+
+    public async Task<int> RevokePriorSessionsForDeviceAsync(
+        Guid userId, string? deviceId, string excludeSid, string reason, CancellationToken cancellationToken)
+    {
+        var normalizedDevice = Normalize(deviceId);
+        if (normalizedDevice is null)
+        {
+            return 0;
+        }
+
+        var normalizedExclude = Normalize(excludeSid);
+        var sids = await dbContext.Sessions.AsNoTracking()
+            .Where(x => x.UserId == userId
+                        && x.DeviceId == normalizedDevice
+                        && x.RevokedAtUtc == null
+                        && x.Sid != normalizedExclude)
+            .Select(x => x.Sid)
+            .ToListAsync(cancellationToken);
+
+        foreach (var sid in sids)
+        {
+            await RevokeAsync(sid, reason, cancellationToken);
         }
 
         return sids.Count;
@@ -370,6 +417,7 @@ internal sealed class SessionService(
         session.PasswordVerifiedAtUtc = now;
         session.LastActivityAtUtc = now;
         await dbContext.SaveChangesAsync(cancellationToken);
+        await stateCache.RemoveAsync(normalized, cancellationToken);
     }
 
     public async Task GrantStrongAuthAsync(string sid, string method, CancellationToken cancellationToken)
@@ -391,6 +439,7 @@ internal sealed class SessionService(
         session.StrongAuthMethod = Truncate(method, 20);
         session.LastActivityAtUtc = now;
         await dbContext.SaveChangesAsync(cancellationToken);
+        await stateCache.RemoveAsync(normalized, cancellationToken);
     }
 
     // --- IDeviceTrustService ---
@@ -400,7 +449,7 @@ internal sealed class SessionService(
         var normalized = Normalize(deviceId);
         if (normalized is null)
         {
-            return new DeviceTrust(false, false, "device_id_missing");
+            return new DeviceTrust(false, false, DeviceTrustReasons.DeviceIdMissing);
         }
 
         var device = await dbContext.TrustedDevices.AsNoTracking()
@@ -408,24 +457,24 @@ internal sealed class SessionService(
 
         if (device is null)
         {
-            return new DeviceTrust(false, false, "device_new");
+            return new DeviceTrust(false, false, DeviceTrustReasons.DeviceNew);
         }
         if (device.Status == TrustedDeviceStatus.Revoked)
         {
-            return new DeviceTrust(true, false, "device_revoked");
+            return new DeviceTrust(true, false, DeviceTrustReasons.DeviceRevoked);
         }
 
         var decay = TimeSpan.FromDays(Math.Max(1, options.Value.Session.TrustedDeviceDecayDays));
         if (timeProvider.GetUtcNow().UtcDateTime - device.LastSeenUtc > decay)
         {
-            return new DeviceTrust(true, false, "device_trust_expired");
+            return new DeviceTrust(true, false, DeviceTrustReasons.DeviceTrustExpired);
         }
 
-        return new DeviceTrust(true, true, "device_trusted");
+        return new DeviceTrust(true, true, DeviceTrustReasons.DeviceTrusted);
     }
 
-    public async Task MarkTrustedAsync(
-        Guid userId, string deviceId, string? deviceInfoJson, string? sid, CancellationToken cancellationToken)
+    public async Task RecordDeviceLoginAsync(
+        Guid userId, string deviceId, string? deviceInfoJson, string? sid, bool grantTrust, CancellationToken cancellationToken)
     {
         var normalized = Normalize(deviceId);
         if (normalized is null)
@@ -439,6 +488,13 @@ internal sealed class SessionService(
 
         if (device is null)
         {
+            // 不授予信任就不建行：这张表只登记"被信任过"的设备，
+            // 从未受信的设备在列表里由活跃会话合成，免得一次性设备把它撑大。
+            if (!grantTrust)
+            {
+                return;
+            }
+
             dbContext.TrustedDevices.Add(new AdminTrustedDevice
             {
                 Id = Guid.CreateVersion7(),
@@ -453,13 +509,18 @@ internal sealed class SessionService(
         }
         else
         {
+            // 最近使用时间与设备信息每次登录都刷新，与是否授予信任无关。
             device.DeviceInfoJson = deviceInfoJson ?? device.DeviceInfoJson;
             device.LastSeenUtc = now;
             device.LastLoginSid = Normalize(sid) ?? device.LastLoginSid;
-            device.Status = TrustedDeviceStatus.Trusted;
-            device.RevokedReason = null;
-            device.RevokedAtUtc = null;
-            device.RevokedByActorId = null;
+
+            if (grantTrust)
+            {
+                device.Status = TrustedDeviceStatus.Trusted;
+                device.RevokedReason = null;
+                device.RevokedAtUtc = null;
+                device.RevokedByActorId = null;
+            }
         }
 
         await dbContext.SaveChangesAsync(cancellationToken);
@@ -495,7 +556,7 @@ internal sealed class SessionService(
             .GroupBy(x => x.DeviceId!)
             .ToDictionary(g => g.Key, g => g.ToList(), StringComparer.Ordinal);
 
-        var result = new List<DeviceItem>(devices.Count);
+        var result = new List<DeviceItem>(devices.Count + sessionsByDevice.Count);
         foreach (var device in devices)
         {
             var deviceSessions = sessionsByDevice.GetValueOrDefault(device.DeviceId, []);
@@ -510,9 +571,113 @@ internal sealed class SessionService(
                 deviceSessions
                     .Select(x => ToSessionItem(x, userId, userName, displayName, normalizedCurrentSid, now, onlineWindow))
                     .ToList(),
-                device.DeviceId == normalizedCurrentDevice));
+                device.DeviceId == normalizedCurrentDevice,
+                device.Status,
+                device.RevokedAtUtc,
+                device.RevokedReason));
         }
-        return result;
+
+        // 没走完强认证的设备不会进受信表，但用户此刻可能正从它登录；
+        // 只遍历受信表会让"我的设备"对这类账号永远是空的，所以按活跃会话补齐。
+        foreach (var (deviceId, deviceSessions) in sessionsByDevice)
+        {
+            if (devices.Any(x => x.DeviceId == deviceId))
+            {
+                continue;
+            }
+            result.Add(new DeviceItem(
+                deviceId,
+                DeviceInfoSummary.Parse(deviceSessions[0].DeviceInfoJson),
+                deviceSessions.Min(x => x.CreatedAtUtc),
+                deviceSessions.Max(x => x.LastActivityAtUtc),
+                deviceSessions.Any(x => now - x.LastActivityAtUtc <= onlineWindow),
+                IsTrusted: false,
+                deviceSessions.Count,
+                deviceSessions
+                    .Select(x => ToSessionItem(x, userId, userName, displayName, normalizedCurrentSid, now, onlineWindow))
+                    .ToList(),
+                deviceId == normalizedCurrentDevice,
+                TrustedDeviceStatus.NeverTrusted,
+                RevokedAtUtc: null,
+                RevokedReason: null));
+        }
+
+        return result.OrderByDescending(x => x.LastSeenUtc).ToList();
+    }
+
+    public async Task<IReadOnlyList<DeviceUsageItem>> ListDeviceUsageAsync(string deviceId, CancellationToken cancellationToken)
+    {
+        var normalized = Normalize(deviceId);
+        if (normalized is null)
+        {
+            return [];
+        }
+
+        var now = timeProvider.GetUtcNow().UtcDateTime;
+        var onlineWindow = OnlineWindow;
+
+        var trustRows = await dbContext.TrustedDevices.AsNoTracking()
+            .Where(x => x.DeviceId == normalized)
+            .ToListAsync(cancellationToken);
+
+        // 会话表才是主证据：降级密码登录的设备根本不会进受信表。
+        var sessionGroups = await dbContext.Sessions.AsNoTracking()
+            .Where(x => x.DeviceId == normalized)
+            .GroupBy(x => x.UserId)
+            .Select(g => new
+            {
+                UserId = g.Key,
+                SessionCount = g.Count(),
+                LastSessionAtUtc = g.Max(x => x.LastActivityAtUtc),
+                FirstSessionAtUtc = g.Min(x => x.CreatedAtUtc),
+            })
+            .ToListAsync(cancellationToken);
+
+        var userIds = trustRows.Select(x => x.UserId)
+            .Union(sessionGroups.Select(x => x.UserId))
+            .Distinct()
+            .ToList();
+        if (userIds.Count == 0)
+        {
+            return [];
+        }
+
+        var users = await dbContext.Users.AsNoTracking()
+            .Where(x => userIds.Contains(x.Id))
+            .Select(x => new { x.Id, x.UserName, x.DisplayName })
+            .ToListAsync(cancellationToken);
+        var userById = users.ToDictionary(x => x.Id);
+        var trustByUser = trustRows.ToDictionary(x => x.UserId);
+        var sessionByUser = sessionGroups.ToDictionary(x => x.UserId);
+
+        var result = new List<DeviceUsageItem>(userIds.Count);
+        foreach (var userId in userIds)
+        {
+            var trust = trustByUser.GetValueOrDefault(userId);
+            var aggregate = sessionByUser.GetValueOrDefault(userId);
+            userById.TryGetValue(userId, out var user);
+
+            var firstSeen = trust?.FirstSeenUtc ?? aggregate?.FirstSessionAtUtc ?? now;
+            var lastSeen = trust is not null && aggregate is not null
+                ? (trust.LastSeenUtc > aggregate.LastSessionAtUtc ? trust.LastSeenUtc : aggregate.LastSessionAtUtc)
+                : trust?.LastSeenUtc ?? aggregate?.LastSessionAtUtc ?? now;
+
+            result.Add(new DeviceUsageItem(
+                normalized,
+                userId,
+                user?.UserName ?? "(已删除用户)",
+                user?.DisplayName ?? string.Empty,
+                trust?.Status ?? TrustedDeviceStatus.NeverTrusted,
+                firstSeen,
+                lastSeen,
+                trust?.RevokedAtUtc,
+                trust?.RevokedReason,
+                aggregate?.SessionCount ?? 0,
+                aggregate?.LastSessionAtUtc,
+                now - lastSeen <= onlineWindow));
+        }
+
+        return result.OrderByDescending(x => x.LastSeenUtc).ToList();
     }
 
     public async Task RevokeDeviceAsync(Guid userId, string deviceId, string reason, CancellationToken cancellationToken)
@@ -530,6 +695,31 @@ internal sealed class SessionService(
 
     private TimeSpan StrongAuthWindow =>
         TimeSpan.FromMinutes(Math.Max(1, options.Value.Session.StrongAuthWindowMinutes));
+
+    /// <summary>
+    /// 事实缓存的存活时间：取在线窗口与会话剩余寿命的较小值。
+    /// 吊销不靠 TTL 兜底（有独立的只写标记），所以这里只需要保证陈旧事实不会长期驻留。
+    /// </summary>
+    private TimeSpan CacheTtl(SessionState state, DateTime now)
+    {
+        var remaining = state.ExpiresAtUtc - now;
+        var cap = OnlineWindow;
+        return remaining < cap ? remaining : cap;
+    }
+
+    private static SessionState ToState(AdminSession session) => new(
+        session.Sid, session.UserId, session.DeviceId, session.LoginMethod,
+        session.PasswordVerifiedAtUtc, session.StrongAuthAtUtc, session.StrongAuthMethod,
+        session.LastActivityAtUtc, session.ExpiresAtUtc, session.RevokedAtUtc);
+
+    /// <summary>只回写活跃时间与可能已清除的密码核验事实，不加载实体、不碰其它列。</summary>
+    private Task WriteActivityAsync(string sid, SessionState state, CancellationToken cancellationToken) =>
+        dbContext.Sessions
+            .Where(x => x.Sid == sid)
+            .ExecuteUpdateAsync(s => s
+                .SetProperty(x => x.LastActivityAtUtc, state.LastActivityAtUtc)
+                .SetProperty(x => x.PasswordVerifiedAtUtc, state.PasswordVerifiedAtUtc),
+                cancellationToken);
 
     private int EvaluateLevel(SessionState state) => EvaluateLevel(state, timeProvider.GetUtcNow().UtcDateTime);
 

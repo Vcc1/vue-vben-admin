@@ -55,7 +55,7 @@ internal sealed class ScheduledTaskQuartzJob(
         run.QuartzFireInstanceId = context.FireInstanceId;
         await dbContext.SaveChangesAsync(cancellationToken);
 
-        using var logScope = runContext.Push(run.Id, run.LogRelativePath);
+        using var logScope = runContext.Push(run.Id, run.LogRelativePath, TaskLogFilterParser.Parse(task.Configuration));
         logger.LogInformation(
             "Scheduled task started. RunId={RunId} TaskId={TaskId} TaskName={TaskName} TaskType={TaskType} TriggerType={TriggerType} Actor={Actor}",
             run.Id, task.Id, task.Name, task.TaskType, run.TriggerType,
@@ -105,6 +105,19 @@ internal sealed class ScheduledTaskQuartzJob(
         run.LogLengthBytes = file.Length;
         run.IsLogTruncated = file.Truncated;
         await dbContext.SaveChangesAsync(CancellationToken.None);
+
+        try
+        {
+            await logStore.CompressAsync(run.LogRelativePath);
+            run.LogRelativePath += ".gz";
+            var compressed = logStore.GetFileState(run.LogRelativePath);
+            run.LogLengthBytes = compressed.Length;
+            await dbContext.SaveChangesAsync(CancellationToken.None);
+        }
+        catch
+        {
+            // Compression is best-effort; the uncompressed log remains readable.
+        }
 
         var shouldRetry = run.AttemptNumber <= task.RetryCount
             && (finalStatus == ScheduledTaskStatuses.Failed

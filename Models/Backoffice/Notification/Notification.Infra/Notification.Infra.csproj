@@ -1,0 +1,22 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <FrameworkReference Include="Microsoft.AspNetCore.App" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\Notification.App\Notification.App.csproj" />
+    <ProjectReference Include="..\Notification.Contracts\Notification.Contracts.csproj" />
+    <ProjectReference Include="..\..\AdminIdentity\AdminIdentity.App\AdminIdentity.App.csproj" />
+    <ProjectReference Include="..\..\..\..\Providers\Infrastructure.Sql.Admin\Infrastructure.Sql.Admin.csproj" />
+    <ProjectReference Include="..\..\..\..\BaseFrameworks\VBaseFramework.Core\VBaseFramework.Core.csproj" />
+    <ProjectReference Include="..\..\..\..\Providers\Infrastructure.HTTP.WorkWechatAlert\Infrastructure.HTTP.WorkWechatAlert.csproj" />
+  </ItemGroup>
+
+</Project>

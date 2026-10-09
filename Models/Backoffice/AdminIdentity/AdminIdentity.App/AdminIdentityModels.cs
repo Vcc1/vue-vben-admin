@@ -16,6 +16,7 @@ public static class AdminPolicies
     public const string ManageTasks = "Admin.ManageTasks";
     public const string ManageUsers = "Admin.ManageUsers";
     public const string ManageSessions = "Admin.ManageSessions";
+    public const string ManageNotifications = "Admin.ManageNotifications";
 }
 
 public sealed record CurrentActor(
@@ -55,7 +56,9 @@ public sealed record LoginRequest(
     string Mode = "cookie",
     bool RememberMe = false,
     string? DeviceId = null,
-    System.Text.Json.JsonElement? DeviceInfo = null);
+    System.Text.Json.JsonElement? DeviceInfo = null,
+    string? CaptchaId = null,
+    string? CaptchaAnswer = null);
 
 public sealed record TokenPair(
     string AccessToken,
@@ -65,6 +68,17 @@ public sealed record TokenPair(
 
 /// <summary>登录结果。StepUp 非空表示密码已通过但设备不受信，需二次验证（HTTP 428）。sid 不下发给前端。</summary>
 public sealed record LoginResult(AdminUserItem User, TokenPair? Tokens, StepUpChallenge? StepUp = null);
+
+public sealed record LoginOutcome(LoginResult? Result, LoginFailureReason Reason = LoginFailureReason.None);
+
+public enum LoginFailureReason
+{
+    None,
+    CaptchaRequired,
+    CaptchaWrong,
+    InvalidCredentials,
+    AccountLockedOut
+}
 public sealed record RefreshTokenRequest(string RefreshToken);
 public sealed record CreateAdminUserRequest(
     string UserName,
@@ -95,10 +109,11 @@ public interface ICurrentActorAccessor
 
 public interface IAdminAuthenticationService
 {
-    Task<LoginResult?> LoginAsync(LoginRequest request, string? ipAddress, CancellationToken cancellationToken);
+    Task<LoginOutcome> LoginAsync(LoginRequest request, string? ipAddress, CancellationToken cancellationToken);
     Task<TokenPair?> RefreshAsync(string refreshToken, string? ipAddress, CancellationToken cancellationToken);
     Task LogoutAsync(CancellationToken cancellationToken);
     Task<AdminUserItem?> GetCurrentUserAsync(CancellationToken cancellationToken);
+    Task<IReadOnlyList<string>> GetCurrentUserPermissionsAsync(CancellationToken cancellationToken);
 
     /// <summary>登出并吊销指定凭证（sid 为空时仅签出 cookie，兼容旧调用）。</summary>
     Task LogoutAsync(string? sid, CancellationToken cancellationToken);

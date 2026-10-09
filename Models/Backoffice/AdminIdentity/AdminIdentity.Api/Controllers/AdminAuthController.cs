@@ -15,6 +15,7 @@ public sealed class AdminAuthController(
     IAdminUserService userService,
     ISessionService sessionService,
     IStepUpService stepUpService,
+    ICaptchaService captchaService,
     ICurrentActorAccessor actorAccessor,
     IAntiforgery antiforgery) : ControllerBase
 {
@@ -22,18 +23,70 @@ public sealed class AdminAuthController(
     [HttpPost("login")]
     public async Task<ActionResult<LoginResult>> LoginAsync(LoginRequest request, CancellationToken cancellationToken)
     {
-        var result = await authenticationService.LoginAsync(
+        var outcome = await authenticationService.LoginAsync(
             request, HttpContext.Connection.RemoteIpAddress?.ToString(), cancellationToken);
-        if (result is null)
+
+        if (outcome.Result is null)
         {
-            return Unauthorized();
+            return outcome.Reason switch
+            {
+                LoginFailureReason.CaptchaRequired => StatusCode(StatusCodes.Status428PreconditionRequired,
+                    new { message = "需要验证码" }),
+                LoginFailureReason.CaptchaWrong => BadRequest(
+                    new { message = "验证码错误" }),
+                LoginFailureReason.AccountLockedOut => StatusCode(StatusCodes.Status423Locked,
+                    new { message = "账户已锁定，请 15 分钟后重试" }),
+                _ => Unauthorized()
+            };
         }
         // 密码已通过但设备不受信：428 告知前端必须先完成二次验证，响应体携带可用通道。
-        if (result.StepUp is not null)
+        if (outcome.Result.StepUp is not null)
         {
-            return StatusCode(StatusCodes.Status428PreconditionRequired, result);
+            return StatusCode(StatusCodes.Status428PreconditionRequired, outcome.Result);
         }
-        return Ok(result);
+        return Ok(outcome.Result);
+    }
+
+    [AllowAnonymous]
+    [HttpGet("captcha-required")]
+    public async Task<ActionResult<CaptchaRequiredResponse>> CaptchaRequiredAsync(
+        [FromQuery] string? userName, CancellationToken cancellationToken)
+    {
+        var deviceId = Request.Cookies.TryGetValue(DeviceCookieName.Value, out var v)
+            ? v : null;
+        var required = await captchaService.IsCaptchaRequiredByUserAsync(userName, deviceId, cancellationToken);
+        return Ok(new CaptchaRequiredResponse(required));
+    }
+
+    [AllowAnonymous]
+    [HttpGet("captcha/image")]
+    public async Task<ActionResult<ImageCaptchaResponse>> CaptchaImageAsync(CancellationToken cancellationToken)
+    {
+        var response = await captchaService.GenerateImageCaptchaAsync(cancellationToken);
+        return Ok(response);
+    }
+
+    [AllowAnonymous]
+    [HttpPost("captcha/verify")]
+    public async Task<ActionResult<CaptchaVerifyResponse>> CaptchaVerifyAsync(
+        ImageCaptchaVerifyRequest request, CancellationToken cancellationToken)
+    {
+        var valid = await captchaService.ValidateImageCaptchaAsync(request.CaptchaId, request.Answer, cancellationToken);
+        if (!valid)
+        {
+            return BadRequest(new { message = "验证码错误" });
+        }
+
+        var existingDeviceId = Request.Cookies.TryGetValue(DeviceCookieName.Value, out var v) ? v : null;
+        var token = await captchaService.IssueTokenWithDeviceAsync(
+            existingDeviceId, request.UserName,
+            deviceId => Response.Cookies.Append(DeviceCookieName.Value, deviceId, new CookieOptions
+            {
+                HttpOnly = false, SameSite = SameSiteMode.Lax,
+                Expires = DateTimeOffset.UtcNow.AddDays(3650), Path = "/"
+            }),
+            cancellationToken);
+        return Ok(new CaptchaVerifyResponse(token, 300));
     }
 
     [AllowAnonymous]
@@ -111,6 +164,14 @@ public sealed class AdminAuthController(
     {
         var user = await authenticationService.GetCurrentUserAsync(cancellationToken);
         return user is null ? Unauthorized() : Ok(user);
+    }
+
+    [Authorize]
+    [HttpGet("permissions")]
+    public async Task<ActionResult<IReadOnlyList<string>>> PermissionsAsync(CancellationToken cancellationToken)
+    {
+        var permissions = await authenticationService.GetCurrentUserPermissionsAsync(cancellationToken);
+        return Ok(permissions);
     }
 
     [Authorize]

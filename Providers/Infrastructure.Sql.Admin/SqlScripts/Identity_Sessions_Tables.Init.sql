@@ -76,10 +76,16 @@ IF COL_LENGTH(N'dbo.Identity_RefreshTokens', N'DeviceId') IS NULL
 IF COL_LENGTH(N'dbo.Identity_RefreshTokens', N'UserAgent') IS NULL
     ALTER TABLE dbo.Identity_RefreshTokens ADD UserAgent nvarchar(512) NULL;
 
+GO
+
+-- 单独一个批次：上面刚加的 Sid 列必须等批次重新编译后才能被索引定义引用，
+-- 否则整批会在编译期报 "列名 'Sid' 无效"。
 IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = N'IX_Identity_RefreshTokens_Sid'
                AND object_id = OBJECT_ID(N'dbo.Identity_RefreshTokens'))
     CREATE INDEX IX_Identity_RefreshTokens_Sid
         ON dbo.Identity_RefreshTokens(Sid) WHERE Sid IS NOT NULL;
+
+GO
 
 IF OBJECT_ID(N'dbo.IdentityOIDC_Applications', N'U') IS NOT NULL
 BEGIN

@@ -279,4 +279,92 @@ BEGIN
     CREATE INDEX IX_Scheduler_TaskAudits_RunId ON dbo.Scheduler_TaskAudits(RunId);
 END;
 
+IF OBJECT_ID(N'dbo.Notify_Types', N'U') IS NULL
+BEGIN
+    CREATE TABLE dbo.Notify_Types
+    (
+        Id uniqueidentifier NOT NULL CONSTRAINT PK_Notify_Types PRIMARY KEY,
+        TypeCode varchar(50) NOT NULL,
+        DisplayName nvarchar(100) NOT NULL,
+        Description nvarchar(500) NULL,
+        AllowedChannelsJson nvarchar(500) NOT NULL,
+        IsEnabled bit NOT NULL CONSTRAINT DF_Notify_Types_IsEnabled DEFAULT (1),
+        IsSystem bit NOT NULL CONSTRAINT DF_Notify_Types_IsSystem DEFAULT (0),
+        CreatedByActorId nvarchar(100) NOT NULL,
+        CreatedAtUtc datetime2(3) NOT NULL,
+        UpdatedByActorId nvarchar(100) NOT NULL,
+        UpdatedAtUtc datetime2(3) NOT NULL,
+        IsDeleted bit NOT NULL CONSTRAINT DF_Notify_Types_IsDeleted DEFAULT (0),
+        RowVersion rowversion NOT NULL
+    );
+    CREATE UNIQUE INDEX UX_Notify_Types_TypeCode
+        ON dbo.Notify_Types(TypeCode) WHERE IsDeleted = 0;
+    CREATE INDEX IX_Notify_Types_Enabled
+        ON dbo.Notify_Types(IsEnabled, IsDeleted);
+END;
+
+IF OBJECT_ID(N'dbo.Notify_Notifications', N'U') IS NULL
+BEGIN
+    CREATE TABLE dbo.Notify_Notifications
+    (
+        Id uniqueidentifier NOT NULL CONSTRAINT PK_Notify_Notifications PRIMARY KEY,
+        NotificationTypeId uniqueidentifier NOT NULL,
+        Title nvarchar(200) NOT NULL,
+        Summary nvarchar(500) NOT NULL,
+        ContentJson nvarchar(max) NOT NULL,
+        LinkUrl nvarchar(500) NULL,
+        Scope varchar(20) NOT NULL,
+        TargetIdsJson nvarchar(4000) NOT NULL,
+        Source varchar(20) NOT NULL,
+        SourceModule nvarchar(100) NULL,
+        SourceEventKey nvarchar(200) NULL,
+        CreatedByActorId nvarchar(100) NOT NULL,
+        CreatedByActorName nvarchar(100) NOT NULL,
+        CreatedAtUtc datetime2(3) NOT NULL,
+        ExpiresAtUtc datetime2(3) NULL,
+        CONSTRAINT FK_Notify_Notifications_Types FOREIGN KEY(NotificationTypeId)
+            REFERENCES dbo.Notify_Types(Id)
+    );
+    CREATE INDEX IX_Notify_Notifications_CreatedAt
+        ON dbo.Notify_Notifications(CreatedAtUtc DESC);
+    CREATE INDEX IX_Notify_Notifications_Source
+        ON dbo.Notify_Notifications(SourceModule, SourceEventKey);
+END;
+
+IF OBJECT_ID(N'dbo.Notify_Recipients', N'U') IS NULL
+BEGIN
+    CREATE TABLE dbo.Notify_Recipients
+    (
+        Id bigint IDENTITY(1,1) NOT NULL CONSTRAINT PK_Notify_Recipients PRIMARY KEY,
+        NotificationId uniqueidentifier NOT NULL,
+        UserId uniqueidentifier NOT NULL,
+        IsRead bit NOT NULL CONSTRAINT DF_Notify_Recipients_IsRead DEFAULT (0),
+        ReadAtUtc datetime2(3) NULL,
+        DeliveredChannelsJson nvarchar(200) NOT NULL,
+        CreatedAtUtc datetime2(3) NOT NULL,
+        CONSTRAINT FK_Notify_Recipients_Notifications FOREIGN KEY(NotificationId)
+            REFERENCES dbo.Notify_Notifications(Id) ON DELETE CASCADE
+    );
+    CREATE UNIQUE INDEX UX_Notify_Recipients_Notification_User
+        ON dbo.Notify_Recipients(NotificationId, UserId);
+    CREATE INDEX IX_Notify_Recipients_User_Read_Time
+        ON dbo.Notify_Recipients(UserId, IsRead, CreatedAtUtc DESC);
+END;
+
+IF OBJECT_ID(N'dbo.Notify_UserPreferences', N'U') IS NULL
+BEGIN
+    CREATE TABLE dbo.Notify_UserPreferences
+    (
+        Id uniqueidentifier NOT NULL CONSTRAINT PK_Notify_UserPreferences PRIMARY KEY,
+        UserId uniqueidentifier NOT NULL,
+        NotificationTypeId uniqueidentifier NOT NULL,
+        EnabledChannelsJson nvarchar(200) NOT NULL,
+        UpdatedAtUtc datetime2(3) NOT NULL,
+        CONSTRAINT FK_Notify_UserPreferences_Types FOREIGN KEY(NotificationTypeId)
+            REFERENCES dbo.Notify_Types(Id)
+    );
+    CREATE UNIQUE INDEX UX_Notify_UserPreferences_User_Type
+        ON dbo.Notify_UserPreferences(UserId, NotificationTypeId);
+END;
+
 COMMIT TRANSACTION;

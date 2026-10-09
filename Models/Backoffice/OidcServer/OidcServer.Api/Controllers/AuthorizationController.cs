@@ -93,9 +93,13 @@ public sealed class AuthorizationController(
         // pva/saa/device_id 是自有内部事实，不外泄到第三方 token。
         identity.AddClaim(new Claim(SessionClaims.Sid, sid));
         identity.AddClaim(new Claim(SessionClaims.Acr, SessionLevels.ToAcr(level)));
-        identity.AddClaim(new Claim(
-            SessionClaims.AuthTime,
-            principal.FindFirstValue(SessionClaims.AuthTime) ?? DateTimeOffset.UtcNow.ToUnixTimeSeconds().ToString()));
+
+        var authTimeValue = principal.FindFirstValue(SessionClaims.AuthTime);
+        if (!long.TryParse(authTimeValue, out _))
+        {
+            authTimeValue = DateTimeOffset.UtcNow.ToUnixTimeSeconds().ToString();
+        }
+        identity.AddClaim(new Claim(SessionClaims.AuthTime, authTimeValue, ClaimValueTypes.Integer64));
 
         // Enrich claims from database for claims not present in the cookie.
         if (!string.IsNullOrEmpty(userId) && Guid.TryParse(userId, out var userGuid))

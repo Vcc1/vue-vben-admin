@@ -29,27 +29,38 @@ using MengTu.Connectmate.Client;
 using MengTu.Connectmate.Client.Tool;
 using Microsoft.AspNetCore.Antiforgery;
 using Microsoft.AspNetCore.Identity;
+using RoomMatch.Api;
+using RoomMatch.App;
+using RoomMatch.Core;
+using RoomMatch.Admin.Api;
+using RoomMatch.Admin.App;
+using RoomMatch.Admin.Infra;
 using System.Text.Encodings.Web;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 using TaskScheduling.Api;
 using TaskScheduling.App;
 using TaskScheduling.Infra;
+using Notification.Api;
+using Notification.App;
+using Notification.Infra;
 using AgentPlatformOpenApi = AgentPlatform.Api.OpenApiMetadata;
 using BackofficeOpenApi = Backoffice.Api.OpenApiMetadata;
 using HotelMatchingOpenApi = HotelMatchingPipeline.Api.OpenApiMetadata;
 using GatewayOpenApi = ApiGateway.Api.OpenApiMetadata;
+using RoomMatchOpenApi = RoomMatch.Api.OpenApiMetadata;
+using RoomMatchAdminOpenApi = RoomMatch.Admin.Api.OpenApiMetadata;
 using AuditingOpenApi = Auditing.Api.OpenApiMetadata;
 using AdminOpenApi = AdminIdentity.Api.OpenApiMetadata;
+
+using NLog.Extensions.Logging;
 
 var builder = WebApplication.CreateBuilder(args);
 
 // Add services to the container.
 
-builder.Logging.AddFilter("MengTu.Connectmate.Client", LogLevel.Warning);
-builder.Logging.AddFilter(
-    "System.Net.Http.HttpClient.IConnectmateConfigurationPullClient",
-    LogLevel.Warning);
+builder.Logging.ClearProviders();
+builder.Logging.AddNLog("Configs/nlog.config");
 
 builder.Services.AddHttpClient();
 builder.Services.AddConnectmateDatabaseSerializer<ConnectmateFallbackSerializer>();
@@ -74,9 +85,15 @@ builder.Services.AddBackofficeApplication();
 builder.Services.AddBackofficeInfrastructure();
 builder.Services.AddApiGatewayApplication();
 builder.Services.AddApiGatewayInfrastructure();
-builder.Services.AddBusiness([typeof(RoomMappingDbContext).Assembly]);
+builder.Services.AddRoomMatchInfrastructure(builder.Configuration);
+builder.Services.AddRoomMatchApplication();
+builder.Services.AddRoomMatchAdminInfrastructure();
+builder.Services.AddRoomMatchAdminApplication();
 builder.Services.AddTaskSchedulingApplication();
 builder.Services.AddTaskSchedulingInfrastructure(builder.Configuration);
+builder.Services.AddNotificationApplication();
+builder.Services.AddNotificationInfrastructure();
+builder.Services.AddNotificationSignalR();
 builder.Services.AddAntiforgery(options => options.HeaderName = "X-CSRF-TOKEN");
 builder.Services.AddProblemDetails();
 
@@ -112,16 +129,21 @@ builder.Services
     .AddOidcServerApi()
     .AddTaskSchedulingApi()
     .AddHotelMatchingApi()
+    .AddRoomMatchApi()
+    .AddRoomMatchAdminApi()
     .AddAgentPlatformApi()
     .AddBackofficeApi()
     .AddApiGatewayApi()
-    .AddAuditingApi();
+    .AddAuditingApi()
+    .AddNotificationApi();
 
 var openApiDocuments = new[]
 {
     new { AdminOpenApi.DocumentName, AdminOpenApi.DisplayName },
     new { AgentPlatformOpenApi.DocumentName, AgentPlatformOpenApi.DisplayName },
     new { HotelMatchingOpenApi.DocumentName, HotelMatchingOpenApi.DisplayName },
+    new { RoomMatchOpenApi.DocumentName, RoomMatchOpenApi.DisplayName },
+    new { RoomMatchAdminOpenApi.DocumentName, RoomMatchAdminOpenApi.DisplayName },
     new { BackofficeOpenApi.DocumentName, BackofficeOpenApi.DisplayName },
     new { GatewayOpenApi.DocumentName, GatewayOpenApi.DisplayName },
     new { AuditingOpenApi.DocumentName, AuditingOpenApi.DisplayName }
@@ -158,12 +180,28 @@ app.UseSwaggerUI(options =>
 
 app.UseHttpsRedirection();
 
+var frontendUrl = builder.Configuration["FrontendUrl"] ?? "http://localhost:5101";
+
+app.Use(async (context, next) =>
+{
+    if (context.Request.Path == "/" || context.Request.Path == "")
+    {
+        context.Response.Redirect(frontendUrl, permanent: false);
+        return;
+    }
+    await next(context);
+});
+
 app.UseDefaultFiles();
 app.UseStaticFiles();
 
 app.UseCors();
 
 app.UseAuthentication();
+
+// OIDC access token 里虽有 sid，但 OpenIddict validation 管道不检查会话状态。
+// 此中间件在认证之后立即校验 sid，被吊销的 session 直接返回 401。
+app.UseSessionValidation();
 
 // 登录前的匿名端点：调用方身份靠请求体里的凭据 / stepUpToken / refreshToken 自证，不读 cookie。
 // 浏览器却可能残留 AS 侧签发的 Identity cookie（OIDC 授权流程、上一次登录都会写入），
@@ -205,5 +243,7 @@ app.UseSessionLevelEnforcement();
 app.UseGatewayProxy();
 
 app.MapControllers();
+
+app.MapNotificationHub();
 
 app.Run();

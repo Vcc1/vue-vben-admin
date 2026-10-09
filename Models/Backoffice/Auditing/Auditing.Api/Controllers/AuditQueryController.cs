@@ -16,12 +16,13 @@ public sealed class AuditQueryController(IAuditQueryService service) : Controlle
         [FromQuery] string? actorName,
         [FromQuery] string? path,
         [FromQuery] string? httpMethod,
+        [FromQuery] string? feature,
         [FromQuery] DateTime? fromUtc,
         [FromQuery] DateTime? toUtc,
         [FromQuery] int take = 100,
         CancellationToken ct = default) =>
         Ok(await service.QueryRequestLogsAsync(
-            new AuditQueryFilter(actorName, path, httpMethod, null, null, fromUtc, toUtc, take), ct));
+            new AuditQueryFilter(actorName, path, httpMethod, null, null, feature, fromUtc, toUtc, take), ct));
 
     [HttpGet("security-events")]
     public async Task<ActionResult<IReadOnlyList<SecurityEventItem>>> QuerySecurityEventsAsync(
@@ -33,5 +34,5 @@ public sealed class AuditQueryController(IAuditQueryService service) : Controlle
         [FromQuery] int take = 100,
         CancellationToken ct = default) =>
         Ok(await service.QuerySecurityEventsAsync(
-            new AuditQueryFilter(actorName, null, null, eventType, severity, fromUtc, toUtc, take), ct));
+            new AuditQueryFilter(actorName, null, null, eventType, severity, null, fromUtc, toUtc, take), ct));
 }

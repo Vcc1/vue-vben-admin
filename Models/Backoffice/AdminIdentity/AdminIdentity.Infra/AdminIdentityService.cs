@@ -29,8 +29,10 @@ internal sealed class AdminIdentityService(
     ISessionService sessionService,
     IDeviceTrustService deviceTrust,
     IStepUpService stepUpService,
+    ICaptchaService captchaService,
     IHttpContextAccessor httpContextAccessor,
-    TimeProvider timeProvider)
+    TimeProvider timeProvider,
+    IRolePermissionCatalog rolePermissionCatalog)
     : IAdminAuthenticationService, IAdminUserService, IAdminApiKeyService
 {
     private static readonly JsonSerializerOptions AuditJsonOptions = new(JsonSerializerDefaults.Web)
@@ -40,7 +42,7 @@ internal sealed class AdminIdentityService(
         Encoder = JavaScriptEncoder.UnsafeRelaxedJsonEscaping
     };
 
-    public async Task<LoginResult?> LoginAsync(LoginRequest request, string? ipAddress, CancellationToken cancellationToken)
+    public async Task<LoginOutcome> LoginAsync(LoginRequest request, string? ipAddress, CancellationToken cancellationToken)
     {
         if (!string.Equals(request.Mode, "cookie", StringComparison.OrdinalIgnoreCase)
             && !string.Equals(request.Mode, "token", StringComparison.OrdinalIgnoreCase))
@@ -49,14 +51,39 @@ internal sealed class AdminIdentityService(
         var user = await userManager.FindByNameAsync(request.UserName.Trim());
         if (user is null || !user.IsEnabled)
         {
-            return null;
+            return new LoginOutcome(null, LoginFailureReason.InvalidCredentials);
+        }
+
+        var deviceId = string.IsNullOrWhiteSpace(request.DeviceId)
+            ? DeviceCookie.Ensure(httpContextAccessor.HttpContext)
+            : request.DeviceId.Trim();
+
+        var captchaRequired = await captchaService.IsCaptchaRequiredAsync(user.Id, deviceId, cancellationToken);
+        if (captchaRequired)
+        {
+            if (string.IsNullOrWhiteSpace(request.CaptchaId) || string.IsNullOrWhiteSpace(request.CaptchaAnswer))
+            {
+                return new LoginOutcome(null, LoginFailureReason.CaptchaRequired);
+            }
+            var valid = await captchaService.ValidateImageCaptchaAsync(request.CaptchaId, request.CaptchaAnswer, cancellationToken);
+            if (!valid)
+            {
+                return new LoginOutcome(null, LoginFailureReason.CaptchaWrong);
+            }
         }
 
         var checkedPassword = await signInManager.CheckPasswordSignInAsync(user, request.Password, lockoutOnFailure: true);
         if (!checkedPassword.Succeeded)
         {
-            return null;
+            await captchaService.IncrementFailureAsync(user.UserName!, cancellationToken);
+            if (checkedPassword.IsLockedOut)
+            {
+                return new LoginOutcome(null, LoginFailureReason.AccountLockedOut);
+            }
+            return new LoginOutcome(null, LoginFailureReason.InvalidCredentials);
         }
+
+        await captchaService.ResetFailureAsync(user.UserName!, cancellationToken);
 
         var now = timeProvider.GetUtcNow().UtcDateTime;
         user.LastLoginAtUtc = now;
@@ -67,25 +94,59 @@ internal sealed class AdminIdentityService(
 
         // deviceId 优先取 AS 侧 cookie（首次登录会自动下发）；
         // 请求体里的 deviceId 只作为原生客户端等非浏览器场景的显式覆盖。
-        var deviceId = string.IsNullOrWhiteSpace(request.DeviceId)
-            ? DeviceCookie.Ensure(httpContextAccessor.HttpContext)
-            : request.DeviceId.Trim();
 
-        // 受信设备只需密码；新设备与被踢设备必须再走一次强认证（HTTP 428）。
         var trust = await deviceTrust.EvaluateAsync(user.Id, deviceId, cancellationToken);
-        if (!trust.IsTrusted)
+
+        if (!options.Value.StepUp.Enabled)
         {
-            var challenge = await stepUpService.CreateLoginChallengeAsync(user.Id, deviceId, deviceInfoJson, trust.Reason, cancellationToken);
-            await securityEvents.LogAsync(new SecurityEvent(
-                "LoginStepUpRequired", "Low", "密码校验通过但设备不受信，要求二次验证。",
-                new { user.Id, DeviceId = deviceId, trust.Reason, IpAddress = ipAddress },
-                ActorId: user.Id.ToString(), ActorName: user.UserName), cancellationToken);
-            return new LoginResult(await MapUserAsync(user), null, challenge);
+            // 全局没开启比密码更强的凭证，密码就是最高凭证：新设备与信任过期的设备直接纳入受信，
+            // 顺带刷新"最近使用"。但被管理员显式踢除过的设备不自动复活——否则踢除形同虚设，
+            // 踢除时间与原因也会被一并抹掉。
+            var wasRevoked = trust.Reason == DeviceTrustReasons.DeviceRevoked;
+            if (wasRevoked)
+            {
+                await securityEvents.LogAsync(new SecurityEvent(
+                    "LoginOnRevokedDevice", "Medium",
+                    "该设备曾被管理员踢除受信，密码登录放行但不恢复受信状态。",
+                    new { user.Id, DeviceId = deviceId, IpAddress = ipAddress },
+                    ActorId: user.Id.ToString(), ActorName: user.UserName), cancellationToken);
+            }
+
+            return new LoginOutcome(await EstablishSessionAsync(
+                user, deviceId, deviceInfoJson, SessionLoginMethods.Password,
+                strongAuthMethod: null, request.Mode, request.RememberMe, ipAddress, allowTrust: !wasRevoked, cancellationToken));
         }
 
-        return await EstablishSessionAsync(
+        // 受信设备只需密码；新设备与被踢设备必须再走一次强认证（HTTP 428）。
+        if (!trust.IsTrusted)
+        {
+            var challenge = await stepUpService.TryCreateLoginChallengeAsync(user.Id, deviceId, deviceInfoJson, trust.Reason, cancellationToken);
+            if (challenge is not null)
+            {
+                await securityEvents.LogAsync(new SecurityEvent(
+                    "LoginStepUpRequired", "Low", "密码校验通过但设备不受信，要求二次验证。",
+                    new { user.Id, DeviceId = deviceId, trust.Reason, IpAddress = ipAddress },
+                    ActorId: user.Id.ToString(), ActorName: user.UserName), cancellationToken);
+                return new LoginOutcome(new LoginResult(await MapUserAsync(user), null, challenge));
+            }
+
+            // 账号没绑定任何强认证通道时不能把人锁死：降级为纯密码登录，
+            // 但设备不写入受信表（下次登录仍会要求验证），且会话只到 L2（没有强认证事实）。
+            await securityEvents.LogAsync(new SecurityEvent(
+                "LoginStepUpDegraded", "Medium",
+                "设备不受信且账号无可用强认证通道，降级为密码登录；该设备不标记受信。",
+                new { user.Id, DeviceId = deviceId, trust.Reason, IpAddress = ipAddress },
+                ActorId: user.Id.ToString(), ActorName: user.UserName), cancellationToken);
+
+            return new LoginOutcome(await EstablishSessionAsync(
+                user, deviceId, deviceInfoJson, SessionLoginMethods.Password,
+                strongAuthMethod: null, request.Mode, request.RememberMe, ipAddress, allowTrust: false, cancellationToken));
+        }
+
+        // 已受信设备：仍记录一次设备登录，把"最近使用"和设备信息刷成这次的实际情况。
+        return new LoginOutcome(await EstablishSessionAsync(
             user, deviceId, deviceInfoJson, SessionLoginMethods.Password,
-            strongAuthMethod: null, request.Mode, request.RememberMe, ipAddress, trustDevice: false, cancellationToken);
+            strongAuthMethod: null, request.Mode, request.RememberMe, ipAddress, allowTrust: true, cancellationToken));
     }
 
     public async Task<LoginResult> CompleteStepUpLoginAsync(
@@ -101,7 +162,7 @@ internal sealed class AdminIdentityService(
         // 设备信息在 428 往返中被封存在 stepUpToken 里，二次验证通过时随结果带回。
         return await EstablishSessionAsync(
             user, verification.DeviceId, verification.DeviceInfoJson, SessionLoginMethods.Otp,
-            strongAuthMethod: verification.Channel, mode, rememberMe, ipAddress, trustDevice: true, cancellationToken);
+            strongAuthMethod: verification.Channel, mode, rememberMe, ipAddress, allowTrust: true, cancellationToken);
     }
 
     /// <summary>创建 sid、签入 cookie（带 sid 与等级 claim）、按需签发 token。</summary>
@@ -114,7 +175,7 @@ internal sealed class AdminIdentityService(
         string mode,
         bool rememberMe,
         string? ipAddress,
-        bool trustDevice,
+        bool allowTrust,
         CancellationToken cancellationToken)
     {
         var now = timeProvider.GetUtcNow().UtcDateTime;
@@ -133,9 +194,23 @@ internal sealed class AdminIdentityService(
             TimeSpan.FromDays(Math.Clamp(options.Value.Jwt.RefreshTokenDays, 1, 365))),
             cancellationToken);
 
-        if (trustDevice && deviceId is not null)
+        // 同设备只保留最后一次登录：新会话创建后立即吊销该设备上的其他活跃会话。
+        if (deviceId is not null)
         {
-            await deviceTrust.MarkTrustedAsync(user.Id, deviceId, deviceInfoJson, sid, cancellationToken);
+            await sessionService.RevokePriorSessionsForDeviceAsync(
+                user.Id, deviceId, sid, "device-new-login", cancellationToken);
+        }
+
+        if (deviceId is not null)
+        {
+            // 这次登录本身达到的等级：走强认证即 L3，纯密码即 L2。
+            // 是否把设备记为受信由 TrustDeviceMinLevel 决定；allowTrust=false 表示管理员踢除过，不自动复活。
+            var achievedLevel = strongAuthMethod is null ? SessionLevels.L2 : SessionLevels.L3;
+            var grantTrust = allowTrust
+                && achievedLevel >= SessionLevels.Clamp(options.Value.Session.TrustDeviceMinLevel);
+
+            await deviceTrust.RecordDeviceLoginAsync(
+                user.Id, deviceId, deviceInfoJson, sid, grantTrust, cancellationToken);
         }
 
         var facts = new SessionFacts(sid, deviceId, loginMethod, now, now, strongAuthAt, strongAuthMethod);
@@ -292,6 +367,33 @@ internal sealed class AdminIdentityService(
 
         var user = await userManager.FindByIdAsync(userId.ToString());
         return user is null ? null : await MapUserAsync(user);
+    }
+
+    public async Task<IReadOnlyList<string>> GetCurrentUserPermissionsAsync(CancellationToken cancellationToken)
+    {
+        var user = await GetCurrentUserAsync(cancellationToken);
+        if (user is null)
+        {
+            return Array.Empty<string>();
+        }
+
+        var catalog = rolePermissionCatalog.GetRolePermissions();
+        var codes = new HashSet<string>(StringComparer.Ordinal);
+
+        foreach (var role in user.Roles)
+        {
+            codes.Add($"role:{role}");
+
+            if (catalog.TryGetValue(role, out var rolePermissions))
+            {
+                foreach (var permission in rolePermissions)
+                {
+                    codes.Add($"auth:{permission}");
+                }
+            }
+        }
+
+        return codes.ToList();
     }
 
     public async Task<IReadOnlyList<AdminUserItem>> ListAsync(CancellationToken cancellationToken)
@@ -489,7 +591,7 @@ internal sealed class AdminIdentityService(
             throw new InvalidOperationException("AdminIdentity:Jwt:SigningKey must contain at least 32 bytes.");
         }
 
-        var accessExpires = now.AddMinutes(Math.Clamp(jwtOptions.AccessTokenMinutes, 1, 1440));
+        var accessExpires = now.AddMinutes(Math.Max(jwtOptions.AccessTokenMinutes, 1));
         var roles = await userManager.GetRolesAsync(user);
         var claims = new List<Claim>
         {

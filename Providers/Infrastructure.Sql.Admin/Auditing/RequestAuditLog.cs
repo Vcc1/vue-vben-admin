@@ -15,6 +15,13 @@ public sealed class RequestAuditLog
     public string? QueryString { get; set; }
     public string? ControllerName { get; set; }
     public string? ActionName { get; set; }
+
+    /// <summary>功能名称（中文，运营可读），由 [RequestAudit(Feature = "...")] 声明。</summary>
+    public string? FeatureName { get; set; }
+
+    /// <summary>操作名称（中文，运营可读），由 [AuditOperation("...")] 声明。</summary>
+    public string? OperationName { get; set; }
+
     public int StatusCode { get; set; }
     public long DurationMs { get; set; }
     public string? RequestBody { get; set; }
