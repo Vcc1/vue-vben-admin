@@ -35,6 +35,7 @@ interface MountOptions {
   expandOnHover?: boolean;
   expandOnHovering?: boolean;
   extraVisible?: boolean;
+  fixedExtra?: boolean;
 }
 
 function mountSidebar(options: MountOptions = {}) {
@@ -48,7 +49,7 @@ function mountSidebar(options: MountOptions = {}) {
         extraCollapse: false,
         extraVisible: options.extraVisible ?? false,
         extraWidth: EXTRA_WIDTH,
-        fixedExtra: expandOnHover,
+        fixedExtra: options.fixedExtra ?? expandOnHover,
         headerHeight: 50,
         isSidebarMixed: true,
         mixedWidth: MIXED_WIDTH,
@@ -86,16 +87,6 @@ function getExtraPanelWidth(): number {
   return Number.parseFloat((panel as HTMLElement).style.width);
 }
 
-/**
- * 面板宽度与占位宽度必须同源：vben-layout 的 header/正文偏移只看 sidebarExtraVisible，
- * 两者不一致时面板就会浮在正文上。固定模式下面板展开即占位；悬停模式下面板是浮层，
- * 占位恒为一级列宽（且只在悬停期间渲染）。
- */
-function expectWidths(panelWidth: number, placeholderWidth: number) {
-  expect(getExtraPanelWidth()).toBe(panelWidth);
-  expect(getPlaceholderWidth()).toBe(placeholderWidth);
-}
-
 afterEach(() => {
   activeApp?.unmount();
   activeApp = undefined;
@@ -103,17 +94,35 @@ afterEach(() => {
   vi.restoreAllMocks();
 });
 
+/**
+ * 面板宽度与占位宽度必须同源：vben-layout 的 header/正文偏移只看 sidebarExtraVisible，
+ * 两者不一致时面板就会浮在正文上。固定模式下面板展开即占位；悬停模式下面板是浮层，
+ * 占位恒为一级列宽（且只在悬停期间渲染）。
+ */
 describe('layout-sidebar extra panel (#双列菜单遮挡正文)', () => {
   it('固定模式：有二级菜单时展开并占位', () => {
     mountSidebar({ expandOnHover: true, extraVisible: true });
 
-    expectWidths(EXTRA_WIDTH, MIXED_WIDTH + EXTRA_WIDTH);
+    expect(getExtraPanelWidth()).toBe(EXTRA_WIDTH);
+    expect(getPlaceholderWidth()).toBe(MIXED_WIDTH + EXTRA_WIDTH);
+  });
+
+  it('调用方只传 expandOnHover 不传 fixedExtra 时面板仍能展开', () => {
+    mountSidebar({
+      expandOnHover: true,
+      extraVisible: true,
+      fixedExtra: false,
+    });
+
+    expect(getExtraPanelWidth()).toBe(EXTRA_WIDTH);
+    expect(getPlaceholderWidth()).toBe(MIXED_WIDTH + EXTRA_WIDTH);
   });
 
   it('固定模式：页面不属于任何菜单时整列收起，不遮挡正文', () => {
     mountSidebar({ expandOnHover: true, extraVisible: false });
 
-    expectWidths(0, MIXED_WIDTH);
+    expect(getExtraPanelWidth()).toBe(0);
+    expect(getPlaceholderWidth()).toBe(MIXED_WIDTH);
   });
 
   it('悬停模式：未悬停时即使 extraVisible 残留为真也不渲染面板', () => {
@@ -123,7 +132,8 @@ describe('layout-sidebar extra panel (#双列菜单遮挡正文)', () => {
       extraVisible: true,
     });
 
-    expectWidths(0, MIXED_WIDTH);
+    expect(getExtraPanelWidth()).toBe(0);
+    expect(getPlaceholderWidth()).toBe(MIXED_WIDTH);
   });
 
   it('悬停模式：悬停中作为浮层展开，不挤占正文', () => {
@@ -133,12 +143,14 @@ describe('layout-sidebar extra panel (#双列菜单遮挡正文)', () => {
       extraVisible: true,
     });
 
-    expectWidths(EXTRA_WIDTH, MIXED_WIDTH);
+    expect(getExtraPanelWidth()).toBe(EXTRA_WIDTH);
+    expect(getPlaceholderWidth()).toBe(MIXED_WIDTH);
   });
 
   it('折叠时不渲染面板也不占位', () => {
     mountSidebar({ collapse: true, expandOnHover: true, extraVisible: true });
 
-    expectWidths(0, MIXED_WIDTH);
+    expect(getExtraPanelWidth()).toBe(0);
+    expect(getPlaceholderWidth()).toBe(MIXED_WIDTH);
   });
 });
