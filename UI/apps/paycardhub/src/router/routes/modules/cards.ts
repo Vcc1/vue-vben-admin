@@ -24,6 +24,7 @@ const routes: RouteRecordRaw[] = [
         path: ':id',
         component: () => import('#/views/cards/detail.vue'),
         meta: {
+          activePath: '/cards',
           hideInMenu: true,
           title: '卡片详情',
         },
