@@ -63,7 +63,7 @@ const { density, rowHeight, load: loadDensity, handleChange: handleDensityChange
 
 function onDensityChange(val: string) {
   handleDensityChange(val);
-  nextTick(updateHeaderStickyTop);
+  nextTick(updateStickyMetrics);
 }
 const {
   columnConfigs,
@@ -89,13 +89,7 @@ const columnMap = computed(() => {
 });
 
 const cardRef = ref<HTMLElement | null>(null);
-const syncBarRef = ref<HTMLElement | null>(null);
-let headerStickyRaf = 0;
-let syncRafId = 0;
-let tableScrollEl: HTMLElement | null = null;
-let syncBarEl: HTMLElement | null = null;
-let syncingFromTable = false;
-let syncingFromBar = false;
+let stickyMetricsObserver: ResizeObserver | null = null;
 
 function getCardEl(): HTMLElement | null {
   const r = cardRef.value;
@@ -103,82 +97,27 @@ function getCardEl(): HTMLElement | null {
   return (r as any).$el ?? r;
 }
 
-function updateHeaderStickyTop() {
+function updateStickyMetrics() {
   const card = getCardEl();
   if (!card) return;
   const toolbar = card.querySelector('.table-toolbar') as HTMLElement | null;
-  const header = card.querySelector('.el-table__header-wrapper') as HTMLElement | null;
-  if (toolbar && header && toolbar.offsetHeight > 0) {
-    header.style.setProperty('top', `${toolbar.offsetHeight}px`);
-  } else {
-    cancelAnimationFrame(headerStickyRaf);
-    headerStickyRaf = requestAnimationFrame(updateHeaderStickyTop);
-  }
+  const bottomBar = card.querySelector('.sticky-bottom-bar') as HTMLElement | null;
+
+  card.style.setProperty('--table-page-toolbar-height', `${toolbar?.offsetHeight ?? 0}px`);
+  card.style.setProperty('--table-page-bottom-bar-height', `${bottomBar?.offsetHeight ?? 0}px`);
 }
 
-let tableScrollDebounce = 0;
-let barScrollDebounce = 0;
-
-function onTableScroll() {
-  clearTimeout(tableScrollDebounce);
-  syncingFromTable = true;
-  tableScrollDebounce = window.setTimeout(() => { syncingFromTable = false; }, 150);
-}
-
-function onBarScroll() {
-  clearTimeout(barScrollDebounce);
-  syncingFromBar = true;
-  barScrollDebounce = window.setTimeout(() => { syncingFromBar = false; }, 150);
-}
-
-function syncScrollLoop() {
-  if (tableScrollEl && syncBarEl) {
-    const tableLeft = tableScrollEl.scrollLeft;
-    const barLeft = syncBarEl.scrollLeft;
-    if (!syncingFromBar && Math.abs(tableLeft - barLeft) > 0.5) {
-      syncingFromTable = true;
-      clearTimeout(tableScrollDebounce);
-      tableScrollDebounce = window.setTimeout(() => { syncingFromTable = false; }, 150);
-      tableScrollEl.removeEventListener('scroll', onTableScroll);
-      syncBarEl.scrollLeft = tableLeft;
-      tableScrollEl.addEventListener('scroll', onTableScroll, { passive: true });
-    }
-    if (!syncingFromTable && Math.abs(barLeft - tableLeft) > 0.5) {
-      syncingFromBar = true;
-      clearTimeout(barScrollDebounce);
-      barScrollDebounce = window.setTimeout(() => { syncingFromBar = false; }, 150);
-      syncBarEl.removeEventListener('scroll', onBarScroll);
-      tableScrollEl.scrollLeft = barLeft;
-      syncBarEl.addEventListener('scroll', onBarScroll, { passive: true });
-    }
-  }
-  syncRafId = requestAnimationFrame(syncScrollLoop);
-}
-
-function setupScrollSync() {
+function observeStickyMetrics() {
   const card = getCardEl();
   if (!card) return;
-  const wrapper = card.querySelector('.el-table__body-wrapper .el-scrollbar__wrap') as HTMLElement | null;
-  tableScrollEl = wrapper || null;
-  syncBarEl = syncBarRef.value || null;
-  if (tableScrollEl && syncBarEl && tableScrollEl.scrollWidth > tableScrollEl.clientWidth) {
-    const inner = syncBarEl.querySelector('.scroll-sync-inner') as HTMLElement | null;
-    if (inner) {
-      inner.style.width = `${tableScrollEl.scrollWidth}px`;
-    }
-    tableScrollEl.addEventListener('scroll', onTableScroll, { passive: true });
-    syncBarEl.addEventListener('scroll', onBarScroll, { passive: true });
-  } else {
-    setTimeout(setupScrollSync, 100);
-  }
-}
 
-function updateSyncInnerWidth() {
-  if (tableScrollEl && syncBarEl) {
-    const inner = syncBarEl.querySelector('.scroll-sync-inner') as HTMLElement | null;
-    if (inner && tableScrollEl.scrollWidth > 0) {
-      inner.style.width = `${tableScrollEl.scrollWidth}px`;
-    }
+  stickyMetricsObserver?.disconnect();
+  stickyMetricsObserver = new ResizeObserver(updateStickyMetrics);
+  for (const el of [
+    card.querySelector('.table-toolbar'),
+    card.querySelector('.sticky-bottom-bar'),
+  ]) {
+    if (el) stickyMetricsObserver.observe(el);
   }
 }
 
@@ -195,31 +134,27 @@ function handleSizeChange(val: number) {
 
 watch(() => props.columns, () => {
   loadColumnConfig();
-  nextTick(() => {
-    setupScrollSync();
-    updateSyncInnerWidth();
-  });
+  nextTick(updateStickyMetrics);
 });
 
-watch(() => props.data, () => {
-  nextTick(updateSyncInnerWidth);
+watch(() => props.pagination, () => {
+  nextTick(() => {
+    observeStickyMetrics();
+    updateStickyMetrics();
+  });
 });
 
 onMounted(() => {
   loadDensity();
   loadColumnConfig();
   nextTick(() => {
-    updateHeaderStickyTop();
-    setupScrollSync();
-    syncRafId = requestAnimationFrame(syncScrollLoop);
+    updateStickyMetrics();
+    observeStickyMetrics();
   });
 });
 
 onBeforeUnmount(() => {
-  cancelAnimationFrame(headerStickyRaf);
-  cancelAnimationFrame(syncRafId);
-  clearTimeout(tableScrollDebounce);
-  clearTimeout(barScrollDebounce);
+  stickyMetricsObserver?.disconnect();
 });
 </script>
 
@@ -357,6 +292,7 @@ onBeforeUnmount(() => {
       :stripe="stripe"
       :row-class-name="rowClassName"
       :row-style="{ height: rowHeight + 'px' }"
+      scrollbar-always-on
       @row-click="(row: Record<string, any>) => emit('row-click', row)"
     >
       <ElTableColumn
@@ -378,9 +314,6 @@ onBeforeUnmount(() => {
 
     <!-- Sticky bottom bar -->
     <div v-if="pagination" class="sticky-bottom-bar">
-      <div ref="syncBarRef" class="scroll-sync-bar">
-        <div class="scroll-sync-inner" />
-      </div>
       <div class="pagination-bar">
         <ElPagination
           :current-page="page"
@@ -398,6 +331,8 @@ onBeforeUnmount(() => {
 
 <style scoped>
 .table-page-card {
+  --table-page-bottom-bar-height: 0px;
+  --table-page-toolbar-height: 0px;
   overflow: visible;
 }
 
@@ -536,9 +471,44 @@ onBeforeUnmount(() => {
   overflow: visible;
 }
 
+.table-page-card :deep(.el-table__body-wrapper) {
+  overflow: visible;
+}
+
+.table-page-card :deep(.el-table__body-wrapper > .el-scrollbar) {
+  height: auto;
+  overflow: visible;
+}
+
+.table-page-card :deep(.el-table__body-wrapper > .el-scrollbar > .el-scrollbar__wrap) {
+  height: auto;
+  overflow-x: auto;
+  overflow-y: hidden;
+}
+
+.table-page-card :deep(.el-table__body-wrapper > .el-scrollbar > .el-scrollbar__bar.is-horizontal) {
+  /* Keep the built-in bar outside the horizontal scroll container for page-level sticky. */
+  position: sticky;
+  bottom: var(--table-page-bottom-bar-height);
+  left: auto;
+  right: auto;
+  height: 8px;
+  margin: 0 2px;
+  z-index: 6;
+  background: var(--el-fill-color-lighter);
+}
+
+.table-page-card :deep(.el-table:not(.el-table--scrollable-x) > .el-table__inner-wrapper > .el-table__body-wrapper > .el-scrollbar > .el-scrollbar__bar.is-horizontal) {
+  display: none;
+}
+
+.table-page-card :deep(.el-table__body-wrapper > .el-scrollbar > .el-scrollbar__bar.is-vertical) {
+  display: none;
+}
+
 .table-page-card :deep(.el-table__header-wrapper) {
   position: sticky;
-  top: 0;
+  top: var(--table-page-toolbar-height);
   z-index: 5;
   background: var(--el-card-bg-color);
 }
@@ -565,45 +535,9 @@ onBeforeUnmount(() => {
   border-top: 1px solid var(--el-border-color-lighter);
 }
 
-.scroll-sync-bar {
-  overflow-x: auto;
-  overflow-y: hidden;
-  height: 8px;
-  min-height: 8px;
-}
-
-.scroll-sync-bar::-webkit-scrollbar {
-  height: 8px;
-}
-
-.scroll-sync-bar::-webkit-scrollbar-track {
-  background: var(--el-fill-color-lighter);
-}
-
-.scroll-sync-bar::-webkit-scrollbar-thumb {
-  background: var(--el-border-color);
-  border-radius: 4px;
-}
-
-.scroll-sync-inner {
-  height: 1px;
-  visibility: hidden;
-}
-
 .pagination-bar {
   padding: 12px 16px;
   display: flex;
   justify-content: flex-end;
-}
-</style>
-
-<style>
-.table-page-card .el-table__body-wrapper .el-scrollbar__wrap {
-  scrollbar-width: none;
-  -ms-overflow-style: none;
-}
-
-.table-page-card .el-table__body-wrapper .el-scrollbar__wrap::-webkit-scrollbar {
-  display: none;
 }
 </style>
