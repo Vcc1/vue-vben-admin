@@ -89,7 +89,13 @@ const columnMap = computed(() => {
 });
 
 const cardRef = ref<HTMLElement | null>(null);
+const syncBarRef = ref<HTMLElement | null>(null);
 let headerStickyRaf = 0;
+let syncRafId = 0;
+let tableScrollEl: HTMLElement | null = null;
+let syncBarEl: HTMLElement | null = null;
+let syncingFromTable = false;
+let syncingFromBar = false;
 
 function getCardEl(): HTMLElement | null {
   const r = cardRef.value;
@@ -110,6 +116,72 @@ function updateHeaderStickyTop() {
   }
 }
 
+let tableScrollDebounce = 0;
+let barScrollDebounce = 0;
+
+function onTableScroll() {
+  clearTimeout(tableScrollDebounce);
+  syncingFromTable = true;
+  tableScrollDebounce = window.setTimeout(() => { syncingFromTable = false; }, 150);
+}
+
+function onBarScroll() {
+  clearTimeout(barScrollDebounce);
+  syncingFromBar = true;
+  barScrollDebounce = window.setTimeout(() => { syncingFromBar = false; }, 150);
+}
+
+function syncScrollLoop() {
+  if (tableScrollEl && syncBarEl) {
+    const tableLeft = tableScrollEl.scrollLeft;
+    const barLeft = syncBarEl.scrollLeft;
+    if (!syncingFromBar && Math.abs(tableLeft - barLeft) > 0.5) {
+      syncingFromTable = true;
+      clearTimeout(tableScrollDebounce);
+      tableScrollDebounce = window.setTimeout(() => { syncingFromTable = false; }, 150);
+      tableScrollEl.removeEventListener('scroll', onTableScroll);
+      syncBarEl.scrollLeft = tableLeft;
+      tableScrollEl.addEventListener('scroll', onTableScroll, { passive: true });
+    }
+    if (!syncingFromTable && Math.abs(barLeft - tableLeft) > 0.5) {
+      syncingFromBar = true;
+      clearTimeout(barScrollDebounce);
+      barScrollDebounce = window.setTimeout(() => { syncingFromBar = false; }, 150);
+      syncBarEl.removeEventListener('scroll', onBarScroll);
+      tableScrollEl.scrollLeft = barLeft;
+      syncBarEl.addEventListener('scroll', onBarScroll, { passive: true });
+    }
+  }
+  syncRafId = requestAnimationFrame(syncScrollLoop);
+}
+
+function setupScrollSync() {
+  const card = getCardEl();
+  if (!card) return;
+  const wrapper = card.querySelector('.el-table__body-wrapper .el-scrollbar__wrap') as HTMLElement | null;
+  tableScrollEl = wrapper || null;
+  syncBarEl = syncBarRef.value || null;
+  if (tableScrollEl && syncBarEl && tableScrollEl.scrollWidth > tableScrollEl.clientWidth) {
+    const inner = syncBarEl.querySelector('.scroll-sync-inner') as HTMLElement | null;
+    if (inner) {
+      inner.style.width = `${tableScrollEl.scrollWidth}px`;
+    }
+    tableScrollEl.addEventListener('scroll', onTableScroll, { passive: true });
+    syncBarEl.addEventListener('scroll', onBarScroll, { passive: true });
+  } else {
+    setTimeout(setupScrollSync, 100);
+  }
+}
+
+function updateSyncInnerWidth() {
+  if (tableScrollEl && syncBarEl) {
+    const inner = syncBarEl.querySelector('.scroll-sync-inner') as HTMLElement | null;
+    if (inner && tableScrollEl.scrollWidth > 0) {
+      inner.style.width = `${tableScrollEl.scrollWidth}px`;
+    }
+  }
+}
+
 function handlePageChange(val: number) {
   emit('update:page', val);
   emit('page-change', val);
@@ -123,16 +195,31 @@ function handleSizeChange(val: number) {
 
 watch(() => props.columns, () => {
   loadColumnConfig();
+  nextTick(() => {
+    setupScrollSync();
+    updateSyncInnerWidth();
+  });
+});
+
+watch(() => props.data, () => {
+  nextTick(updateSyncInnerWidth);
 });
 
 onMounted(() => {
   loadDensity();
   loadColumnConfig();
-  nextTick(updateHeaderStickyTop);
+  nextTick(() => {
+    updateHeaderStickyTop();
+    setupScrollSync();
+    syncRafId = requestAnimationFrame(syncScrollLoop);
+  });
 });
 
 onBeforeUnmount(() => {
   cancelAnimationFrame(headerStickyRaf);
+  cancelAnimationFrame(syncRafId);
+  clearTimeout(tableScrollDebounce);
+  clearTimeout(barScrollDebounce);
 });
 </script>
 
@@ -291,6 +378,9 @@ onBeforeUnmount(() => {
 
     <!-- Sticky bottom bar -->
     <div v-if="pagination" class="sticky-bottom-bar">
+      <div ref="syncBarRef" class="scroll-sync-bar">
+        <div class="scroll-sync-inner" />
+      </div>
       <div class="pagination-bar">
         <ElPagination
           :current-page="page"
@@ -475,9 +565,45 @@ onBeforeUnmount(() => {
   border-top: 1px solid var(--el-border-color-lighter);
 }
 
+.scroll-sync-bar {
+  overflow-x: auto;
+  overflow-y: hidden;
+  height: 8px;
+  min-height: 8px;
+}
+
+.scroll-sync-bar::-webkit-scrollbar {
+  height: 8px;
+}
+
+.scroll-sync-bar::-webkit-scrollbar-track {
+  background: var(--el-fill-color-lighter);
+}
+
+.scroll-sync-bar::-webkit-scrollbar-thumb {
+  background: var(--el-border-color);
+  border-radius: 4px;
+}
+
+.scroll-sync-inner {
+  height: 1px;
+  visibility: hidden;
+}
+
 .pagination-bar {
   padding: 12px 16px;
   display: flex;
   justify-content: flex-end;
+}
+</style>
+
+<style>
+.table-page-card .el-table__body-wrapper .el-scrollbar__wrap {
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+}
+
+.table-page-card .el-table__body-wrapper .el-scrollbar__wrap::-webkit-scrollbar {
+  display: none;
 }
 </style>
