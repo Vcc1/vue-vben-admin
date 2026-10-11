@@ -1,5 +1,5 @@
 <script lang="ts" setup>
-import { computed, nextTick, onMounted, onUnmounted, ref, toRef, watch } from 'vue';
+import { computed, nextTick, onBeforeUnmount, onMounted, ref, toRef, watch } from 'vue';
 
 import { IconifyIcon } from '@vben/icons';
 
@@ -60,6 +60,11 @@ const emit = defineEmits<{
 
 const columnsRef = toRef(props, 'columns');
 const { density, rowHeight, load: loadDensity, handleChange: handleDensityChange } = useDensity(props.tableKey);
+
+function onDensityChange(val: string) {
+  handleDensityChange(val);
+  nextTick(updateHeaderStickyTop);
+}
 const {
   columnConfigs,
   orderedVisibleColumns,
@@ -83,57 +88,88 @@ const columnMap = computed(() => {
   return map;
 });
 
-// --- Scroll sync ---
-const scrollSyncRef = ref<HTMLElement | null>(null);
+const cardRef = ref<HTMLElement | null>(null);
+const syncBarRef = ref<HTMLElement | null>(null);
+let headerStickyRaf = 0;
+let syncRafId = 0;
 let tableScrollEl: HTMLElement | null = null;
-let tableScrolling = false;
-let syncScrolling = false;
+let syncBarEl: HTMLElement | null = null;
+let syncingFromTable = false;
+let syncingFromBar = false;
 
-function syncFromTable() {
-  if (syncScrolling || !tableScrollEl || !scrollSyncRef.value) return;
-  tableScrolling = true;
-  scrollSyncRef.value.scrollLeft = tableScrollEl.scrollLeft;
-  requestAnimationFrame(() => { tableScrolling = false; });
+function getCardEl(): HTMLElement | null {
+  const r = cardRef.value;
+  if (!r) return null;
+  return (r as any).$el ?? r;
 }
 
-function syncFromBar() {
-  if (tableScrolling || !tableScrollEl || !scrollSyncRef.value) return;
-  syncScrolling = true;
-  tableScrollEl.scrollLeft = scrollSyncRef.value.scrollLeft;
-  requestAnimationFrame(() => { syncScrolling = false; });
-}
-
-function setupScrollSync() {
-  const card = scrollSyncRef.value?.closest('.table-page-card');
-  const wrapper = card?.querySelector('.el-table__body-wrapper') as HTMLElement | null;
-  const syncEl = scrollSyncRef.value;
-  tableScrollEl = wrapper || null;
-  if (tableScrollEl && syncEl) {
-    const inner = syncEl.querySelector('.scroll-sync-inner') as HTMLElement | null;
-    if (inner) {
-      inner.style.width = `${tableScrollEl.scrollWidth}px`;
-    }
-    updateSyncBarDisplay();
-    tableScrollEl.addEventListener('scroll', syncFromTable, { passive: true });
-    syncEl.addEventListener('scroll', syncFromBar, { passive: true });
+function updateHeaderStickyTop() {
+  const card = getCardEl();
+  if (!card) return;
+  const toolbar = card.querySelector('.table-toolbar') as HTMLElement | null;
+  const header = card.querySelector('.el-table__header-wrapper') as HTMLElement | null;
+  if (toolbar && header && toolbar.offsetHeight > 0) {
+    header.style.setProperty('top', `${toolbar.offsetHeight}px`);
+  } else {
+    cancelAnimationFrame(headerStickyRaf);
+    headerStickyRaf = requestAnimationFrame(updateHeaderStickyTop);
   }
 }
 
-function cleanupScrollSync() {
-  tableScrollEl?.removeEventListener('scroll', syncFromTable);
-  scrollSyncRef.value?.removeEventListener('scroll', syncFromBar);
+let tableScrollDebounce = 0;
+let barScrollDebounce = 0;
+
+function onTableScroll() {
+  clearTimeout(tableScrollDebounce);
+  syncingFromTable = true;
+  tableScrollDebounce = window.setTimeout(() => { syncingFromTable = false; }, 150);
 }
 
-function updateSyncBarDisplay() {
-  const syncEl = scrollSyncRef.value;
-  if (syncEl && tableScrollEl) {
-    const inner = syncEl.querySelector('.scroll-sync-inner') as HTMLElement | null;
+function onBarScroll() {
+  clearTimeout(barScrollDebounce);
+  syncingFromBar = true;
+  barScrollDebounce = window.setTimeout(() => { syncingFromBar = false; }, 150);
+}
+
+function syncScrollLoop() {
+  if (tableScrollEl && syncBarEl) {
+    const tableLeft = tableScrollEl.scrollLeft;
+    const barLeft = syncBarEl.scrollLeft;
+    if (!syncingFromBar && Math.abs(tableLeft - barLeft) > 0.5) {
+      syncingFromTable = true;
+      clearTimeout(tableScrollDebounce);
+      tableScrollDebounce = window.setTimeout(() => { syncingFromTable = false; }, 150);
+      tableScrollEl.removeEventListener('scroll', onTableScroll);
+      syncBarEl.scrollLeft = tableLeft;
+      tableScrollEl.addEventListener('scroll', onTableScroll, { passive: true });
+    }
+    if (!syncingFromTable && Math.abs(barLeft - tableLeft) > 0.5) {
+      syncingFromBar = true;
+      clearTimeout(barScrollDebounce);
+      barScrollDebounce = window.setTimeout(() => { syncingFromBar = false; }, 150);
+      syncBarEl.removeEventListener('scroll', onBarScroll);
+      tableScrollEl.scrollLeft = barLeft;
+      syncBarEl.addEventListener('scroll', onBarScroll, { passive: true });
+    }
+  }
+  syncRafId = requestAnimationFrame(syncScrollLoop);
+}
+
+function setupScrollSync() {
+  const card = getCardEl();
+  if (!card) return;
+  const wrapper = card.querySelector('.el-table__body-wrapper .el-scrollbar__wrap') as HTMLElement | null;
+  tableScrollEl = wrapper || null;
+  syncBarEl = syncBarRef.value || null;
+  if (tableScrollEl && syncBarEl && tableScrollEl.scrollWidth > tableScrollEl.clientWidth) {
+    const inner = syncBarEl.querySelector('.scroll-sync-inner') as HTMLElement | null;
     if (inner) {
       inner.style.width = `${tableScrollEl.scrollWidth}px`;
     }
-    syncEl.scrollWidth > syncEl.clientWidth
-      ? syncEl.style.setProperty('display', '')
-      : syncEl.style.setProperty('display', 'none');
+    tableScrollEl.addEventListener('scroll', onTableScroll, { passive: true });
+    syncBarEl.addEventListener('scroll', onBarScroll, { passive: true });
+  } else {
+    setTimeout(setupScrollSync, 100);
   }
 }
 
@@ -148,26 +184,47 @@ function handleSizeChange(val: number) {
   emit('size-change', val);
 }
 
-watch(() => props.data, () => {
-  nextTick(updateSyncBarDisplay);
-});
-
 watch(() => props.columns, () => {
   loadColumnConfig();
-  nextTick(updateSyncBarDisplay);
-}, { deep: true });
+  nextTick(() => {
+    setupScrollSync();
+    updateSyncInnerWidth();
+  });
+});
+
+watch(() => props.data, () => {
+  nextTick(updateSyncInnerWidth);
+});
+
+function updateSyncInnerWidth() {
+  if (tableScrollEl && syncBarEl) {
+    const inner = syncBarEl.querySelector('.scroll-sync-inner') as HTMLElement | null;
+    if (inner && tableScrollEl.scrollWidth > 0) {
+      inner.style.width = `${tableScrollEl.scrollWidth}px`;
+    }
+  }
+}
 
 onMounted(() => {
   loadDensity();
   loadColumnConfig();
-  nextTick(setupScrollSync);
+  nextTick(() => {
+    updateHeaderStickyTop();
+    setupScrollSync();
+    syncRafId = requestAnimationFrame(syncScrollLoop);
+  });
 });
 
-onUnmounted(cleanupScrollSync);
+onBeforeUnmount(() => {
+  cancelAnimationFrame(headerStickyRaf);
+  cancelAnimationFrame(syncRafId);
+  clearTimeout(tableScrollDebounce);
+  clearTimeout(barScrollDebounce);
+});
 </script>
 
 <template>
-  <ElCard class="table-page-card">
+  <ElCard ref="cardRef" class="table-page-card">
     <!-- Toolbar -->
     <div class="table-toolbar">
       <div class="toolbar-left">
@@ -181,7 +238,7 @@ onUnmounted(cleanupScrollSync);
             <IconifyIcon icon="lucide:refresh-cw" class="text-sm" />
           </ElButton>
         </ElTooltip>
-        <ElDropdown trigger="click" @command="handleDensityChange">
+        <ElDropdown trigger="click" @command="onDensityChange">
           <ElButton circle size="small">
             <IconifyIcon icon="lucide:rows-3" class="text-sm" />
           </ElButton>
@@ -320,8 +377,8 @@ onUnmounted(cleanupScrollSync);
     </ElTable>
 
     <!-- Sticky bottom bar -->
-    <div v-if="pagination" ref="scrollSyncRef" class="sticky-bottom-bar">
-      <div class="scroll-sync-bar">
+    <div v-if="pagination" class="sticky-bottom-bar">
+      <div ref="syncBarRef" class="scroll-sync-bar">
         <div class="scroll-sync-inner" />
       </div>
       <div class="pagination-bar">
@@ -475,6 +532,17 @@ onUnmounted(cleanupScrollSync);
   overflow: visible;
 }
 
+.table-page-card :deep(.el-table__inner-wrapper) {
+  overflow: visible;
+}
+
+.table-page-card :deep(.el-table__header-wrapper) {
+  position: sticky;
+  top: 0;
+  z-index: 5;
+  background: var(--el-card-bg-color);
+}
+
 .table-page-card :deep(.el-table th) {
   background: var(--el-fill-color-light) !important;
   font-weight: 600;
@@ -484,19 +552,18 @@ onUnmounted(cleanupScrollSync);
   transition: background-color 0.2s;
 }
 
-.table-page-card :deep(.is-active) {
-  color: var(--el-color-primary);
-  font-weight: 600;
-}
-
-.table-page-card :deep(.el-table__body-wrapper) {
-  overflow-x: auto;
+.table-page-card :deep(.el-table__body-wrapper .el-scrollbar__wrap) {
   scrollbar-width: none;
   -ms-overflow-style: none;
 }
 
-.table-page-card :deep(.el-table__body-wrapper::-webkit-scrollbar) {
+.table-page-card :deep(.el-table__body-wrapper .el-scrollbar__wrap::-webkit-scrollbar) {
   display: none;
+}
+
+.table-page-card :deep(.is-active) {
+  color: var(--el-color-primary);
+  font-weight: 600;
 }
 
 .sticky-bottom-bar {
@@ -504,12 +571,27 @@ onUnmounted(cleanupScrollSync);
   bottom: 0;
   z-index: 6;
   background: var(--el-card-bg-color);
+  border-top: 1px solid var(--el-border-color-lighter);
 }
 
 .scroll-sync-bar {
   overflow-x: auto;
   overflow-y: hidden;
-  border-top: 1px solid var(--el-border-color-lighter);
+  height: 8px;
+  min-height: 8px;
+}
+
+.scroll-sync-bar::-webkit-scrollbar {
+  height: 8px;
+}
+
+.scroll-sync-bar::-webkit-scrollbar-track {
+  background: var(--el-fill-color-lighter);
+}
+
+.scroll-sync-bar::-webkit-scrollbar-thumb {
+  background: var(--el-border-color);
+  border-radius: 4px;
 }
 
 .scroll-sync-inner {

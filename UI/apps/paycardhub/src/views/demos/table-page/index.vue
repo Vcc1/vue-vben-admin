@@ -1,8 +1,8 @@
 <script lang="ts" setup>
 import { computed, ref } from 'vue';
 
-import { Page, TablePage } from '@vben/common-ui';
-import type { TablePageColumnDef } from '@vben/common-ui';
+import { Page } from '@vben/common-ui';
+import { TablePage, type TablePageColumnDef } from '@vben/element-plus-ui';
 
 import {
   ElButton,
