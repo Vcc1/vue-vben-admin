@@ -606,4 +606,12 @@ onBeforeUnmount(() => {
 .table-page-card .el-table__body-wrapper .el-scrollbar__wrap::-webkit-scrollbar {
   display: none;
 }
+
+.table-page-card .el-table__body-wrapper .el-scrollbar__bar.is-horizontal {
+  position: sticky;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  z-index: 3;
+}
 </style>
