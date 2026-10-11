@@ -9,7 +9,6 @@ export * from './json-viewer';
 export * from './loading';
 export * from './page';
 export * from './resize';
-export * from './table-page';
 export * from './tippy';
 export * from './tree';
 export * from '@vben-core/form-ui';

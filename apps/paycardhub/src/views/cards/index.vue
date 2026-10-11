@@ -2,9 +2,8 @@
 import { onMounted, ref } from 'vue';
 import { useRouter } from 'vue-router';
 
-import { Page, TablePage } from '@vben/common-ui';
-import type { TablePageColumnDef } from '@vben/common-ui';
-import { IconifyIcon } from '@vben/icons';
+import { Page } from '@vben/common-ui';
+import { TablePage, type TablePageColumnDef } from '@vben/element-plus-ui';
 
 import {
   ElButton,
@@ -131,6 +130,12 @@ function formatDateOnly(val?: string) {
   const m = String(d.getMonth() + 1).padStart(2, '0');
   const day = String(d.getDate()).padStart(2, '0');
   return `${d.getFullYear()}-${m}-${day}`;
+}
+
+function isExpired(val?: string) {
+  if (!val) return false;
+  const d = new Date(val);
+  return Number.isNaN(d.getTime()) ? false : d.getTime() < Date.now();
 }
 
 function stayRange(h?: HotelOrder) {
@@ -291,15 +296,10 @@ onMounted(() => {
       </template>
 
       <template #column-apiClient="{ row }">
-        <ElTooltip
-          :content="`${row.apiClientName || row.apiClientCode || '-'}（${row.apiClientCode}）`"
-          placement="top"
-        >
-          <div class="cell-stack cell-ellipsis">
-            <span class="cell-title text-ellipsis">{{ row.apiClientName || row.apiClientCode || '-' }}</span>
-            <span class="cell-subtitle text-ellipsis">{{ row.apiClientCode }}</span>
-          </div>
-        </ElTooltip>
+        <div class="cell-stack">
+          <span class="cell-title">{{ row.apiClientName || row.apiClientCode || '-' }}</span>
+          <span class="cell-subtitle">{{ row.apiClientCode }}</span>
+        </div>
       </template>
 
       <template #column-providerAccount="{ row }">
@@ -354,23 +354,15 @@ onMounted(() => {
 
       <template #column-latestTransactionAt="{ row }">
         <div class="cell-stack">
-          <div class="cell-line">
-            <IconifyIcon icon="lucide:credit-card" class="cell-icon" />
-            <ElTooltip content="最近交易" placement="top">
-              <span class="cell-title">{{ formatDateTime(row.latestTransactionAt) }}</span>
-            </ElTooltip>
-          </div>
-          <div class="cell-line">
-            <IconifyIcon icon="lucide:eye" class="cell-icon" />
-            <ElTooltip content="最近观测" placement="top">
-              <span class="cell-subtitle">{{ formatDateTime(row.latestObservedAt) }}</span>
-            </ElTooltip>
-          </div>
+          <span class="cell-title">{{ formatDateTime(row.latestTransactionAt) }}</span>
+          <span v-if="row.hotelOrder" class="cell-subtitle">{{ stayRange(row.hotelOrder as HotelOrder) }}</span>
         </div>
       </template>
 
       <template #column-expireAt="{ row }">
-        {{ row.expireAt ? formatDateOnly(row.expireAt) : '-' }}
+        <span :class="{ 'text-red-500 font-medium': isExpired(row.expireAt) }">
+          {{ formatDateOnly(row.expireAt) || '-' }}
+        </span>
       </template>
     </TablePage>
   </Page>
@@ -384,18 +376,6 @@ onMounted(() => {
   line-height: 1.35;
 }
 
-.cell-line {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-}
-
-.cell-icon {
-  font-size: 13px;
-  color: var(--el-text-color-secondary);
-  flex-shrink: 0;
-}
-
 .cell-title {
   font-weight: 500;
   color: var(--el-text-color-primary);
@@ -404,16 +384,6 @@ onMounted(() => {
 .cell-subtitle {
   font-size: 12px;
   color: var(--el-text-color-secondary);
-}
-
-.cell-ellipsis {
-  max-width: 100%;
-}
-
-.text-ellipsis {
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
 }
 
 .info-grid {
