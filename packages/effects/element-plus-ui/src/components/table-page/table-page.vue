@@ -2,6 +2,7 @@
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, toRef, watch } from 'vue';
 
 import { IconifyIcon } from '@vben/icons';
+import { vHorizontalScroll } from 'el-table-horizontal-scroll';
 
 import {
   ElButton,
@@ -195,23 +196,23 @@ function handleSizeChange(val: number) {
 
 watch(() => props.columns, () => {
   loadColumnConfig();
-  nextTick(() => {
-    setupScrollSync();
-    updateSyncInnerWidth();
-  });
+  // nextTick(() => {
+  //   setupScrollSync();
+  //   updateSyncInnerWidth();
+  // });
 });
 
-watch(() => props.data, () => {
-  nextTick(updateSyncInnerWidth);
-});
+// watch(() => props.data, () => {
+//   nextTick(updateSyncInnerWidth);
+// });
 
 onMounted(() => {
   loadDensity();
   loadColumnConfig();
   nextTick(() => {
     updateHeaderStickyTop();
-    setupScrollSync();
-    syncRafId = requestAnimationFrame(syncScrollLoop);
+    // setupScrollSync();
+    // syncRafId = requestAnimationFrame(syncScrollLoop);
   });
 });
 
@@ -352,6 +353,7 @@ onBeforeUnmount(() => {
 
     <!-- Table -->
     <ElTable
+      v-horizontal-scroll.always
       :data="data"
       v-loading="loading"
       :stripe="stripe"
@@ -378,9 +380,9 @@ onBeforeUnmount(() => {
 
     <!-- Sticky bottom bar -->
     <div v-if="pagination" class="sticky-bottom-bar">
-      <div ref="syncBarRef" class="scroll-sync-bar">
+      <!-- <div ref="syncBarRef" class="scroll-sync-bar">
         <div class="scroll-sync-inner" />
-      </div>
+      </div> -->
       <div class="pagination-bar">
         <ElPagination
           :current-page="page"
