@@ -1,4 +1,11 @@
-import { computed, ref, type Ref } from 'vue';
+import {
+  computed,
+  ref,
+  toValue,
+  watch,
+  type MaybeRefOrGetter,
+  type Ref,
+} from 'vue';
 
 import type { TablePageColumnDef } from './types';
 
@@ -10,15 +17,15 @@ interface InternalColumnConfig {
 
 interface ColumnConfigDelta {
   visibility?: Record<string, boolean>;
-  fixed?: Record<string, 'left' | 'right'>;
+  fixed?: Record<string, 'left' | 'right' | false>;
   order?: string[];
 }
 
-export function useColumnConfig(
-  tableKey: string,
-  columns: Ref<TablePageColumnDef[]>,
+export function useColumnConfig<T extends object>(
+  tableKey: MaybeRefOrGetter<string>,
+  columns: Ref<TablePageColumnDef<T>[]>,
 ) {
-  const storageKey = `${tableKey}-column-config`;
+  const storageKey = () => `${toValue(tableKey)}-column-config`;
   const columnConfigs = ref<InternalColumnConfig[]>([]);
   const draggingField = ref<string | null>(null);
 
@@ -36,7 +43,7 @@ export function useColumnConfig(
 
   function load() {
     try {
-      const saved = localStorage.getItem(storageKey);
+      const saved = localStorage.getItem(storageKey());
       if (!saved) {
         columnConfigs.value = buildDefault();
         return;
@@ -46,18 +53,29 @@ export function useColumnConfig(
       const visibilityMap = delta.visibility || {};
       const fixedMap = delta.fixed || {};
 
-      const orderedFields =
-        delta.order && delta.order.length === columns.value.length
-          ? delta.order
-          : columns.value.map((c) => c.field);
+      const defaultFields = columns.value.map((c) => c.field);
+      const currentFields = new Set(defaultFields);
+      const savedOrder = Array.isArray(delta.order) ? delta.order : [];
+      const orderedFields = [
+        ...new Set([
+          ...savedOrder.filter((field) => currentFields.has(field)),
+          ...defaultFields,
+        ]),
+      ];
 
       columnConfigs.value = orderedFields.map((field) => {
         const defaultCol = columns.value.find((c) => c.field === field);
         const visible =
-          field in visibilityMap
+          typeof visibilityMap[field] === 'boolean'
             ? visibilityMap[field]!
             : (defaultCol?.defaultVisible ?? true);
-        const fixed = fixedMap[field] || defaultCol?.fixed || false;
+        const savedFixed = fixedMap[field];
+        const fixed =
+          savedFixed === false ||
+          savedFixed === 'left' ||
+          savedFixed === 'right'
+            ? savedFixed
+            : defaultCol?.fixed || false;
         return { field, visible, fixed };
       });
     } catch {
@@ -82,9 +100,9 @@ export function useColumnConfig(
       delta.visibility = visibilityDelta;
     }
 
-    const fixedDelta: Record<string, 'left' | 'right'> = {};
+    const fixedDelta: Record<string, 'left' | 'right' | false> = {};
     for (const col of columnConfigs.value) {
-      if (col.fixed && col.fixed !== false) {
+      if (col.fixed !== (defaultMap.get(col.field)?.fixed || false)) {
         fixedDelta[col.field] = col.fixed;
       }
     }
@@ -96,7 +114,16 @@ export function useColumnConfig(
       delta.order = currentOrder;
     }
 
-    localStorage.setItem(storageKey, JSON.stringify(delta));
+    try {
+      localStorage.setItem(storageKey(), JSON.stringify(delta));
+    } catch (error) {
+      console.warn('TablePage column preferences could not be saved.', error);
+    }
+  }
+
+  function reset() {
+    columnConfigs.value = buildDefault();
+    save();
   }
 
   function toggleColumnVisibility(field: string) {
@@ -107,7 +134,7 @@ export function useColumnConfig(
     }
   }
 
-  function getColumnFixed(field: string): 'left' | 'right' | boolean {
+  function getColumnFixed(field: string): 'left' | 'right' | false {
     return columnConfigs.value.find((c) => c.field === field)?.fixed || false;
   }
 
@@ -119,10 +146,7 @@ export function useColumnConfig(
     draggingField.value = field;
   }
 
-  function handleDragOver(
-    e: DragEvent,
-    targetFixed: 'left' | 'right' | false,
-  ) {
+  function handleDragOver(e: DragEvent, targetFixed: 'left' | 'right' | false) {
     e.preventDefault();
     if (!draggingField.value) return;
 
@@ -152,6 +176,7 @@ export function useColumnConfig(
     if (targetIdx < 0 || draggedIdx < 0) return;
 
     const [removed] = columnConfigs.value.splice(draggedIdx, 1);
+    if (!removed) return;
     columnConfigs.value.splice(targetIdx, 0, removed);
   }
 
@@ -166,12 +191,27 @@ export function useColumnConfig(
     draggingField.value = null;
   }
 
+  watch(
+    [
+      () => toValue(tableKey),
+      () =>
+        columns.value.map(({ field, defaultVisible, fixed }) => ({
+          field,
+          defaultVisible,
+          fixed,
+        })),
+    ],
+    load,
+    { immediate: true },
+  );
+
   return {
     columnConfigs,
     orderedVisibleColumns,
     draggingField,
     load,
     save,
+    reset,
     toggleColumnVisibility,
     getColumnFixed,
     getColumnsByFixed,
