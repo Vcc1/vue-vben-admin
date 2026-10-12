@@ -1,4 +1,4 @@
-import { computed, ref } from 'vue';
+import { computed, ref, toValue, type MaybeRefOrGetter } from 'vue';
 
 import type { TablePageDensity } from './types';
 
@@ -9,21 +9,30 @@ const ROW_HEIGHTS: Record<TablePageDensity, number> = {
   loose: 56,
 };
 
-export function useDensity(tableKey: string) {
-  const storageKey = `${tableKey}-density`;
+export function useDensity(tableKey: MaybeRefOrGetter<string>) {
+  const storageKey = () => `${toValue(tableKey)}-density`;
   const density = ref<TablePageDensity>('default');
 
   const rowHeight = computed(() => ROW_HEIGHTS[density.value]);
 
   function load() {
-    const saved = localStorage.getItem(storageKey) as TablePageDensity | null;
-    if (saved && DENSITY_OPTIONS.includes(saved)) {
-      density.value = saved;
+    density.value = 'default';
+    try {
+      const saved = localStorage.getItem(
+        storageKey(),
+      ) as TablePageDensity | null;
+      if (saved && DENSITY_OPTIONS.includes(saved)) density.value = saved;
+    } catch {
+      density.value = 'default';
     }
   }
 
   function save() {
-    localStorage.setItem(storageKey, density.value);
+    try {
+      localStorage.setItem(storageKey(), density.value);
+    } catch (error) {
+      console.warn('TablePage density preference could not be saved.', error);
+    }
   }
 
   function handleChange(val: TablePageDensity) {

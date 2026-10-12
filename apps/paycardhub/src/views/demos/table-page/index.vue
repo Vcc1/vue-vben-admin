@@ -2,13 +2,14 @@
 import { computed, ref } from 'vue';
 
 import { Page } from '@vben/common-ui';
-import { TablePage, type TablePageColumnDef } from '@vben/element-plus-ui';
-
 import {
-  ElButton,
-  ElInput,
-  ElTag,
-} from 'element-plus';
+  TablePage,
+  TableSearch,
+  TableSearchItem,
+  type TablePageColumnDef,
+} from '@vben/element-plus-ui';
+
+import { ElInput, ElTag } from 'element-plus';
 
 const columns: TablePageColumnDef[] = [
   { field: 'orderNo', label: '订单号', width: 160, fixed: 'left' },
@@ -17,8 +18,19 @@ const columns: TablePageColumnDef[] = [
   { field: 'amount', label: '金额', minWidth: 100, align: 'right' },
   { field: 'status', label: '状态', minWidth: 100, align: 'center' },
   { field: 'createdAt', label: '创建时间', minWidth: 160 },
-  { field: 'updatedAt', label: '更新时间', minWidth: 160, defaultVisible: false },
-  { field: 'remark', label: '备注', minWidth: 200, defaultVisible: false },
+  {
+    field: 'updatedAt',
+    label: '更新时间',
+    minWidth: 160,
+    defaultVisible: false,
+  },
+  {
+    field: 'remark',
+    label: '备注',
+    minWidth: 200,
+    defaultVisible: false,
+    showOverflowTooltip: true,
+  },
 ];
 
 const allData = generateMockData(86);
@@ -57,15 +69,33 @@ function handleReset() {
   page.value = 1;
 }
 
-const statusMap: Record<string, { label: string; type: 'danger' | 'success' | 'warning' }> = {
+const statusMap: Record<
+  string,
+  { label: string; type: 'danger' | 'success' | 'warning' }
+> = {
   completed: { label: '已完成', type: 'success' },
   pending: { label: '待处理', type: 'warning' },
   cancelled: { label: '已取消', type: 'danger' },
 };
 
 function generateMockData(count: number) {
-  const customers = ['张三', '李四', '王五', '赵六', '孙七', '周八', '吴九', '郑十'];
-  const products = ['豪华大床房', '标准双床房', '行政套房', '家庭房', '总统套房'];
+  const customers = [
+    '张三',
+    '李四',
+    '王五',
+    '赵六',
+    '孙七',
+    '周八',
+    '吴九',
+    '郑十',
+  ];
+  const products = [
+    '豪华大床房',
+    '标准双床房',
+    '行政套房',
+    '家庭房',
+    '总统套房',
+  ];
   const statuses = ['completed', 'pending', 'cancelled'];
   const data: Record<string, any>[] = [];
   for (let i = 0; i < count; i++) {
@@ -91,6 +121,16 @@ function generateMockData(count: number) {
 
 <template>
   <Page title="TablePage 组件演示">
+    <TableSearch class="mb-4" @search="handleSearch" @reset="handleReset">
+      <TableSearchItem v-slot="{ id }" label="关键词">
+        <ElInput
+          :id="id"
+          v-model="keyword"
+          clearable
+          placeholder="搜索订单号/客户/产品"
+        />
+      </TableSearchItem>
+    </TableSearch>
     <TablePage
       v-model:page="page"
       v-model:pageSize="pageSize"
@@ -101,20 +141,6 @@ function generateMockData(count: number) {
       title="订单列表"
       @refresh="handleRefresh"
     >
-      <template #toolbar-left>
-        <div class="flex items-center gap-2">
-          <ElInput
-            v-model="keyword"
-            clearable
-            placeholder="搜索订单号/客户/产品"
-            style="width: 220px"
-            @keyup.enter="handleSearch"
-          />
-          <ElButton type="primary" @click="handleSearch">搜索</ElButton>
-          <ElButton @click="handleReset">重置</ElButton>
-        </div>
-      </template>
-
       <template #column-status="{ row }">
         <ElTag :type="row.statusType" size="small">
           {{ row.statusLabel }}

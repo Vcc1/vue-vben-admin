@@ -3,11 +3,15 @@ import { onMounted, ref } from 'vue';
 import { useRouter } from 'vue-router';
 
 import { Page } from '@vben/common-ui';
-import { TablePage, type TablePageColumnDef } from '@vben/element-plus-ui';
+import {
+  TablePage,
+  TableSearch,
+  TableSearchItem,
+  useTablePage,
+  type TablePageColumnDef,
+} from '@vben/element-plus-ui';
 
 import {
-  ElButton,
-  ElCard,
   ElInput,
   ElOption,
   ElPopover,
@@ -28,11 +32,6 @@ import { getClientOptionsApi, type ApiClientOption } from '#/api/api-clients';
 import ProviderSelect from '#/components/provider-select.vue';
 
 const router = useRouter();
-const loading = ref(false);
-const cards = ref<CardListItem[]>([]);
-const total = ref(0);
-const page = ref(1);
-const pageSize = ref(20);
 const keyword = ref('');
 const providerCode = ref('');
 const providerAccountId = ref<number | undefined>(undefined);
@@ -41,36 +40,49 @@ const apiClientCode = ref('');
 const providerAccounts = ref<ProviderAccountOption[]>([]);
 const apiClients = ref<ApiClientOption[]>([]);
 
-const columns: TablePageColumnDef[] = [
+const columns: TablePageColumnDef<CardListItem>[] = [
   { field: 'orderNo', label: '单号', minWidth: 245 },
   { field: 'hotelOrder', label: '订单信息', minWidth: 170 },
   { field: 'apiClient', label: 'API 客户端', minWidth: 160 },
   { field: 'providerAccount', label: '供应商账户', minWidth: 160 },
   { field: 'limitAmount', label: '额度 / 已使用', minWidth: 230 },
-  { field: 'expectedBusinessStatus', label: '期望状态', width: 100, align: 'center' },
-  { field: 'transactionHealth', label: '交易状态', width: 100, align: 'center' },
+  {
+    field: 'expectedBusinessStatus',
+    label: '期望状态',
+    width: 100,
+    align: 'center',
+  },
+  {
+    field: 'transactionHealth',
+    label: '交易状态',
+    width: 100,
+    align: 'center',
+  },
   { field: 'transactionCount', label: '交易', width: 80, align: 'center' },
   { field: 'latestTransactionAt', label: '最近交易 / 观测', minWidth: 180 },
   { field: 'expireAt', label: '有效期', width: 110, align: 'center' },
 ];
 
-async function loadData() {
-  loading.value = true;
-  try {
+const table = useTablePage<CardListItem>({
+  request: async ({ page, pageSize }) => {
     const res = await getCardsApi({
       keyword: keyword.value || undefined,
       providerCode: providerCode.value || undefined,
       providerAccountId: providerAccountId.value,
       apiClientCode: apiClientCode.value || undefined,
-      page: page.value,
-      pageSize: pageSize.value,
+      page,
+      pageSize,
     });
-    cards.value = res.items;
-    total.value = res.totalCount;
-  } finally {
-    loading.value = false;
-  }
-}
+    return { items: res.items, total: res.totalCount };
+  },
+  onReset: () => {
+    keyword.value = '';
+    providerCode.value = '';
+    providerAccountId.value = undefined;
+    apiClientCode.value = '';
+  },
+});
+const { loading } = table;
 
 async function loadOptions() {
   const [accounts, clients] = await Promise.all([
@@ -82,20 +94,15 @@ async function loadOptions() {
 }
 
 function handleSearch() {
-  page.value = 1;
-  loadData();
+  void table.search().catch(() => {});
 }
 
 function handleReset() {
-  keyword.value = '';
-  providerCode.value = '';
-  providerAccountId.value = undefined;
-  apiClientCode.value = '';
-  handleSearch();
+  void table.reset().catch(() => {});
 }
 
-function viewDetail(row: Record<string, any>) {
-  router.push({ name: 'CardDetail', params: { id: (row as CardListItem).id } });
+function viewDetail(row: CardListItem) {
+  router.push({ name: 'CardDetail', params: { id: row.id } });
 }
 
 function formatAmount(value?: number) {
@@ -186,73 +193,70 @@ function usageLabel(u: CardUsageAmount) {
 
 onMounted(() => {
   loadOptions();
-  loadData();
 });
 </script>
 
 <template>
   <Page title="卡管理">
-    <ElCard class="mb-4">
-      <div class="flex flex-wrap items-end gap-3">
-        <div class="w-56">
-          <label class="mb-1 block text-xs text-gray-500">关键词</label>
-          <ElInput
-            v-model="keyword"
-            placeholder="订单号 / 卡 ID / 卡号"
-            clearable
-            @keyup.enter="handleSearch"
+    <TableSearch
+      class="mb-4"
+      :loading="loading"
+      @search="handleSearch"
+      @reset="handleReset"
+    >
+      <TableSearchItem v-slot="{ id }" label="关键词">
+        <ElInput
+          :id="id"
+          v-model="keyword"
+          placeholder="订单号 / 卡 ID / 卡号"
+          clearable
+        />
+      </TableSearchItem>
+      <TableSearchItem v-slot="{ id }" label="供应商">
+        <ProviderSelect :id="id" v-model="providerCode" width="100%" />
+      </TableSearchItem>
+      <TableSearchItem v-slot="{ id }" label="供应商账户">
+        <ElSelect
+          :id="id"
+          v-model="providerAccountId"
+          clearable
+          placeholder="全部"
+        >
+          <ElOption
+            v-for="acc in providerAccounts"
+            :key="acc.id"
+            :label="`${acc.providerCode} - ${acc.accountName}`"
+            :value="acc.id"
           />
-        </div>
-        <div class="w-44">
-          <label class="mb-1 block text-xs text-gray-500">供应商</label>
-          <ProviderSelect v-model="providerCode" />
-        </div>
-        <div class="w-52">
-          <label class="mb-1 block text-xs text-gray-500">供应商账户</label>
-          <ElSelect v-model="providerAccountId" clearable placeholder="全部">
-            <ElOption
-              v-for="acc in providerAccounts"
-              :key="acc.id"
-              :label="`${acc.providerCode} - ${acc.accountName}`"
-              :value="acc.id"
-            />
-          </ElSelect>
-        </div>
-        <div class="w-44">
-          <label class="mb-1 block text-xs text-gray-500">API 客户端</label>
-          <ElSelect v-model="apiClientCode" clearable placeholder="全部">
-            <ElOption
-              v-for="c in apiClients"
-              :key="c.id"
-              :label="c.displayName"
-              :value="c.clientCode"
-            />
-          </ElSelect>
-        </div>
-        <ElButton type="primary" @click="handleSearch">查询</ElButton>
-        <ElButton @click="handleReset">重置</ElButton>
-      </div>
-    </ElCard>
+        </ElSelect>
+      </TableSearchItem>
+      <TableSearchItem v-slot="{ id }" label="API 客户端">
+        <ElSelect :id="id" v-model="apiClientCode" clearable placeholder="全部">
+          <ElOption
+            v-for="c in apiClients"
+            :key="c.id"
+            :label="c.displayName"
+            :value="c.clientCode"
+          />
+        </ElSelect>
+      </TableSearchItem>
+    </TableSearch>
 
     <TablePage
-      v-model:page="page"
-      v-model:pageSize="pageSize"
+      v-bind="table.bindings"
       :columns="columns"
-      :data="cards"
-      :loading="loading"
-      :total="total"
+      row-key="id"
       row-class-name="cursor-pointer"
       table-key="paycardhub-cards"
       title="卡列表"
-      @page-change="loadData"
-      @refresh="loadData"
       @row-click="viewDetail"
-      @size-change="loadData"
     >
       <template #column-orderNo="{ row }">
         <div class="cell-stack">
           <span class="cell-title">{{ row.orderNo || '-' }}</span>
-          <span class="cell-subtitle">业务单号: {{ row.businessOrderNo || '-' }}</span>
+          <span class="cell-subtitle"
+            >业务单号: {{ row.businessOrderNo || '-' }}</span
+          >
         </div>
       </template>
 
@@ -272,11 +276,15 @@ onMounted(() => {
           <div class="info-grid">
             <div class="info-line">
               <span class="info-label">萌兔单号</span>
-              <span class="info-value">{{ row.hotelOrder.mtOrderNo || '-' }}</span>
+              <span class="info-value">{{
+                row.hotelOrder.mtOrderNo || '-'
+              }}</span>
             </div>
             <div class="info-line">
               <span class="info-label">酒店编码</span>
-              <span class="info-value">{{ row.hotelOrder.mtHotelCode || '-' }}</span>
+              <span class="info-value">{{
+                row.hotelOrder.mtHotelCode || '-'
+              }}</span>
             </div>
             <div class="info-line">
               <span class="info-label">SupId</span>
@@ -284,11 +292,15 @@ onMounted(() => {
             </div>
             <div class="info-line">
               <span class="info-label">ShotelCode</span>
-              <span class="info-value">{{ row.hotelOrder.sHotelCode || '-' }}</span>
+              <span class="info-value">{{
+                row.hotelOrder.sHotelCode || '-'
+              }}</span>
             </div>
             <div class="info-line">
               <span class="info-label">入住离店</span>
-              <span class="info-value">{{ stayRange(row.hotelOrder as HotelOrder) || '-' }}</span>
+              <span class="info-value">{{
+                stayRange(row.hotelOrder as HotelOrder) || '-'
+              }}</span>
             </div>
           </div>
         </ElPopover>
@@ -297,7 +309,9 @@ onMounted(() => {
 
       <template #column-apiClient="{ row }">
         <div class="cell-stack">
-          <span class="cell-title">{{ row.apiClientName || row.apiClientCode || '-' }}</span>
+          <span class="cell-title">{{
+            row.apiClientName || row.apiClientCode || '-'
+          }}</span>
           <span class="cell-subtitle">{{ row.apiClientCode }}</span>
         </div>
       </template>
@@ -312,7 +326,8 @@ onMounted(() => {
       <template #column-limitAmount="{ row }">
         <div class="cell-stack">
           <span class="cell-title">
-            额度 {{ formatAmount(row.limitAmountValue) }} {{ row.limitAmountCurrency }}
+            额度 {{ formatAmount(row.limitAmountValue) }}
+            {{ row.limitAmountCurrency }}
           </span>
           <template v-if="activeUsages(row as CardListItem).length">
             <span
@@ -320,26 +335,41 @@ onMounted(() => {
               :key="u.currency"
               class="cell-subtitle"
             >
-              {{ usageLabel(u) }} {{ formatAmount(Math.abs(Number(u.usedAmount))) }}
-              {{ u.currency }}{{ u.includesUnprojectedFacts ? ' · 含未归一' : '' }}
+              {{ usageLabel(u) }}
+              {{ formatAmount(Math.abs(Number(u.usedAmount))) }} {{ u.currency
+              }}{{ u.includesUnprojectedFacts ? ' · 含未归一' : '' }}
             </span>
-            <span v-if="activeUsages(row as CardListItem).length > 2" class="cell-subtitle">
+            <span
+              v-if="activeUsages(row as CardListItem).length > 2"
+              class="cell-subtitle"
+            >
               另有 {{ activeUsages(row as CardListItem).length - 2 }} 个币种
             </span>
           </template>
-          <span v-else class="cell-subtitle">已用 0.00 {{ row.limitAmountCurrency }}</span>
+          <span v-else class="cell-subtitle"
+            >已用 0.00 {{ row.limitAmountCurrency }}</span
+          >
         </div>
       </template>
 
       <template #column-expectedBusinessStatus="{ row }">
-        <ElTag :type="expectedStatus(row.expectedBusinessStatus).type" size="small">
+        <ElTag
+          :type="expectedStatus(row.expectedBusinessStatus).type"
+          size="small"
+        >
           {{ expectedStatus(row.expectedBusinessStatus).label }}
         </ElTag>
       </template>
 
       <template #column-transactionHealth="{ row }">
-        <ElTooltip :content="transactionHealth(row as CardListItem).reason" placement="top">
-          <ElTag :type="transactionHealth(row as CardListItem).type" size="small">
+        <ElTooltip
+          :content="transactionHealth(row as CardListItem).reason"
+          placement="top"
+        >
+          <ElTag
+            :type="transactionHealth(row as CardListItem).type"
+            size="small"
+          >
             {{ transactionHealth(row as CardListItem).label }}
           </ElTag>
         </ElTooltip>
@@ -354,8 +384,12 @@ onMounted(() => {
 
       <template #column-latestTransactionAt="{ row }">
         <div class="cell-stack">
-          <span class="cell-title">{{ formatDateTime(row.latestTransactionAt) }}</span>
-          <span v-if="row.hotelOrder" class="cell-subtitle">{{ stayRange(row.hotelOrder as HotelOrder) }}</span>
+          <span class="cell-title">{{
+            formatDateTime(row.latestTransactionAt)
+          }}</span>
+          <span v-if="row.hotelOrder" class="cell-subtitle">{{
+            stayRange(row.hotelOrder as HotelOrder)
+          }}</span>
         </div>
       </template>
 
