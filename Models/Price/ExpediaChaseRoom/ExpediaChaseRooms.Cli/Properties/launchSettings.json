@@ -1,0 +1,10 @@
+﻿{
+  "profiles": {
+    "ExpediaChaseRooms": {
+      "commandName": "Project"
+    },
+    "Container (Dockerfile)": {
+      "commandName": "Docker"
+    }
+  }
+}

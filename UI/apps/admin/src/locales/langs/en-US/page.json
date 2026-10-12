@@ -1,0 +1,49 @@
+{
+  "auth": {
+    "login": "Login",
+    "register": "Register",
+    "codeLogin": "Code Login",
+    "qrcodeLogin": "Qr Code Login",
+    "forgetPassword": "Forget Password",
+    "profile": "Profile"
+  },
+  "dashboard": {
+    "title": "Dashboard",
+    "analytics": "Analytics",
+    "workspace": "Workspace"
+  },
+  "oidc": {
+    "title": "OIDC",
+    "clients": "Clients",
+    "scopes": "Scopes"
+  },
+  "session": {
+    "title": "Sessions & Devices",
+    "all": "Sessions",
+    "myDevices": "My Devices & Sessions"
+  },
+  "scheduling": {
+    "title": "Scheduled Tasks",
+    "tasks": "Tasks"
+  },
+  "system": {
+    "title": "System Settings"
+  },
+  "auditing": {
+    "title": "Auditing",
+    "security": "Security Audit",
+    "operations": "Operation Audit"
+  },
+  "access": {
+    "title": "Users & Access",
+    "users": "Users",
+    "roles": "Roles",
+    "permissions": "Permissions"
+  },
+  "notification": {
+    "title": "Notifications",
+    "center": "Notification Center",
+    "types": "Types",
+    "publish": "Publish"
+  }
+}

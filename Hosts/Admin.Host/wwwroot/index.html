@@ -1,0 +1,175 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>酒店匹配调试</title>
+  <style>
+    :root { color-scheme: light; font-family: Inter, "Microsoft YaHei", Arial, sans-serif; color: #17201a; background: #f4f6f4; --line: #d7ddd8; --muted: #657168; --accent: #176b4d; --soft: #e6f2ec; --warn: #945900; --danger: #a42d2d; }
+    * { box-sizing: border-box; }
+    body { margin: 0; min-width: 320px; }
+    header, .query-band { background: #fff; border-bottom: 1px solid var(--line); }
+    .shell { width: min(1440px, 100%); margin: 0 auto; padding: 20px 28px; }
+    h1 { margin: 0; font-size: 22px; font-weight: 680; letter-spacing: 0; }
+    .query-grid { display: grid; grid-template-columns: 190px minmax(220px, 1fr) minmax(160px, 240px) 112px; gap: 12px; align-items: end; }
+    .field { display: grid; gap: 6px; min-width: 0; }
+    label { color: var(--muted); font-size: 13px; }
+    input, button { height: 40px; border: 1px solid #b9c3bb; border-radius: 6px; font: inherit; letter-spacing: 0; }
+    input { width: 100%; padding: 0 11px; background: #fff; color: #17201a; }
+    input:focus, button:focus-visible { outline: 2px solid #72aa92; outline-offset: 1px; }
+    button { cursor: pointer; padding: 0 15px; background: #fff; color: #243129; }
+    button.primary { border-color: var(--accent); background: var(--accent); color: #fff; font-weight: 650; }
+    button:disabled { cursor: wait; opacity: .65; }
+    .segments { display: grid; grid-template-columns: 1fr 1fr; height: 40px; border: 1px solid #b9c3bb; border-radius: 6px; overflow: hidden; }
+    .segments button { height: 38px; border: 0; border-radius: 0; }
+    .segments button.active { background: var(--soft); color: var(--accent); font-weight: 650; }
+    main { padding: 24px 28px 48px; }
+    .status { min-height: 24px; margin-bottom: 14px; color: var(--muted); }
+    .status.error, .bad { color: var(--danger); }
+    .summary { display: grid; grid-template-columns: repeat(5, minmax(130px, 1fr)); border: 1px solid var(--line); background: #fff; margin-bottom: 24px; }
+    .metric { padding: 14px 16px; border-right: 1px solid var(--line); }
+    .metric:last-child { border-right: 0; }
+    .metric span { display: block; color: var(--muted); font-size: 12px; margin-bottom: 6px; }
+    .metric strong { font-size: 16px; font-weight: 680; overflow-wrap: anywhere; }
+    section { margin-top: 24px; }
+    h2 { margin: 0 0 10px; font-size: 16px; font-weight: 680; letter-spacing: 0; }
+    .table-wrap { overflow-x: auto; border: 1px solid var(--line); background: #fff; }
+    table { width: 100%; min-width: 1040px; border-collapse: collapse; table-layout: fixed; }
+    th, td { padding: 11px 12px; border-bottom: 1px solid #e6eae7; text-align: left; vertical-align: top; font-size: 13px; overflow-wrap: anywhere; }
+    th { background: #f8faf8; color: #4d5a51; font-weight: 650; }
+    tr:last-child td { border-bottom: 0; }
+    .good { color: var(--accent); font-weight: 650; }
+    .warn { color: var(--warn); font-weight: 650; }
+    pre { margin: 0; padding: 16px; max-height: 420px; overflow: auto; border: 1px solid var(--line); background: #fff; font: 12px/1.55 Consolas, monospace; white-space: pre-wrap; overflow-wrap: anywhere; }
+    [hidden] { display: none !important; }
+    @media (max-width: 900px) { .shell, main { padding-left: 16px; padding-right: 16px; } .query-grid { grid-template-columns: 1fr 1fr; } .summary { grid-template-columns: 1fr 1fr; } .metric { border-bottom: 1px solid var(--line); } }
+    @media (max-width: 560px) { .query-grid, .summary { grid-template-columns: 1fr; } .metric { border-right: 0; } }
+  </style>
+</head>
+<body>
+  <header><div class="shell"><h1>酒店匹配调试</h1></div></header>
+  <div class="query-band">
+    <form class="shell query-grid" id="queryForm">
+      <div class="field">
+        <label>酒店来源</label>
+        <div class="segments" aria-label="酒店来源">
+          <button type="button" class="active" data-source="supplier">SUP</button>
+          <button type="button" data-source="ota">OTA</button>
+        </div>
+      </div>
+      <div class="field"><label for="hotelCode" id="hotelCodeLabel">SHotelCode</label><input id="hotelCode" autocomplete="off" required></div>
+      <div class="field" id="supField"><label for="supId">SupId</label><input id="supId" inputmode="numeric" type="number" min="1" required></div>
+      <button class="primary" id="analyzeButton" type="submit">分析</button>
+    </form>
+  </div>
+  <main class="shell">
+    <div class="status" id="status">等待查询</div>
+    <div id="results" hidden>
+      <div class="summary" id="summary"></div>
+      <section>
+        <h2>三公里召回候选</h2>
+        <div class="table-wrap">
+          <table>
+            <thead><tr><th>酒店</th><th>距离</th><th>区域</th><th>名称证据</th><th>电话证据</th><th>结果</th><th>规则原因</th></tr></thead>
+            <tbody id="candidateRows"></tbody>
+          </table>
+        </div>
+      </section>
+      <section><h2>当前清洗结果</h2><pre id="sourceJson"></pre></section>
+    </div>
+  </main>
+  <script>
+    const state = { source: 'supplier' };
+    const form = document.querySelector('#queryForm');
+    const status = document.querySelector('#status');
+    const results = document.querySelector('#results');
+    const analyzeButton = document.querySelector('#analyzeButton');
+
+    document.querySelectorAll('[data-source]').forEach(item => item.addEventListener('click', () => {
+      state.source = item.dataset.source;
+      document.querySelectorAll('[data-source]').forEach(x => x.classList.toggle('active', x === item));
+      const isSupplier = state.source === 'supplier';
+      document.querySelector('#supField').hidden = !isSupplier;
+      document.querySelector('#supId').required = isSupplier;
+      document.querySelector('#hotelCodeLabel').textContent = isSupplier ? 'SHotelCode' : 'MTHotelCode';
+    }));
+
+    form.addEventListener('submit', async event => {
+      event.preventDefault();
+      analyzeButton.disabled = true;
+      status.className = 'status';
+      status.textContent = '分析中';
+      results.hidden = true;
+      try {
+        const request = {
+          sourceType: state.source,
+          hotelCode: document.querySelector('#hotelCode').value.trim(),
+          supId: state.source === 'supplier' ? Number(document.querySelector('#supId').value) : null
+        };
+        const response = await fetch('/api/admin/hotel-matching/analyze', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(request)
+        });
+        if (!response.ok) {
+          throw new Error(`请求失败：HTTP ${response.status}`);
+        }
+        render(await response.json());
+      } catch (error) {
+        status.className = 'status error';
+        status.textContent = error.message;
+      } finally {
+        analyzeButton.disabled = false;
+      }
+    });
+
+    function render(data) {
+      const source = data.source || {};
+      const decision = data.decision || {};
+      const candidates = data.recalledCandidates || [];
+      const evidence = decision.candidates || [];
+      const evidenceByCode = new Map(evidence.map(x => [x.mtHotelCode, x]));
+      const errors = data.errors || [];
+      status.textContent = errors.length ? errors.join(', ') : '分析完成';
+      status.className = errors.length ? 'status error' : 'status';
+      document.querySelector('#summary').innerHTML = [
+        ['来源', data.request?.sourceType || '-'],
+        ['酒店', source.hotelCode || '-'],
+        ['数据质量', source.isQualityValid ? '有效' : '问题'],
+        ['候选数', candidates.length],
+        ['结论', decision.kind || (data.request?.sourceType === 'ota' ? '反向召回' : '-')]
+      ].map(([label, value]) => `<div class="metric"><span>${escapeHtml(label)}</span><strong>${escapeHtml(String(value))}</strong></div>`).join('');
+
+      document.querySelector('#candidateRows').innerHTML = candidates.map(candidate => {
+        const item = evidenceByCode.get(candidate.hotelCode) || {};
+        const distance = item.distanceMeters ?? distanceMeters(source, candidate);
+        const reasons = item.rejectionReasons || [];
+        const selected = decision.mtHotelCode === candidate.hotelCode;
+        const result = reasons.length ? '剔除' : (selected ? '匹配' : '候选');
+        const resultClass = result === '匹配' ? 'good' : (result === '剔除' ? 'bad' : 'warn');
+        const phone = item.phoneConflict ? '<span class="bad">冲突</span>' : (item.phoneMatches ? '<span class="good">一致</span>' : '-');
+        return `<tr><td>${escapeHtml(candidate.hotelCode || '-')}<br>${escapeHtml(candidate.hotelName || '-')}</td>
+          <td>${Number.isFinite(distance) ? `${Math.round(distance)} m` : '-'}</td>
+          <td>${escapeHtml([candidate.regionLevel1Name, candidate.regionLevel2Name, candidate.regionLevel3Name].filter(Boolean).join(' / ') || '-')}</td>
+          <td>${escapeHtml(item.nameResult?.kind || '-')}</td><td>${phone}</td>
+          <td class="${resultClass}">${result}</td><td>${escapeHtml(reasons.join(', ') || '-')}</td></tr>`;
+      }).join('') || '<tr><td colspan="7">无候选</td></tr>';
+
+      document.querySelector('#sourceJson').textContent = JSON.stringify(source, null, 2);
+      results.hidden = false;
+    }
+
+    function distanceMeters(a, b) {
+      if (![a.latitude, a.longitude, b.latitude, b.longitude].every(Number.isFinite)) return NaN;
+      const rad = value => value * Math.PI / 180;
+      const dLat = rad(b.latitude - a.latitude), dLon = rad(b.longitude - a.longitude);
+      const x = Math.sin(dLat / 2) ** 2 + Math.cos(rad(a.latitude)) * Math.cos(rad(b.latitude)) * Math.sin(dLon / 2) ** 2;
+      return 6371008.8 * 2 * Math.atan2(Math.sqrt(x), Math.sqrt(1 - x));
+    }
+
+    function escapeHtml(value) {
+      return value.replace(/[&<>'"]/g, char => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', "'": '&#39;', '"': '&quot;' })[char]);
+    }
+  </script>
+</body>
+</html>

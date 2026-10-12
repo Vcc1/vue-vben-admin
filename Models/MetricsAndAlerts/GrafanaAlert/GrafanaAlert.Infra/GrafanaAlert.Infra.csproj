@@ -1,0 +1,16 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    
+    
+    <RootNamespace>GrafanaAlert.Infra</RootNamespace><AssemblyName>GrafanaAlert.Infra</AssemblyName><TargetFramework>net10.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\GrafanaAlert.App\GrafanaAlert.App.csproj" />
+    <ProjectReference Include="..\..\..\..\Providers\Infrastructure.HTTP.WorkWechatAlert\Infrastructure.HTTP.WorkWechatAlert.csproj" />
+  </ItemGroup>
+
+</Project>

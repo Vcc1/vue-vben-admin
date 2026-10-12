@@ -1,0 +1,44 @@
+# ���??https://aka.ms/customizecontainer ���˽�����Զ��������������??Visual Studio ���ʹ��??Dockerfile ����ӳ���Ը���ؽ��е���??
+
+# �˽׶������ڿ���ģ??Ĭ��Ϊ������??�´� VS ����??
+FROM mcr.microsoft.com/dotnet/aspnet:10.0 AS base
+USER $APP_UID
+WORKDIR /app
+
+
+# �˽׶��������ɷ�����??
+FROM mcr.microsoft.com/dotnet/sdk:10.0 AS build
+ARG BUILD_CONFIGURATION=Release
+WORKDIR /src
+COPY ["Models/Room/SupRoomInfo/Ingestion/SupRoomInfoRedisToSql.Cli/SupRoomInfoRedisToSql.Cli.csproj", "Models/Room/SupRoomInfo/Ingestion/SupRoomInfoRedisToSql.Cli/"]
+COPY ["BaseFrameworks/VBaseFramework.Core/VBaseFramework.Core.csproj", "BaseFrameworks/VBaseFramework.Core/"]
+COPY ["BaseFrameworks/VBaseFramework.ServiceDefaults/VBaseFramework.ServiceDefaults.csproj", "BaseFrameworks/VBaseFramework.ServiceDefaults/"]
+COPY ["Models/Room/SupRoomInfo/Ingestion/SupRoomInfoIngestion.App/SupRoomInfoIngestion.App.csproj", "Models/Room/SupRoomInfo/Ingestion/SupRoomInfoIngestion.App/"]
+COPY ["Providers/Infrastructure.Sql.RoomMapping/Infrastructure.Sql.RoomMapping.csproj", "Providers/Infrastructure.Sql.RoomMapping/"]
+COPY ["Models/Room/RoomMatchings/Core/RoomMatch.Domain/RoomMatch.Domain.csproj", "Models/Room/RoomMatchings/Core/RoomMatch.Domain/"]
+COPY ["Models/Base/Shared/OTA.Domain/OTA.Domain.csproj", "Models/Base/Shared/OTA.Domain/"]
+COPY ["Models/Room/RoomMatchings/Core/RoomMatch.Core.App/RoomMatch.Core.App.csproj", "Models/Room/RoomMatchings/Core/RoomMatch.Core.App/"]
+COPY ["Models/Room/SupRoomInfo/Ingestion/SupRoomInfoIngestion.Infra/Infrastructure.SupRoomInfoIngestion.App.csproj", "Models/Room/SupRoomInfo/Ingestion/SupRoomInfoIngestion.Infra/"]
+COPY ["Providers/Infrastructure.Redis.SupRoomInfo.CachePriceDiscovery/Infrastructure.Redis.SupRoomInfo.CachePriceDiscovery.csproj", "Providers/Infrastructure.Redis.SupRoomInfo.CachePriceDiscovery/"]
+COPY ["Providers/Infrastructure.Redis.SupRoomInfo.DirectPriceDiscovery/Infrastructure.Redis.SupRoomInfo.DirectPriceDiscovery.csproj", "Providers/Infrastructure.Redis.SupRoomInfo.DirectPriceDiscovery/"]
+COPY ["Models/Room/RoomMatchings/Core/RoomMatch.Infra/RoomMatch.Infra.csproj", "Models/Room/RoomMatchings/Core/RoomMatch.Infra/"]
+COPY ["Providers/Infrastructure.HTTP.SupStaticData/Infrastructure.HTTP.SupStaticData.csproj", "Providers/Infrastructure.HTTP.SupStaticData/"]
+COPY ["Providers/Infrastructure.Redis.RoomMatchingRedis/Infrastructure.Redis.RoomMatchingRedis.csproj", "Providers/Infrastructure.Redis.RoomMatchingRedis/"]
+COPY ["Providers/Infrastructure.Sql.MengTuAPI/Infrastructure.Sql.MengTuAPI.csproj", "Providers/Infrastructure.Sql.MengTuAPI/"]
+COPY ["Providers/Infrastructure.Sql.MengTuSup/Infrastructure.Sql.MengTuSup.csproj", "Providers/Infrastructure.Sql.MengTuSup/"]
+COPY ["Providers/Infrastructure.Sql.MixedData/Infrastructure.Sql.MixedData.csproj", "Providers/Infrastructure.Sql.MixedData/"]
+RUN dotnet restore "./Models/Room/SupRoomInfo/Ingestion/SupRoomInfoRedisToSql.Cli/SupRoomInfoRedisToSql.Cli.csproj"
+COPY . .
+WORKDIR "/src/Models/Room/SupRoomInfo/Ingestion/SupRoomInfoRedisToSql.Cli"
+RUN dotnet build "./SupRoomInfoRedisToSql.Cli.csproj" -c $BUILD_CONFIGURATION -o /app/build
+
+# �˽׶����ڷ���Ҫ���Ƶ����ս׶εķ�����Ŀ
+FROM build AS publish
+ARG BUILD_CONFIGURATION=Release
+RUN dotnet publish "./SupRoomInfoRedisToSql.Cli.csproj" -c $BUILD_CONFIGURATION -o /app/publish /p:UseAppHost=false
+
+# �˽׶���������ʹ�ã����ڳ���ģʽ�´� VS ����ʱʹ??�ڲ�ʹ�õ�������ʱΪĬ��??
+FROM base AS final
+WORKDIR /app
+COPY --from=publish /app/publish .
+ENTRYPOINT ["dotnet", "SupRoomInfoRedisToSql.Cli.dll"]

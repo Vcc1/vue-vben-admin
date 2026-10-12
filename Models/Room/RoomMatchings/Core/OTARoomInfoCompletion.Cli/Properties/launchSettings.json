@@ -1,0 +1,10 @@
+﻿{
+  "profiles": {
+    "OTARoomInfoCompletion": {
+      "commandName": "Project"
+    },
+    "Container (Dockerfile)": {
+      "commandName": "Docker"
+    }
+  }
+}

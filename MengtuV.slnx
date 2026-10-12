@@ -1,0 +1,199 @@
+<Solution>
+  <Folder Name="/BaseFrameworks/">
+    <Project Path="BaseFrameworks/VBaseFramework.Core/VBaseFramework.Core.csproj" />
+    <Project Path="BaseFrameworks/VBaseFramework.ServiceDefaults/VBaseFramework.ServiceDefaults.csproj" Id="4535a6ed-2396-4699-a879-75bad01832ea" />
+  </Folder>
+  <Folder Name="/Hosts/">
+    <Project Path="Hosts/Admin.Host/Admin.Host.csproj" Id="efe4532a-26b4-4b1b-af05-b51a0b1f4759" />
+    <Project Path="Hosts/Agent.Host/Agent.Host.csproj" />
+    <Project Path="Hosts/Tests.Host.Tests/Tests.Host.Tests.csproj" />
+    <Project Path="Hosts/Tests.Host/Tests.Host.csproj" Id="2d9a328f-7b22-4c7e-809d-be634a966a19" />
+  </Folder>
+  <Folder Name="/Models/" />
+  <Folder Name="/Models/0.Base/" />
+  <Folder Name="/Models/0.Base/Shared/">
+    <Project Path="Models/Base/Shared/OTA.Domain/OTA.Domain.csproj" Id="6fee78ca-3838-4c9d-b2c0-e154a16ae5e5" />
+  </Folder>
+  <Folder Name="/Models/5.AI/" />
+  <Folder Name="/Models/5.AI/AgentPlatform/">
+    <Project Path="Models/AI/AgentPlatform/AgentPlatform.Api/AgentPlatform.Api.csproj" />
+    <Project Path="Models/AI/AgentPlatform/AgentPlatform.App/AgentPlatform.App.csproj" />
+    <Project Path="Models/AI/AgentPlatform/AgentPlatform.App/Tests/AgentPlatform.App.Tests.csproj" />
+    <Project Path="Models/AI/AgentPlatform/AgentPlatform.Client/AgentPlatform.Client.csproj" />
+    <Project Path="Models/AI/AgentPlatform/AgentPlatform.Contracts/AgentPlatform.Contracts.csproj" />
+    <Project Path="Models/AI/AgentPlatform/AgentPlatform.Extensibility/AgentPlatform.Extensibility.csproj" />
+    <Project Path="Models/AI/AgentPlatform/AgentPlatform.Infra/AgentPlatform.Infra.csproj" />
+  </Folder>
+  <Folder Name="/Models/1.Hotel/" />
+  <Folder Name="/Models/1.Hotel/OTAHotelInfoSync/">
+    <Project Path="Models/Hotel/OTAHotelInfoSync/OTAHotelInfoSync.App/OTAHotelInfoSync.App.csproj" />
+    <Project Path="Models/Hotel/OTAHotelInfoSync/OTAHotelInfoSync.Cli/OTAHotelInfoSync.Cli.csproj" />
+    <Project Path="Models/Hotel/OTAHotelInfoSync/OTAHotelInfoSync.Infra/OTAHotelInfoSync.Infra.csproj" />
+  </Folder>
+  <Folder Name="/Models/1.Hotel/HotelMatching/" />
+  <Folder Name="/Models/1.Hotel/HotelMatching/MatchingPipeline/">
+    <Project Path="Models/Hotel/HotelMatching/MatchingPipeline/HotelMatchingPipeline.AgentTools/HotelMatchingPipeline.AgentTools.csproj" />
+    <Project Path="Models/Hotel/HotelMatching/MatchingPipeline/HotelMatchingPipeline.Api/HotelMatchingPipeline.Api.csproj" />
+    <Project Path="Models/Hotel/HotelMatching/MatchingPipeline/HotelMatchingPipeline.App/HotelMatchingPipeline.App.csproj" />
+    <Project Path="Models/Hotel/HotelMatching/MatchingPipeline/HotelMatchingPipeline.Cli/HotelMatchingPipeline.Cli.csproj" />
+    <Project Path="Models/Hotel/HotelMatching/MatchingPipeline/HotelMatchingPipeline.Domain/HotelMatchingPipeline.Domain.csproj" />
+    <Project Path="Models/Hotel/HotelMatching/MatchingPipeline/HotelMatchingPipeline.Domain/Tests/HotelMatchingPipeline.Domain.Tests.csproj" />
+    <Project Path="Models/Hotel/HotelMatching/MatchingPipeline/HotelMatchingPipeline.Infra/HotelMatchingPipeline.Infra.csproj" />
+    <Project Path="Models/Hotel/HotelMatching/MatchingPipeline/HotelMatchingPipeline.Infra/Tests/HotelMatchingPipeline.Infra.Tests.csproj" />
+  </Folder>
+  <Folder Name="/Models/1.Hotel/SupplierStaticData/">
+    <Project Path="Models/Hotel/SupplierStaticData/SupplierStaticData.App/SupplierStaticData.App.csproj" />
+  </Folder>
+  <Folder Name="/Models/1.Hotel/HotelResearch/">
+    <Project Path="Models/Hotel/HotelResearch/HotelResearch.Api/HotelResearch.Api.csproj" />
+    <Project Path="Models/Hotel/HotelResearch/HotelResearch.App/HotelResearch.App.csproj" />
+    <Project Path="Models/Hotel/HotelResearch/HotelResearch.Client/HotelResearch.Client.csproj" />
+    <Project Path="Models/Hotel/HotelResearch/HotelResearch.Contracts/HotelResearch.Contracts.csproj" />
+    <Project Path="Models/Hotel/HotelResearch/HotelResearch.Infra/HotelResearch.Infra.csproj" />
+  </Folder>
+  <Folder Name="/Models/1.Hotel/HotelBusiness/">
+    <Project Path="Models/Hotel/HotelBusiness/HotelBusiness.Api/HotelBusiness.Api.csproj" />
+    <Project Path="Models/Hotel/HotelBusiness/HotelBusiness.App/HotelBusiness.App.csproj" />
+    <Project Path="Models/Hotel/HotelBusiness/HotelBusiness.Contracts/HotelBusiness.Contracts.csproj" />
+    <Project Path="Models/Hotel/HotelBusiness/HotelBusiness.Infra/HotelBusiness.Infra.csproj" />
+  </Folder>
+  <Folder Name="/Models/2.Room/" />
+  <Folder Name="/Models/2.Room/RoomDataProcessings/" />
+  <Folder Name="/Models/2.Room/RoomDataProcessings/QueryPriceSupRoomBuilder/">
+    <Project Path="Models/Room/RoomDataProcessings/QueryPriceSupRoomBuilder/QueryPriceSupRoomBuilder.App/QueryPriceSupRoomBuilder.App.csproj" />
+    <Project Path="Models/Room/RoomDataProcessings/QueryPriceSupRoomBuilder/QueryPriceSupRoomBuilder.Infra/QueryPriceSupRoomBuilder.Infra.csproj" />
+    <Project Path="Models/Room/RoomDataProcessings/QueryPriceSupRoomBuilder/QueryPriceSupRoomBuilderToRedis.Cli/QueryPriceSupRoomBuilderToRedis.Cli.csproj" />
+  </Folder>
+  <Folder Name="/Models/2.Room/RoomMatchings/" />
+  <Folder Name="/Models/2.Room/RoomMatchings/Core/">
+    <Project Path="Models/Room/RoomMatchings/Core/OTARoomInfoCompletion.Cli/OTARoomInfoCompletion.Cli.csproj" />
+    <Project Path="Models/Room/RoomMatchings/Core/RoomMatch.Api/RoomMatch.Api.csproj" />
+    <Project Path="Models/Room/RoomMatchings/Core/RoomMatch.App/RoomMatch.App.csproj" />
+    <Project Path="Models/Room/RoomMatchings/Core/RoomMatch.Core.App/RoomMatch.Core.App.csproj" />
+    <Project Path="Models/Room/RoomMatchings/Core/RoomMatch.Domain/RoomMatch.Domain.csproj" />
+    <Project Path="Models/Room/RoomMatchings/Core/RoomMatch.Infra/RoomMatch.Infra.csproj" />
+    <Project Path="Models/Room/RoomMatchings/Core/RoomMatching.Cli/RoomMatching.Cli.csproj" Id="ab3a3ec8-11a5-4429-a37f-bbc4d7bb04bc" />
+  </Folder>
+  <Folder Name="/Models/2.Room/RoomMatchings/Admin/">
+    <Project Path="Models/Room/RoomMatchings/Admin/RoomMatch.Admin.Api/RoomMatch.Admin.Api.csproj" />
+    <Project Path="Models/Room/RoomMatchings/Admin/RoomMatch.Admin.App/RoomMatch.Admin.App.csproj" />
+    <Project Path="Models/Room/RoomMatchings/Admin/RoomMatch.Admin.Contracts/RoomMatch.Admin.Contracts.csproj" />
+    <Project Path="Models/Room/RoomMatchings/Admin/RoomMatch.Admin.Infra/RoomMatch.Admin.Infra.csproj" />
+  </Folder>
+  <Folder Name="/Models/2.Room/RoomMatchings/OTARoomBuilder/">
+    <Project Path="Models/Room/RoomMatchings/OTARoomBuilder/OTARoomBuilder.App/OTARoomBuilder.App.csproj" />
+    <Project Path="Models/Room/RoomMatchings/OTARoomBuilder/OTARoomBuilder.App/Tests/OTARoomBuilder.App.Tests.csproj" />
+    <Project Path="Models/Room/RoomMatchings/OTARoomBuilder/OTARoomBuilder.Cli/OTARoomBuilder.Cli.csproj" />
+    <Project Path="Models/Room/RoomMatchings/OTARoomBuilder/OTARoomBuilder.Infra/OTARoomBuilder.Infra.csproj" />
+  </Folder>
+  <Folder Name="/Models/2.Room/RoomMatchings/Statistics/">
+    <Project Path="Models/Room/RoomMatchings/Statistics/RoomMappingSupStaticRoomInfoStatistics.Cli/RoomMappingSupStaticRoomInfoStatistics.Cli.csproj" />
+    <Project Path="Models/Room/RoomMatchings/Statistics/RoomMatchingStatistics.Cli/RoomMatchingStatistics.Cli.csproj" />
+  </Folder>
+  <Folder Name="/Models/2.Room/SupRoomInfo/" />
+  <Folder Name="/Models/2.Room/SupRoomInfo/Ingestion/">
+    <Project Path="Models/Room/SupRoomInfo/Ingestion/SupRoomInfoIngestion.App/SupRoomInfoIngestion.App.csproj" />
+    <Project Path="Models/Room/SupRoomInfo/Ingestion/SupRoomInfoIngestion.Infra/SupRoomInfoIngestion.Infra.csproj" />
+    <Project Path="Models/Room/SupRoomInfo/Ingestion/SupRoomInfoRedisToSql.Cli/SupRoomInfoRedisToSql.Cli.csproj" Id="0b2d0dc9-abae-4b83-8ee2-e96c3adca58c" />
+  </Folder>
+  <Folder Name="/Models/3.Price/" />
+  <Folder Name="/Models/3.Price/ExpediaChaseRoom/">
+    <Project Path="Models/Price/ExpediaChaseRoom/ExpediaChaseRoom.App/ExpediaChaseRoom.App.csproj" Id="4a958dbd-d2de-4482-9149-782b9e7c2bb8" />
+    <Project Path="Models/Price/ExpediaChaseRoom/ExpediaChaseRoom.Infra/ExpediaChaseRoom.Infra.csproj" />
+    <Project Path="Models/Price/ExpediaChaseRoom/ExpediaChaseRooms.Cli/ExpediaChaseRooms.Cli.csproj" />
+  </Folder>
+  <Folder Name="/Models/3.Price/HotelPriceAvailability/">
+    <Project Path="Models/Price/HotelPriceAvailability/HotelPriceAvailability.App/HotelPriceAvailability.App.csproj" />
+    <Project Path="Models/Price/HotelPriceAvailability/HotelPriceAvailability.App/Tests/HotelPriceAvailability.App.Tests.csproj" />
+    <Project Path="Models/Price/HotelPriceAvailability/HotelPriceAvailability.Cli/HotelPriceAvailability.Cli.csproj" />
+    <Project Path="Models/Price/HotelPriceAvailability/HotelPriceAvailability.Domain/HotelPriceAvailability.Domain.csproj" />
+    <Project Path="Models/Price/HotelPriceAvailability/HotelPriceAvailability.Domain/Tests/HotelPriceAvailability.Domain.Tests.csproj" />
+    <Project Path="Models/Price/HotelPriceAvailability/HotelPriceAvailability.Infra/HotelPriceAvailability.Infra.csproj" />
+    <Project Path="Models/Price/HotelPriceAvailability/HotelPriceAvailability.Infra/Tests/HotelPriceAvailability.Infra.Tests.csproj" />
+  </Folder>
+  <Folder Name="/Models/4.MetricsAndAlerts/" />
+  <Folder Name="/Models/4.MetricsAndAlerts/GrafanaAlert/">
+    <Project Path="Models/MetricsAndAlerts/GrafanaAlert/GrafanaAlert.App/GrafanaAlert.App.csproj" />
+    <Project Path="Models/MetricsAndAlerts/GrafanaAlert/GrafanaAlert.Infra/GrafanaAlert.Infra.csproj" />
+    <Project Path="Models/MetricsAndAlerts/GrafanaAlert/GrafanaAlertWebhook.Api/GrafanaAlertWebhook.Api.csproj" />
+  </Folder>
+  <Folder Name="/Models/4.MetricsAndAlerts/MetricsAndAlerts/">
+    <Project Path="Models/MetricsAndAlerts/MetricsAndAlerts/MetricsAndAlerts.Api/MetricsAndAlerts.Api.csproj" />
+    <Project Path="Models/MetricsAndAlerts/MetricsAndAlerts/MetricsAndAlerts.App/MetricsAndAlerts.App.csproj" />
+    <Project Path="Models/MetricsAndAlerts/MetricsAndAlerts/MetricsAndAlerts.Infra/MetricsAndAlerts.Infra.csproj" />
+    <Project Path="Models/MetricsAndAlerts/MetricsAndAlerts/TestMetrics.Cli/TestMetrics.Cli.csproj" Id="7130c2f8-f08f-4511-acc4-4f779430add9" />
+  </Folder>
+  <Folder Name="/Models/6.Data/" />
+  <Folder Name="/Models/6.Data/Backoffice/">
+    <Project Path="Models/Backoffice/Backoffice.Api/Backoffice.Api.csproj" />
+    <Project Path="Models/Backoffice/Backoffice.App/Backoffice.App.csproj" />
+    <Project Path="Models/Backoffice/Backoffice.Infra/Backoffice.Infra.csproj" />
+  </Folder>
+  <Folder Name="/Models/6.Data/Backoffice/AdminIdentity/">
+    <Project Path="Models/Backoffice/AdminIdentity/AdminIdentity.Api/AdminIdentity.Api.csproj" />
+    <Project Path="Models/Backoffice/AdminIdentity/AdminIdentity.App/AdminIdentity.App.csproj" />
+    <Project Path="Models/Backoffice/AdminIdentity/AdminIdentity.Infra/AdminIdentity.Infra.csproj" />
+  </Folder>
+  <Folder Name="/Models/6.Data/Backoffice/Auditing/">
+    <Project Path="Models/Backoffice/Auditing/Auditing.Api/Auditing.Api.csproj" />
+    <Project Path="Models/Backoffice/Auditing/Auditing.App/Auditing.App.csproj" />
+    <Project Path="Models/Backoffice/Auditing/Auditing.Infra/Auditing.Infra.csproj" />
+  </Folder>
+  <Folder Name="/Models/6.Data/Backoffice/TaskScheduling/">
+    <Project Path="Models/Backoffice/TaskScheduling/TaskScheduling.Api/TaskScheduling.Api.csproj" />
+    <Project Path="Models/Backoffice/TaskScheduling/TaskScheduling.App/TaskScheduling.App.csproj" />
+    <Project Path="Models/Backoffice/TaskScheduling/TaskScheduling.Contracts/TaskScheduling.Contracts.csproj" />
+    <Project Path="Models/Backoffice/TaskScheduling/TaskScheduling.Infra/TaskScheduling.Infra.csproj" />
+  </Folder>
+  <Folder Name="/Models/6.Data/Backoffice/OidcServer/">
+    <Project Path="Models/Backoffice/OidcServer/OidcServer.Api/OidcServer.Api.csproj" />
+    <Project Path="Models/Backoffice/OidcServer/OidcServer.App/OidcServer.App.csproj" />
+    <Project Path="Models/Backoffice/OidcServer/OidcServer.Infra/OidcServer.Infra.csproj" />
+  </Folder>
+  <Folder Name="/Models/6.Data/Backoffice/ApiGateway/">
+    <Project Path="Models/Backoffice/ApiGateway/ApiGateway.Api/ApiGateway.Api.csproj" />
+    <Project Path="Models/Backoffice/ApiGateway/ApiGateway.App/ApiGateway.App.csproj" />
+    <Project Path="Models/Backoffice/ApiGateway/ApiGateway.Domain/ApiGateway.Domain.csproj" />
+    <Project Path="Models/Backoffice/ApiGateway/ApiGateway.Infra/ApiGateway.Infra.csproj" />
+  </Folder>
+  <Folder Name="/Models/6.Data/Backoffice/Notification/">
+    <Project Path="Models/Backoffice/Notification/Notification.Api/Notification.Api.csproj" />
+    <Project Path="Models/Backoffice/Notification/Notification.App/Notification.App.csproj" />
+    <Project Path="Models/Backoffice/Notification/Notification.Contracts/Notification.Contracts.csproj" />
+    <Project Path="Models/Backoffice/Notification/Notification.Infra/Notification.Infra.csproj" />
+  </Folder>
+  <Folder Name="/7.Documentation/">
+    <Project Path="Documentation/Documentation.Driver/Documentation.Driver.csproj" />
+  </Folder>
+  <Folder Name="/Providers/">
+    <Project Path="Providers/Infrastructure.Sql.Admin/Infrastructure.Sql.Admin.csproj" />
+    <Project Path="Providers/Infrastructure.Sql.Admin/Tests/Infrastructure.Sql.Admin.Tests.csproj" />
+    <Project Path="Providers/Infrastructure.HTTP.OTAHotelInfo/Infrastructure.HTTP.OTAHotelInfo.csproj" />
+    <Project Path="Providers/Infrastructure.HTTP.OTARoomCreate/Infrastructure.HTTP.OTARoomCreate.csproj" />
+    <Project Path="Providers/Infrastructure.HTTP.Prometheus/Infrastructure.HTTP.Prometheus.csproj" />
+    <Project Path="Providers/Infrastructure.HTTP.QueryPrice/Infrastructure.HTTP.QueryPrice.csproj" />
+    <Project Path="Providers/Infrastructure.HTTP.SupStaticData/Infrastructure.HTTP.SupStaticData.csproj" Id="f8ad0402-711b-42ab-9c53-7b979733f0f2" />
+    <Project Path="Providers/Infrastructure.HTTP.WorkWechatAlert/Infrastructure.HTTP.WorkWechatAlert.csproj" />
+    <Project Path="Providers/Infrastructure.Redis.HotelMatchingRedis/Infrastructure.Redis.HotelMatchingRedis.csproj" />
+    <Project Path="Providers/Infrastructure.Redis.RoomMatchingRedis/Infrastructure.Redis.RoomMatchingRedis.csproj" Id="c5478d2c-1836-4673-9d51-30de376f8c62" />
+    <Project Path="Providers/Infrastructure.Redis.SupPriceCahce/Infrastructure.Redis.SupPriceCahce.csproj" />
+    <Project Path="Providers/Infrastructure.Redis.SupRoomInfo.CachePriceDiscovery/Infrastructure.Redis.SupRoomInfo.CachePriceDiscovery.csproj" />
+    <Project Path="Providers/Infrastructure.Redis.SupRoomInfo.DirectPriceDiscovery/Infrastructure.Redis.SupRoomInfo.DirectPriceDiscovery.csproj" />
+    <Project Path="Providers/Infrastructure.Redis.TriggerQueue/Infrastructure.Redis.TriggerQueue.csproj" />
+    <Project Path="Providers/Infrastructure.Sql.MengTuAPI/Infrastructure.Sql.MengTuAPI.csproj" Id="531bea02-a581-4c76-8a52-b2982c322da4" />
+    <Project Path="Providers/Infrastructure.Sql.MengTuSup/Infrastructure.Sql.MengTuSup.csproj" />
+    <Project Path="Providers/Infrastructure.Sql.MengTuYaoChi/Infrastructure.Sql.MengTuYaoChi.csproj" />
+    <Project Path="Providers/Infrastructure.Sql.MengTuYDOTA/Infrastructure.Sql.MengTuYDOTA.csproj" Id="f9a7706a-ccdd-4b71-8080-debf08e4b8b3" />
+    <Project Path="Providers/Infrastructure.Sql.MetricsAndAlerts/Infrastructure.Sql.MetricsAndAlerts.csproj" />
+    <Project Path="Providers/Infrastructure.Sql.MixedData/Infrastructure.Sql.MixedData.csproj" Id="220d98af-cc48-4711-863e-83f1330452a9" />
+    <Project Path="Providers/Infrastructure.Sql.RoomMapping/Infrastructure.Sql.RoomMapping.csproj" Id="071b4704-9365-406a-9128-0eff436be5f5" />
+    <Project Path="Providers/Infrastructure.Sql.SupCacheDB/Infrastructure.Sql.SupCacheDB.csproj" />
+    <Project Path="Providers/Infrastructure.SupplierStaticData/Infrastructure.SupplierStaticData.csproj" />
+    <Project Path="Providers/Infrastructure.Web.Taap/Infrastructure.Web.Taap.csproj" Id="29b92600-4701-4d7c-9245-40e841b2dde9" />
+  </Folder>
+  <Folder Name="/Tests/">
+    <Project Path="Models/Backoffice/Backoffice.Infra/Tests/Backoffice.Infra.Tests.csproj" />
+    <Project Path="Models/Hotel/HotelBusiness/HotelBusiness.Infra/Tests/HotelBusiness.Infra.Tests.csproj" />
+    <Project Path="Models/Hotel/HotelResearch/HotelResearch.App/Tests/HotelResearch.App.Tests.csproj" />
+  </Folder>
+</Solution>

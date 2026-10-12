@@ -1,0 +1,34 @@
+@GrafanaAlertWebhook_HostAddress = http://n.v.m-tu.com/
+
+POST {{GrafanaAlertWebhook_HostAddress}}/api/grafana/alerts
+Content-Type: application/json
+Accept: application/json
+
+{
+  "receiver": "internal-workwechat",
+  "status": "firing",
+  "title": "Test alert",
+  "message": "Hello, this is a test alert",
+  "commonLabels": {
+    "notify_users": "zhangwei,tangwei",
+    "agent_id": "1000026",
+    "env": "prod"
+  },
+  "alerts": [
+    {
+      "status": "firing",
+      "labels": {
+        "alertname": "HighCpuUsage",
+        "severity": "critical",
+        "instance": "10.0.0.12:9100"
+      },
+      "annotations": {
+        "summary": "CPU usage is too high",
+        "description": "CPU usage > 90%"
+      },
+      "startsAt": "2026-05-28T15:30:00+08:00"
+    }
+  ]
+}
+
+###

@@ -1,0 +1,70 @@
+<Project Sdk="Microsoft.NET.Sdk.Web">
+
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <UserSecretsId>fd874723-a394-49f5-962f-0c418369f7fb</UserSecretsId>
+    <DockerDefaultTargetOS>Linux</DockerDefaultTargetOS>
+    <DockerfileContext>..\..</DockerfileContext>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.AspNetCore.OpenApi" Version="10.0.9" />
+    <PackageReference Include="Microsoft.VisualStudio.Azure.Containers.Tools.Targets" Version="1.23.0" />
+    <PackageReference Include="NLog.Extensions.Logging" Version="6.1.2" />
+    <PackageReference Include="Swashbuckle.AspNetCore.SwaggerUI" Version="6.6.2" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\Models\Backoffice\Backoffice.Api\Backoffice.Api.csproj" />
+    <ProjectReference Include="..\..\Models\Backoffice\Backoffice.App\Backoffice.App.csproj" />
+    <ProjectReference Include="..\..\Models\Backoffice\Backoffice.Infra\Backoffice.Infra.csproj" />
+    <ProjectReference Include="..\..\Models\Backoffice\AdminIdentity\AdminIdentity.Api\AdminIdentity.Api.csproj" />
+    <ProjectReference Include="..\..\Models\Backoffice\AdminIdentity\AdminIdentity.App\AdminIdentity.App.csproj" />
+    <ProjectReference Include="..\..\Models\Backoffice\AdminIdentity\AdminIdentity.Infra\AdminIdentity.Infra.csproj" />
+    <ProjectReference Include="..\..\Models\Backoffice\Auditing\Auditing.App\Auditing.App.csproj" />
+    <ProjectReference Include="..\..\Models\Backoffice\Auditing\Auditing.Infra\Auditing.Infra.csproj" />
+    <ProjectReference Include="..\..\Models\Backoffice\Auditing\Auditing.Api\Auditing.Api.csproj" />
+    <ProjectReference Include="..\..\Models\Backoffice\OidcServer\OidcServer.Api\OidcServer.Api.csproj" />
+    <ProjectReference Include="..\..\Models\Backoffice\OidcServer\OidcServer.App\OidcServer.App.csproj" />
+    <ProjectReference Include="..\..\Models\Backoffice\OidcServer\OidcServer.Infra\OidcServer.Infra.csproj" />
+    <ProjectReference Include="..\..\Models\Backoffice\TaskScheduling\TaskScheduling.Api\TaskScheduling.Api.csproj" />
+    <ProjectReference Include="..\..\Models\Backoffice\TaskScheduling\TaskScheduling.App\TaskScheduling.App.csproj" />
+    <ProjectReference Include="..\..\Models\Backoffice\TaskScheduling\TaskScheduling.Infra\TaskScheduling.Infra.csproj" />
+    <ProjectReference Include="..\..\Models\Backoffice\Notification\Notification.Api\Notification.Api.csproj" />
+    <ProjectReference Include="..\..\Models\Backoffice\Notification\Notification.App\Notification.App.csproj" />
+    <ProjectReference Include="..\..\Models\Backoffice\Notification\Notification.Contracts\Notification.Contracts.csproj" />
+    <ProjectReference Include="..\..\Models\Backoffice\Notification\Notification.Infra\Notification.Infra.csproj" />
+    <ProjectReference Include="..\..\Models\Backoffice\ApiGateway\ApiGateway.Api\ApiGateway.Api.csproj" />
+    <ProjectReference Include="..\..\Models\Backoffice\ApiGateway\ApiGateway.App\ApiGateway.App.csproj" />
+    <ProjectReference Include="..\..\Models\Backoffice\ApiGateway\ApiGateway.Infra\ApiGateway.Infra.csproj" />
+    <ProjectReference Include="..\..\Models\AI\AgentPlatform\AgentPlatform.Api\AgentPlatform.Api.csproj" />
+    <ProjectReference Include="..\..\Models\AI\AgentPlatform\AgentPlatform.App\AgentPlatform.App.csproj" />
+    <ProjectReference Include="..\..\Models\AI\AgentPlatform\AgentPlatform.Infra\AgentPlatform.Infra.csproj" />
+    <ProjectReference Include="..\..\Models\Room\RoomMatchings\Core\RoomMatch.Api\RoomMatch.Api.csproj" />
+    <ProjectReference Include="..\..\Models\Room\RoomMatchings\Core\RoomMatch.App\RoomMatch.App.csproj" />
+    <ProjectReference Include="..\..\Models\Room\RoomMatchings\Core\RoomMatch.Infra\RoomMatch.Infra.csproj" />
+    <ProjectReference Include="..\..\Models\Room\RoomMatchings\Admin\RoomMatch.Admin.Api\RoomMatch.Admin.Api.csproj" />
+    <ProjectReference Include="..\..\Models\Room\RoomMatchings\Admin\RoomMatch.Admin.App\RoomMatch.Admin.App.csproj" />
+    <ProjectReference Include="..\..\Models\Room\RoomMatchings\Admin\RoomMatch.Admin.Infra\RoomMatch.Admin.Infra.csproj" />
+    <ProjectReference Include="..\..\Models\Hotel\HotelMatching\MatchingPipeline\HotelMatchingPipeline.AgentTools\HotelMatchingPipeline.AgentTools.csproj" />
+    <ProjectReference Include="..\..\Models\Hotel\HotelMatching\MatchingPipeline\HotelMatchingPipeline.Api\HotelMatchingPipeline.Api.csproj" />
+    <ProjectReference Include="..\..\Models\Hotel\HotelMatching\MatchingPipeline\HotelMatchingPipeline.App\HotelMatchingPipeline.App.csproj" />
+    <ProjectReference Include="..\..\Models\Hotel\HotelMatching\MatchingPipeline\HotelMatchingPipeline.Infra\HotelMatchingPipeline.Infra.csproj" />
+    <ProjectReference Include="..\..\Providers\Infrastructure.Sql.RoomMapping\Infrastructure.Sql.RoomMapping.csproj" />
+    <ProjectReference Include="..\..\Providers\Infrastructure.Sql.Admin\Infrastructure.Sql.Admin.csproj" />
+    <ProjectReference Include="..\..\BaseFrameworks\VBaseFramework.Core\VBaseFramework.Core.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Reference Include="MengTu.Connectmate.Client">
+      <HintPath>..\..\999.DLL\Connectmate\net10.0\MengTu.Connectmate.Client.dll</HintPath>
+    </Reference>
+  </ItemGroup>
+
+  <ItemGroup>
+    <Folder Include="Controllers\" />
+  </ItemGroup>
+
+</Project>

@@ -1,0 +1,238 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Admin.Host 调度管理</title>
+  <link rel="stylesheet" href="/admin/styles.css">
+</head>
+<body>
+  <main id="loginView" class="login-view">
+    <form id="loginForm" class="login-panel">
+      <div class="brand-mark">AH</div>
+      <h1>Admin.Host</h1>
+      <p>调度与访问管理</p>
+      <label>用户名<input id="loginUserName" autocomplete="username" required></label>
+      <label>密码<input id="loginPassword" type="password" autocomplete="current-password" required></label>
+      <button class="primary wide" type="submit">登录</button>
+      <div id="loginError" class="form-error" role="alert"></div>
+    </form>
+  </main>
+
+  <div id="appView" class="app" hidden>
+    <aside class="sidebar">
+      <div class="brand"><span class="brand-mark small">AH</span><strong>Admin.Host</strong></div>
+      <nav id="navigation">
+        <button class="nav-item active" data-view="tasks">定时任务</button>
+        <button class="nav-item" data-view="runs">执行历史</button>
+        <button class="nav-item admin-only" data-view="users">用户管理</button>
+        <button class="nav-item admin-only" data-view="apiKeys">API Key</button>
+        <button class="nav-item admin-only" data-view="oidcClients">OIDC 应用</button>
+        <button class="nav-item admin-only" data-view="oidcScopes">权限范围</button>
+      </nav>
+      <div class="account">
+        <strong id="accountName"></strong>
+        <span id="accountRoles"></span>
+        <button id="logoutButton" class="quiet" type="button">退出</button>
+      </div>
+    </aside>
+
+    <section class="workspace">
+      <header class="topbar">
+        <div><h1 id="pageTitle">定时任务</h1><p id="pageMeta"></p></div>
+        <div id="pageActions"></div>
+        <div class="user-menu-wrap">
+          <button id="userMenuButton" class="user-menu-btn" type="button">
+            <span class="user-avatar" id="topbarAvatar"></span>
+            <span id="topbarName"></span>
+            <span class="caret"></span>
+          </button>
+          <div id="userDropdown" class="user-dropdown" hidden>
+            <button data-menu="profile">个人中心</button>
+            <button data-menu="logout" class="danger-text">退出</button>
+          </div>
+        </div>
+      </header>
+      <div id="notice" class="notice" hidden></div>
+      <div id="content" class="content"></div>
+    </section>
+  </div>
+
+  <dialog id="taskDialog" class="dialog large">
+    <form id="taskForm" method="dialog">
+      <div class="dialog-head"><h2 id="taskDialogTitle">新建任务</h2><button class="icon-button" type="button" data-close-dialog aria-label="关闭" title="关闭">×</button></div>
+      <input id="taskId" type="hidden"><input id="taskRowVersion" type="hidden">
+      <div class="form-grid">
+        <label>名称<input id="taskName" maxlength="200" required></label>
+        <label>类型<select id="taskType"><option value="Process">CMD / 程序</option><option value="Sql">SQL</option><option value="Program">程序集任务</option></select></label>
+        <label class="span-2">说明<input id="taskDescription" maxlength="1000"></label>
+        <label>Cron 表达式<input id="taskCron" value="0 0/5 * * * ?" required></label>
+        <label>时区<input id="taskTimeZone" value="Asia/Shanghai" required></label>
+        <label>超时（秒）<input id="taskTimeout" type="number" min="1" max="86400" value="300" required></label>
+        <label>失败重试次数<input id="taskRetryCount" type="number" min="0" max="20" value="0" required></label>
+        <label>重试间隔（秒）<input id="taskRetryInterval" type="number" min="1" max="86400" value="60" required></label>
+        <label>错过执行<select id="taskMisfire"><option value="DoNothing">跳过</option><option value="FireOnce">补执行一次</option></select></label>
+        <label class="check"><input id="taskEnabled" type="checkbox"> 创建后启用</label>
+        <label class="check"><input id="taskRetryTimeout" type="checkbox"> 超时后重试</label>
+      </div>
+
+      <fieldset id="processFields" class="type-fields">
+        <legend>CMD / 程序配置</legend>
+        <div class="form-grid">
+          <label>执行方式<select id="processShell"><option value="None">直接执行</option><option value="Cmd">CMD</option><option value="PowerShell">PowerShell</option><option value="Bash">Bash</option></select></label>
+          <label>可执行文件<input id="processExecutable"></label>
+          <label class="span-2">工作目录<input id="processWorkingDirectory"></label>
+          <label class="span-2">参数（JSON 数组）<textarea id="processArguments" rows="3">[]</textarea></label>
+          <label class="span-2">环境变量（JSON 对象）<textarea id="processEnvironment" rows="3">{}</textarea></label>
+        </div>
+      </fieldset>
+
+      <fieldset id="sqlFields" class="type-fields" hidden>
+        <legend>SQL 配置</legend>
+        <div class="form-grid">
+          <label>数据库<select id="sqlDatabase"></select></label>
+          <label>命令超时（秒）<input id="sqlTimeout" type="number" min="1" max="86400"></label>
+          <label class="span-2">SQL 命令<textarea id="sqlCommand" rows="9"></textarea></label>
+          <label class="span-2">参数（JSON 对象）<textarea id="sqlParameters" rows="4">{}</textarea></label>
+        </div>
+      </fieldset>
+
+      <fieldset id="programFields" class="type-fields" hidden>
+        <legend>程序集任务配置</legend>
+        <div class="form-grid">
+          <label class="span-2">Handler<select id="programHandler"></select></label>
+          <label class="span-2">参数（JSON 对象）<textarea id="programParameters" rows="7">{}</textarea></label>
+        </div>
+      </fieldset>
+      <div id="taskFormError" class="form-error" role="alert"></div>
+      <div class="dialog-actions"><button type="button" data-close-dialog>取消</button><button id="saveTaskButton" class="primary" type="submit">保存</button></div>
+    </form>
+  </dialog>
+
+  <dialog id="detailDialog" class="dialog large">
+    <div class="dialog-head"><h2 id="detailTitle"></h2><button id="closeDetail" class="icon-button" aria-label="关闭" title="关闭">×</button></div>
+    <div id="detailBody" class="detail-body"></div>
+  </dialog>
+
+  <dialog id="userDialog" class="dialog">
+    <form id="userForm" method="dialog">
+      <div class="dialog-head"><h2>新建用户</h2><button class="icon-button" type="button" data-close-dialog aria-label="关闭" title="关闭">×</button></div>
+      <div class="form-grid one">
+        <label>登录名<input id="newUserName" required></label>
+        <label>用户名<input id="newDisplayName" required></label>
+        <label>用户姓名<input id="newName" required></label>
+        <label>邮箱<input id="newEmail" type="email"></label>
+        <label>初始密码<input id="newPassword" type="password" autocomplete="new-password" required></label>
+        <label>角色<select id="newRole"><option value="Viewer">Viewer</option><option value="Operator">Operator</option><option value="Admin">Admin</option></select></label>
+      </div>
+      <div id="userFormError" class="form-error" role="alert"></div>
+      <div class="dialog-actions"><button type="button" data-close-dialog>取消</button><button class="primary" type="submit">创建</button></div>
+    </form>
+  </dialog>
+
+  <dialog id="passwordDialog" class="dialog">
+    <form id="passwordForm" method="dialog" novalidate>
+      <div class="dialog-head"><h2 id="passwordDialogTitle">修改密码</h2><button class="icon-button" type="button" data-close-dialog aria-label="关闭" title="关闭">×</button></div>
+      <input id="passwordUserId" type="hidden">
+      <div class="form-grid one">
+        <label>新密码<input id="resetPassword" type="password" autocomplete="new-password" required></label>
+        <label>确认密码<input id="confirmResetPassword" type="password" autocomplete="new-password" required></label>
+      </div>
+      <div id="passwordFormError" class="form-error" role="alert"></div>
+      <div class="dialog-actions"><button type="button" data-close-dialog>取消</button><button class="primary" type="submit">确认修改</button></div>
+    </form>
+  </dialog>
+
+  <dialog id="keyDialog" class="dialog">
+    <form id="keyForm" method="dialog">
+      <div class="dialog-head"><h2>新建 API Key</h2><button class="icon-button" type="button" data-close-dialog aria-label="关闭" title="关闭">×</button></div>
+      <div class="form-grid one">
+        <label>用户<select id="keyUser" required></select></label>
+        <label>名称<input id="keyName" required></label>
+        <label>过期时间<input id="keyExpires" type="datetime-local"></label>
+      </div>
+      <div id="keyFormError" class="form-error" role="alert"></div>
+      <div class="dialog-actions"><button type="button" data-close-dialog>取消</button><button class="primary" type="submit">创建</button></div>
+    </form>
+  </dialog>
+
+  <dialog id="oidcClientDialog" class="dialog large">
+    <form id="oidcClientForm" method="dialog">
+      <div class="dialog-head"><h2 id="oidcClientDialogTitle">新建 OIDC 应用</h2><button class="icon-button" type="button" data-close-dialog aria-label="关闭" title="关闭">×</button></div>
+      <input id="oidcClientId" type="hidden">
+      <div class="form-grid">
+        <label>Client ID<input id="oidcClientIdInput" maxlength="100" required></label>
+        <label>显示名称<input id="oidcClientDisplayName" maxlength="200" required></label>
+        <label>客户端类型<select id="oidcClientType"><option value="public">Public (SPA/移动端)</option><option value="confidential">Confidential (服务端)</option></select></label>
+        <label>同意类型<select id="oidcConsentType"><option value="simple">简单（一次同意）</option><option value="systematic">每次询问</option></select></label>
+        <label class="span-2">授权类型
+          <div id="oidcGrantTypes" style="display:flex;gap:12px;flex-wrap:wrap">
+            <label class="check"><input type="checkbox" value="authorization_code"> Authorization Code</label>
+            <label class="check"><input type="checkbox" value="client_credentials"> Client Credentials</label>
+            <label class="check"><input type="checkbox" value="refresh_token"> Refresh Token</label>
+          </div>
+        </label>
+        <label class="span-2">回调地址（每行一个）<textarea id="oidcRedirectUris" rows="3"></textarea></label>
+        <label class="span-2">登出回调（每行一个）<textarea id="oidcPostLogoutUris" rows="2"></textarea></label>
+        <label class="span-2">权限范围<div id="oidcScopeCheckboxes" style="display:flex;gap:12px;flex-wrap:wrap"></div></label>
+        <label>客户端密钥<input id="oidcClientSecret" type="password" autocomplete="new-password" placeholder="留空自动生成"></label>
+      </div>
+      <div id="oidcClientFormError" class="form-error" role="alert"></div>
+      <div class="dialog-actions"><button type="button" data-close-dialog>取消</button><button id="saveOidcClientButton" class="primary" type="submit">保存</button></div>
+    </form>
+  </dialog>
+
+  <dialog id="oidcScopeDialog" class="dialog">
+    <form id="oidcScopeForm" method="dialog">
+      <div class="dialog-head"><h2>新建权限范围</h2><button class="icon-button" type="button" data-close-dialog aria-label="关闭" title="关闭">×</button></div>
+      <div class="form-grid one">
+        <label>名称（scope 标识）<input id="oidcScopeName" maxlength="200" required></label>
+        <label>显示名称<input id="oidcScopeDisplayName" maxlength="200" required></label>
+        <label>说明<input id="oidcScopeDescription" maxlength="1000"></label>
+      </div>
+      <div id="oidcScopeFormError" class="form-error" role="alert"></div>
+      <div class="dialog-actions"><button type="button" data-close-dialog>取消</button><button class="primary" type="submit">创建</button></div>
+    </form>
+  </dialog>
+
+  <dialog id="profileDialog" class="dialog">
+    <form id="profileForm" method="dialog">
+      <div class="dialog-head"><h2>个人中心</h2><button class="icon-button" type="button" data-close-dialog aria-label="关闭" title="关闭">×</button></div>
+      <div class="profile-section">
+        <h3>基本信息</h3>
+        <div class="profile-info">
+          <div class="profile-field"><span class="profile-label">登录名</span><span id="profileLoginName" class="profile-value readonly"></span></div>
+          <div class="profile-field"><span class="profile-label">用户姓名</span><span id="profileName" class="profile-value readonly"></span></div>
+          <div class="profile-field"><span class="profile-label">邮箱</span><span id="profileEmail" class="profile-value readonly"></span></div>
+          <div class="profile-field"><span class="profile-label">手机号</span><span id="profilePhone" class="profile-value readonly"></span></div>
+          <div class="profile-field"><span class="profile-label">角色</span><span id="profileRoles" class="profile-value readonly"></span></div>
+          <div class="profile-field"><span class="profile-label">创建时间</span><span id="profileCreatedAt" class="profile-value readonly"></span></div>
+        </div>
+      </div>
+      <div class="profile-section">
+        <h3>编辑资料</h3>
+        <div class="form-grid one">
+          <label>用户名（昵称）<input id="profileDisplayName" required></label>
+        </div>
+      </div>
+      <div id="profileFormError" class="form-error" role="alert"></div>
+      <div class="dialog-actions"><button type="button" id="openChangePasswordBtn">修改密码</button><span style="flex:1"></span><button type="button" data-close-dialog>取消</button><button class="primary" type="submit">保存</button></div>
+    </form>
+  </dialog>
+
+  <dialog id="changePasswordDialog" class="dialog">
+    <form id="changePasswordForm" method="dialog" novalidate>
+      <div class="dialog-head"><h2>修改密码</h2><button class="icon-button" type="button" data-close-dialog aria-label="关闭" title="关闭">×</button></div>
+      <div class="form-grid one">
+        <label>当前密码<input id="currentPassword" type="password" autocomplete="current-password" required></label>
+        <label>新密码<input id="newPwd" type="password" autocomplete="new-password" required></label>
+        <label>确认新密码<input id="confirmNewPwd" type="password" autocomplete="new-password" required></label>
+      </div>
+      <div id="changePasswordError" class="form-error" role="alert"></div>
+      <div class="dialog-actions"><button type="button" data-close-dialog>取消</button><button class="primary" type="submit">确认修改</button></div>
+    </form>
+  </dialog>
+
+  <script src="/admin/app.js"></script>
+</body>
+</html>

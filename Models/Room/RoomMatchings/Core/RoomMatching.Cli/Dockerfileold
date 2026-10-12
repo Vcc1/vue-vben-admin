@@ -1,0 +1,28 @@
+# ���??https://aka.ms/customizecontainer ���˽�����Զ��������������??Visual Studio ���ʹ��??Dockerfile ����ӳ���Ը���ؽ��е���??
+
+# �˽׶������ڿ���ģ??Ĭ��Ϊ������??�´� VS ����??
+FROM mcr.microsoft.com/dotnet/aspnet:10.0 AS base
+USER $APP_UID
+WORKDIR /app
+
+
+# �˽׶��������ɷ�����??
+FROM mcr.microsoft.com/dotnet/sdk:10.0 AS build
+ARG BUILD_CONFIGURATION=Release
+WORKDIR /src
+COPY ["Models/Room/RoomMatchings/Core/RoomMatching.Cli/RoomMatching.Cli.csproj", "Models/Room/RoomMatchings/Core/RoomMatching.Cli/"]
+RUN dotnet restore "./Models/Room/RoomMatchings/Core/RoomMatching.Cli/RoomMatching.Cli.csproj"
+COPY . .
+WORKDIR "/src/Models/Room/RoomMatchings/Core/RoomMatching.Cli"
+RUN dotnet build "./RoomMatching.Cli.csproj" -c $BUILD_CONFIGURATION -o /app/build
+
+# �˽׶����ڷ���Ҫ���Ƶ����ս׶εķ�����Ŀ
+FROM build AS publish
+ARG BUILD_CONFIGURATION=Release
+RUN dotnet publish "./RoomMatching.Cli.csproj" -c $BUILD_CONFIGURATION -o /app/publish /p:UseAppHost=false
+
+# �˽׶���������ʹ�ã����ڳ���ģʽ�´� VS ����ʱʹ??�ڲ�ʹ�õ�������ʱΪĬ��??
+FROM base AS final
+WORKDIR /app
+COPY --from=publish /app/publish .
+ENTRYPOINT ["dotnet", "RoomMatching.Cli.dll"]

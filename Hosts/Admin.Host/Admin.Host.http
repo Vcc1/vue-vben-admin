@@ -1,0 +1,11 @@
+@Admin.Host_HostAddress = http://localhost:5229
+
+GET {{Admin.Host_HostAddress}}/api/admin/hotel-price-comparison/run-histories?startDate=2026-08-01&endDate=2026-08-28&page=1&pageSize=20
+Accept: application/json
+
+###
+
+GET {{Admin.Host_HostAddress}}/openapi/backoffice.json
+Accept: application/json
+
+###

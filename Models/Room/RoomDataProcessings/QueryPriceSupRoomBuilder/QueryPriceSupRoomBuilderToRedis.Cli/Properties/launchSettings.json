@@ -1,0 +1,10 @@
+﻿{
+  "profiles": {
+    "QueryPriceSupRoomBuilderToRedis": {
+      "commandName": "Project"
+    },
+    "Container (Dockerfile)": {
+      "commandName": "Docker"
+    }
+  }
+}

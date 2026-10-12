@@ -1,0 +1,497 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>QueryPriceSupRoomBuilderToRedis</title>
+    <style>
+        :root {
+            --ink: #14201c;
+            --muted: #5e6d66;
+            --paper: #f7f1e5;
+            --panel: rgba(255, 252, 244, .84);
+            --line: #d7c9ae;
+            --green: #1f7a53;
+            --green-soft: #d8efe3;
+            --amber: #be7b22;
+            --amber-soft: #f6dfb9;
+            --red: #b5483b;
+            --red-soft: #f0c8c1;
+            --blue: #255b7f;
+            --blue-soft: #d8e8ef;
+            --shadow: 0 24px 70px rgba(49, 39, 24, .16);
+        }
+
+        * {
+            box-sizing: border-box;
+        }
+
+        body {
+            margin: 0;
+            color: var(--ink);
+            font-family: "Iowan Old Style", "Palatino Linotype", "Book Antiqua", Georgia, serif;
+            background: radial-gradient(circle at 12% 18%, rgba(31, 122, 83, .20), transparent 28rem), radial-gradient(circle at 90% 8%, rgba(190, 123, 34, .22), transparent 24rem), linear-gradient(135deg, #f9f3e8 0%, #efe1c7 52%, #e8d7b8 100%);
+            min-height: 100vh;
+        }
+
+        main {
+            width: min(1220px, calc(100vw - 40px));
+            margin: 0 auto;
+            padding: 42px 0 56px;
+        }
+
+        .hero {
+            display: grid;
+            grid-template-columns: 1.25fr .75fr;
+            gap: 24px;
+            align-items: stretch;
+            margin-bottom: 24px;
+        }
+
+        .card {
+            background: var(--panel);
+            border: 1px solid rgba(95, 75, 42, .18);
+            border-radius: 28px;
+            box-shadow: var(--shadow);
+            backdrop-filter: blur(12px);
+        }
+
+        .title-card {
+            padding: 34px;
+            position: relative;
+            overflow: hidden;
+        }
+
+            .title-card:after {
+                content: "";
+                position: absolute;
+                right: -80px;
+                bottom: -100px;
+                width: 280px;
+                height: 280px;
+                border: 34px solid rgba(31, 122, 83, .10);
+                border-radius: 50%;
+            }
+
+        .eyebrow {
+            color: var(--green);
+            font-family: "Gill Sans", "Trebuchet MS", sans-serif;
+            font-size: 13px;
+            font-weight: 700;
+            letter-spacing: .16em;
+            text-transform: uppercase;
+            margin-bottom: 14px;
+        }
+
+        h1 {
+            font-size: clamp(34px, 5vw, 64px);
+            line-height: .96;
+            max-width: 850px;
+            margin: 0 0 18px;
+            letter-spacing: -.04em;
+        }
+
+        .lead {
+            color: var(--muted);
+            font-family: "Gill Sans", "Trebuchet MS", sans-serif;
+            font-size: 18px;
+            line-height: 1.55;
+            max-width: 780px;
+            margin: 0;
+        }
+
+        .summary {
+            padding: 24px;
+            display: grid;
+            gap: 14px;
+        }
+
+        .summary-item {
+            padding: 16px;
+            border: 1px solid var(--line);
+            border-radius: 18px;
+            background: rgba(255, 255, 255, .38);
+        }
+
+            .summary-item b {
+                display: block;
+                font-family: "Gill Sans", "Trebuchet MS", sans-serif;
+                font-size: 12px;
+                letter-spacing: .12em;
+                text-transform: uppercase;
+                color: var(--amber);
+                margin-bottom: 6px;
+            }
+
+            .summary-item span {
+                font-family: "Gill Sans", "Trebuchet MS", sans-serif;
+                color: var(--ink);
+                font-size: 15px;
+                line-height: 1.35;
+            }
+
+        .grid {
+            display: grid;
+            grid-template-columns: 1fr;
+            gap: 24px;
+        }
+
+        .section {
+            padding: 24px;
+            overflow: hidden;
+        }
+
+        .section-head {
+            display: flex;
+            justify-content: space-between;
+            gap: 16px;
+            align-items: end;
+            margin-bottom: 18px;
+        }
+
+        h2 {
+            margin: 0;
+            font-size: clamp(24px, 3vw, 36px);
+            letter-spacing: -.03em;
+        }
+
+        .hint {
+            color: var(--muted);
+            font-family: "Gill Sans", "Trebuchet MS", sans-serif;
+            font-size: 14px;
+            margin: 0;
+            max-width: 520px;
+            text-align: right;
+        }
+
+        .legend {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 10px;
+            margin-top: 16px;
+            font-family: "Gill Sans", "Trebuchet MS", sans-serif;
+            color: var(--muted);
+            font-size: 13px;
+        }
+
+        .pill {
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+            padding: 7px 10px;
+            background: rgba(255, 255, 255, .42);
+            border: 1px solid var(--line);
+            border-radius: 999px;
+        }
+
+        .dot {
+            width: 10px;
+            height: 10px;
+            border-radius: 50%;
+            background: var(--green);
+        }
+
+            .dot.amber {
+                background: var(--amber);
+            }
+
+            .dot.blue {
+                background: var(--blue);
+            }
+
+            .dot.red {
+                background: var(--red);
+            }
+
+        svg {
+            width: 100%;
+            height: auto;
+            display: block;
+        }
+
+        .svg-label {
+            font-family: "Gill Sans", "Trebuchet MS", sans-serif;
+            fill: var(--ink);
+            font-weight: 700;
+            font-size: 16px;
+        }
+
+        .svg-small {
+            font-family: "Gill Sans", "Trebuchet MS", sans-serif;
+            fill: var(--muted);
+            font-size: 12px;
+        }
+
+        .node {
+            fill: rgba(255, 252, 244, .95);
+            stroke: #cbb990;
+            stroke-width: 1.4;
+        }
+
+        .node-green {
+            fill: var(--green-soft);
+            stroke: var(--green);
+        }
+
+        .node-amber {
+            fill: var(--amber-soft);
+            stroke: var(--amber);
+        }
+
+        .node-blue {
+            fill: var(--blue-soft);
+            stroke: var(--blue);
+        }
+
+        .node-red {
+            fill: var(--red-soft);
+            stroke: var(--red);
+        }
+
+        .arrow {
+            stroke: #6d604b;
+            stroke-width: 2.2;
+            fill: none;
+            marker-end: url(#arrow);
+        }
+
+        .arrow-soft {
+            stroke: #a89570;
+            stroke-width: 1.7;
+            stroke-dasharray: 7 7;
+            fill: none;
+            marker-end: url(#arrowSoft);
+        }
+
+        .two {
+            display: grid;
+            grid-template-columns: .92fr 1.08fr;
+            gap: 24px;
+        }
+
+        .metric-list {
+            display: grid;
+            grid-template-columns: repeat(2, minmax(0, 1fr));
+            gap: 12px;
+            margin-top: 18px;
+        }
+
+        .metric {
+            padding: 14px;
+            border-radius: 16px;
+            background: rgba(255, 255, 255, .42);
+            border: 1px solid var(--line);
+            font-family: "Gill Sans", "Trebuchet MS", sans-serif;
+        }
+
+            .metric code {
+                display: block;
+                color: var(--green);
+                font-family: "Cascadia Code", Consolas, monospace;
+                font-size: 13px;
+                margin-bottom: 5px;
+                overflow-wrap: anywhere;
+            }
+
+            .metric span {
+                color: var(--muted);
+                font-size: 13px;
+                line-height: 1.35;
+            }
+
+        @media (max-width: 860px) {
+            main {
+                width: min(100% - 24px, 1220px);
+                padding-top: 18px;
+            }
+
+            .hero,
+            .two {
+                grid-template-columns: 1fr;
+            }
+
+            .section-head {
+                display: block;
+            }
+
+            .hint {
+                text-align: left;
+                margin-top: 8px;
+            }
+
+            .metric-list {
+                grid-template-columns: 1fr;
+            }
+        }
+    </style>
+</head>
+<body>
+    <main>
+        <section class="hero">
+            <div class="card title-card">
+                <div class="eyebrow">Room Data Processing</div>
+                <h1>QueryPriceSupRoomBuilderToRedis</h1>
+                <p class="lead">通过触发队列接收酒店，落任务表去重，按供应商查价发现合格供应商房型，成功推送到 NewSupRoom 后交给现有 SupRoomInfoRedisToSql 入库。</p>
+            </div>
+            <aside class="card summary">
+                <div class="summary-item">
+                    <b>完成口径</b>
+                    <span>命中合格价格房型并成功推 Redis。</span>
+                </div>
+                <div class="summary-item">
+                    <b>默认供应商</b>
+                    <span>SupId = 51，配置保留扩展。</span>
+                </div>
+                <div class="summary-item">
+                    <b>关键 Redis</b>
+                    <span>TriggerQueueRedis / NewSupRoom。</span>
+                </div>
+            </aside>
+        </section>
+
+        <section class="card section">
+            <div class="section-head">
+                <h2>端到端流程</h2>
+                <p class="hint">Presentation 只托管 worker；Application 编排规则；Infrastructure 负责 HTTP、Redis、SQL。</p>
+            </div>
+
+            <svg viewBox="0 0 1160 520" role="img" aria-label="QueryPriceSupRoomBuilderToRedis 端到端流程图">
+                <defs>
+                    <marker id="arrow" markerWidth="12" markerHeight="12" refX="10" refY="6" orient="auto">
+                        <path d="M2,2 L10,6 L2,10 Z" fill="#6d604b"></path>
+                    </marker>
+                    <marker id="arrowSoft" markerWidth="12" markerHeight="12" refX="10" refY="6" orient="auto">
+                        <path d="M2,2 L10,6 L2,10 Z" fill="#a89570"></path>
+                    </marker>
+                    <filter id="softShadow" x="-20%" y="-20%" width="140%" height="150%">
+                        <feDropShadow dx="0" dy="12" stdDeviation="10" flood-color="#51442c" flood-opacity=".14"></feDropShadow>
+                    </filter>
+                </defs>
+
+                <rect x="20" y="34" width="214" height="96" rx="22" class="node node-blue" filter="url(#softShadow)"></rect>
+                <text x="127" y="73" text-anchor="middle" class="svg-label">Redis Trigger</text>
+                <text x="127" y="98" text-anchor="middle" class="svg-small">trigger:room-build:hotel</text>
+
+                <rect x="304" y="34" width="214" height="96" rx="22" class="node node-amber" filter="url(#softShadow)"></rect>
+                <text x="411" y="73" text-anchor="middle" class="svg-label">Upsert Task</text>
+                <text x="411" y="98" text-anchor="middle" class="svg-small">MTHotelCode 唯一索引</text>
+
+                <rect x="588" y="34" width="214" height="96" rx="22" class="node" filter="url(#softShadow)"></rect>
+                <text x="695" y="73" text-anchor="middle" class="svg-label">Cron Claim</text>
+                <text x="695" y="98" text-anchor="middle" class="svg-small">Pending / RetryWaiting</text>
+
+                <rect x="872" y="34" width="214" height="96" rx="22" class="node node-green" filter="url(#softShadow)"></rect>
+                <text x="979" y="73" text-anchor="middle" class="svg-label">Query Price</text>
+                <text x="979" y="98" text-anchor="middle" class="svg-small">SupId 51 + 日期窗口 + 人数</text>
+
+                <rect x="164" y="220" width="214" height="96" rx="22" class="node" filter="url(#softShadow)"></rect>
+                <text x="271" y="259" text-anchor="middle" class="svg-label">Filter Rooms</text>
+                <text x="271" y="284" text-anchor="middle" class="svg-small">英文规则 + 字段长度</text>
+
+                <rect x="474" y="220" width="214" height="96" rx="22" class="node" filter="url(#softShadow)"></rect>
+                <text x="581" y="259" text-anchor="middle" class="svg-label">Distinct Model</text>
+                <text x="581" y="284" text-anchor="middle" class="svg-small">按 SupRoomModel 字段集合</text>
+
+                <rect x="784" y="220" width="214" height="96" rx="22" class="node node-blue" filter="url(#softShadow)"></rect>
+                <text x="891" y="259" text-anchor="middle" class="svg-label">Push NewSupRoom</text>
+                <text x="891" y="284" text-anchor="middle" class="svg-small">兼容现有消费格式</text>
+
+                <rect x="314" y="390" width="214" height="86" rx="22" class="node node-green" filter="url(#softShadow)"></rect>
+                <text x="421" y="425" text-anchor="middle" class="svg-label">Completed</text>
+                <text x="421" y="449" text-anchor="middle" class="svg-small">IsRoomBuilt = true</text>
+
+                <rect x="634" y="390" width="214" height="86" rx="22" class="node node-red" filter="url(#softShadow)"></rect>
+                <text x="741" y="425" text-anchor="middle" class="svg-label">Retry / Failed</text>
+                <text x="741" y="449" text-anchor="middle" class="svg-small">LastError + AttemptCount</text>
+
+                <path d="M234 82 H304" class="arrow"></path>
+                <path d="M518 82 H588" class="arrow"></path>
+                <path d="M802 82 H872" class="arrow"></path>
+                <path d="M979 130 C979 180 332 168 287 220" class="arrow"></path>
+                <path d="M378 268 H474" class="arrow"></path>
+                <path d="M688 268 H784" class="arrow"></path>
+                <path d="M891 316 C891 360 484 342 434 390" class="arrow"></path>
+                <path d="M1000 300 C1034 370 894 428 848 432" class="arrow-soft"></path>
+                <path d="M271 316 C282 370 342 395 390 400" class="arrow-soft"></path>
+            </svg>
+
+            <div class="legend">
+                <span class="pill"><span class="dot blue"></span>Redis / Queue</span>
+                <span class="pill"><span class="dot amber"></span>SQL Task</span>
+                <span class="pill"><span class="dot"></span>Success Path</span>
+                <span class="pill"><span class="dot red"></span>Retry Path</span>
+            </div>
+        </section>
+
+        <section class="two">
+            <div class="card section">
+                <div class="section-head">
+                    <h2>任务状态</h2>
+                </div>
+                <svg viewBox="0 0 520 420" role="img" aria-label="任务状态流转图">
+                    <defs>
+                        <marker id="stateArrow" markerWidth="12" markerHeight="12" refX="10" refY="6" orient="auto">
+                            <path d="M2,2 L10,6 L2,10 Z" fill="#6d604b"></path>
+                        </marker>
+                    </defs>
+                    <circle cx="104" cy="86" r="58" class="node node-amber"></circle>
+                    <text x="104" y="82" text-anchor="middle" class="svg-label">Pending</text>
+                    <text x="104" y="105" text-anchor="middle" class="svg-small">0</text>
+
+                    <circle cx="266" cy="86" r="58" class="node"></circle>
+                    <text x="266" y="82" text-anchor="middle" class="svg-label">Processing</text>
+                    <text x="266" y="105" text-anchor="middle" class="svg-small">1</text>
+
+                    <circle cx="428" cy="86" r="58" class="node node-green"></circle>
+                    <text x="428" y="82" text-anchor="middle" class="svg-label">Completed</text>
+                    <text x="428" y="105" text-anchor="middle" class="svg-small">2</text>
+
+                    <circle cx="185" cy="292" r="58" class="node node-amber"></circle>
+                    <text x="185" y="288" text-anchor="middle" class="svg-label">RetryWaiting</text>
+                    <text x="185" y="311" text-anchor="middle" class="svg-small">3</text>
+
+                    <circle cx="347" cy="292" r="58" class="node node-red"></circle>
+                    <text x="347" y="288" text-anchor="middle" class="svg-label">Failed</text>
+                    <text x="347" y="311" text-anchor="middle" class="svg-small">4</text>
+
+                    <path d="M162 86 H208" class="arrow" marker-end="url(#stateArrow)"></path>
+                    <path d="M324 86 H370" class="arrow" marker-end="url(#stateArrow)"></path>
+                    <path d="M240 135 C206 172 190 210 186 234" class="arrow" marker-end="url(#stateArrow)"></path>
+                    <path d="M220 248 C256 210 264 166 266 144" class="arrow" marker-end="url(#stateArrow)"></path>
+                    <path d="M242 292 H289" class="arrow" marker-end="url(#stateArrow)"></path>
+                    <path d="M104 144 C104 206 128 245 149 266" class="arrow-soft"></path>
+                </svg>
+            </div>
+
+            <div class="card section">
+                <div class="section-head">
+                    <h2>指标 Scope</h2>
+                    <p class="hint">Provider scope 固定在各自 Metrics 类中，应用 scope 只用于业务编排。</p>
+                </div>
+                <svg viewBox="0 0 620 250" role="img" aria-label="指标 scope 矢量图表">
+                    <rect x="24" y="32" width="172" height="154" rx="24" class="node node-green"></rect>
+                    <text x="110" y="72" text-anchor="middle" class="svg-label">Application</text>
+                    <text x="110" y="104" text-anchor="middle" class="svg-small">QueryPriceSupRoom</text>
+                    <text x="110" y="124" text-anchor="middle" class="svg-small">BuilderToRedis</text>
+                    <rect x="224" y="32" width="172" height="154" rx="24" class="node node-blue"></rect>
+                    <text x="310" y="72" text-anchor="middle" class="svg-label">HTTP Provider</text>
+                    <text x="310" y="104" text-anchor="middle" class="svg-small">Infrastructure.HTTP</text>
+                    <text x="310" y="124" text-anchor="middle" class="svg-small">.QueryPrice</text>
+                    <rect x="424" y="32" width="172" height="154" rx="24" class="node node-amber"></rect>
+                    <text x="510" y="72" text-anchor="middle" class="svg-label">Redis Provider</text>
+                    <text x="510" y="104" text-anchor="middle" class="svg-small">Infrastructure.Redis</text>
+                    <text x="510" y="124" text-anchor="middle" class="svg-small">.TriggerQueue</text>
+                    <path d="M196 109 H224" class="arrow-soft"></path>
+                    <path d="M396 109 H424" class="arrow-soft"></path>
+                </svg>
+                <div class="metric-list">
+                    <div class="metric"><code>room_build_task_total</code><span>任务处理总量，按 status/outcome 标记。</span></div>
+                    <div class="metric"><code>query_price_duration_ms</code><span>查价耗时直方图，scope 属于 HTTP provider。</span></div>
+                    <div class="metric"><code>trigger_queue_operation_total</code><span>触发队列入队/出队计数，scope 属于 Redis provider。</span></div>
+                    <div class="metric"><code>sup_room_redis_push_total</code><span>合格房型推 NewSupRoom 的结果统计。</span></div>
+                </div>
+            </div>
+        </section>
+    </main>
+</body>
+</html>

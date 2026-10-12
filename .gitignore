@@ -1,63 +1,162 @@
-node_modules
-.DS_Store
-dist
-dist-ssr
-dist.zip
-dist.tar
-dist.war
-.nitro
-.output
-*-dist.zip
-*-dist.tar
-*-dist.war
-coverage
-*.local
-**/.vitepress/cache
-.cache
-.turbo
-.temp
-dev-dist
-.stylelintcache
-yarn.lock
-package-lock.json
-.VSCodeCounter
-**/backend-mock/data
-.omx
-.pnpm-store
-# local env files
-.env.local
-.env.*.local
-.eslintcache
+# =========================
+# Build results
+# =========================
+[Bb]in/
+[Oo]bj/
+[Dd]ebug/
+[Rr]elease/
+x64/
+x86/
+[Aa][Rr][Mm]/
+[Aa][Rr][Mm]64/
+bld/
+[Bb]uild/
+[Bb]uild[Ll]og.*
 
-logs
+# =========================
+# User-specific files
+# =========================
+*.rsuser
+*.suo
+*.user
+*.userosscache
+*.sln.docstates
+
+# =========================
+# Visual Studio
+# =========================
+.vs/
+
+# =========================
+# Rider / JetBrains
+# =========================
+.idea/
+*.sln.iml
+
+# =========================
+# VS Code
+# =========================
+.vscode/
+!.vscode/settings.json
+!.vscode/tasks.json
+!.vscode/launch.json
+!.vscode/extensions.json
+
+# =========================
+# NuGet
+# =========================
+*.nupkg
+*.snupkg
+**/[Pp]ackages/*
+!**/[Pp]ackages/build/
+# 前端 monorepo（UI/）的源码包目录，与 NuGet packages 无关
+!UI/packages/*
+*.nuget.props
+*.nuget.targets
+
+# =========================
+# Logs
+# =========================
 *.log
+logs/
+*.tlog
+
+# =========================
+# Test results
+# =========================
+[Tt]est[Rr]esult*/
+[Bb]enchmark[Dd]ot[Nn]et.Artifacts/
+
+# =========================
+# Publish output
+# =========================
+publish/
+app.publish/
+artifacts/
+
+# =========================
+# Generated files
+# =========================
+Generated/
+*.generated.cs
+
+# =========================
+# OS files
+# =========================
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# =========================
+# ASP.NET Scaffolding
+# =========================
+ScaffoldingReadMe.txt
+
+# =========================
+# DotNet local tools / caches
+# =========================
+.dotnet/
+.dotCover/
+coverage/
+coverage-results/
+
+# =========================
+# EF Core / local db files
+# =========================
+*.mdf
+*.ldf
+*.db
+*.db-shm
+*.db-wal
+
+# =========================
+# Secrets / environment
+# =========================
+appsettings.*.local.json
+appsettings.Development.local.json
+.env
+.env.*
+secrets.json
+
+# =========================
+# Node / Frontend
+# =========================
+node_modules/
+dist/
+wwwroot/dist/
 npm-debug.log*
 yarn-debug.log*
 yarn-error.log*
 pnpm-debug.log*
-lerna-debug.log*
-vite.config.mts.*
-vite.config.mjs.*
-vite.config.js.*
-vite.config.ts.*
 
-# Editor directories and files
-.idea
-# .vscode
-*.suo
-*.ntvs*
-*.njsproj
-*.sln
-*.sw?
-.history
-.cursor
+# =========================
+# Docker
+# =========================
+docker-compose.override.yml
 
-# AI
-.agent
-.agents
-.claude
-.codex
-skills-lock.json
-.atomcode
-datalog
-.playwright-mcp
+# =========================
+# Temporary files
+# =========================
+*.tmp
+*.temp
+*.cache
+*.pid
+.tmp-compile-supcache/compile.rsp
+.tmp-compile-supcache/Infrastructure.Sql.SupCacheDB.dll
+.tmp-compile/compile.rsp
+.tmp-compile/Infrastructure.Web.Taap.dll
+.codex/
+tmp/
+4.Presentation/MetricsAndAlerts/TestMetrics.zip
+.qoder/
+.artifacts/
+.codex-build/
+Hosts/Agent.Host/App_Data/
+
+# OIDC 签名证书（私钥，勿提交）
+*.pfx
+*.p12
+Hosts/Admin.Host/data/oidc-keys/
+Hosts/Admin.Host/data/scheduler-logs/
+.tmp-sqlite/
+.tmp-compile/

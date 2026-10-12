@@ -1,0 +1,157 @@
+<svg class="svg-structure" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1280 1512" role="img" aria-label="Models 项目结构"><style>.node{fill:#fff;stroke:#6a7d91;stroke-width:1.5}.node.root{fill:#dce9f4;stroke:#145da0}.label{font:16px system-ui,Segoe UI,sans-serif;fill:#17202b}.path{font:12px ui-monospace,Consolas,monospace;fill:#6a7480}.edge{stroke:#a9b4c0;stroke-width:1.5;fill:none}</style>
+<path class="edge" d="M 506 76 H 72 V 132"/>
+<path class="edge" d="M 560 132 H 126 V 188"/>
+<path class="edge" d="M 614 188 H 180 V 244"/>
+<path class="edge" d="M 506 76 H 72 V 300"/>
+<path class="edge" d="M 560 300 H 126 V 356"/>
+<path class="edge" d="M 560 300 H 126 V 412"/>
+<path class="edge" d="M 560 300 H 126 V 468"/>
+<path class="edge" d="M 560 300 H 126 V 524"/>
+<path class="edge" d="M 560 300 H 126 V 580"/>
+<path class="edge" d="M 506 76 H 72 V 636"/>
+<path class="edge" d="M 560 636 H 126 V 692"/>
+<path class="edge" d="M 560 636 H 126 V 748"/>
+<path class="edge" d="M 560 636 H 126 V 804"/>
+<path class="edge" d="M 560 636 H 126 V 860"/>
+<path class="edge" d="M 560 636 H 126 V 916"/>
+<path class="edge" d="M 506 76 H 72 V 972"/>
+<path class="edge" d="M 560 972 H 126 V 1028"/>
+<path class="edge" d="M 560 972 H 126 V 1084"/>
+<path class="edge" d="M 506 76 H 72 V 1140"/>
+<path class="edge" d="M 560 1140 H 126 V 1196"/>
+<path class="edge" d="M 560 1140 H 126 V 1252"/>
+<path class="edge" d="M 506 76 H 72 V 1308"/>
+<path class="edge" d="M 560 1308 H 126 V 1364"/>
+<path class="edge" d="M 506 76 H 72 V 1420"/>
+<path class="edge" d="M 560 1420 H 126 V 1476"/>
+<a href="architecture.html">
+<rect class="node root" x="36" y="56" width="470" height="40" rx="5"/>
+<text class="label" x="50" y="75">Models</text>
+<text class="path" x="50" y="90">Models</text>
+</a>
+
+<rect class="node" x="90" y="112" width="470" height="40" rx="5"/>
+<text class="label" x="104" y="131">0.Base</text>
+<text class="path" x="104" y="146">Models/Base</text>
+
+
+<rect class="node" x="144" y="168" width="470" height="40" rx="5"/>
+<text class="label" x="158" y="187">Shared</text>
+<text class="path" x="158" y="202">Models/Base/Shared</text>
+
+
+<rect class="node" x="198" y="224" width="470" height="40" rx="5"/>
+<text class="label" x="212" y="243">OTA.Domain</text>
+<text class="path" x="212" y="258">Models/Base/Shared/OTA.Domain</text>
+
+
+<rect class="node" x="90" y="280" width="470" height="40" rx="5"/>
+<text class="label" x="104" y="299">1.Hotel</text>
+<text class="path" x="104" y="314">Models/Hotel</text>
+
+
+<rect class="node" x="144" y="336" width="470" height="40" rx="5"/>
+<text class="label" x="158" y="355">OTAHotelInfoSync</text>
+<text class="path" x="158" y="370">Models/Hotel/OTAHotelInfoSync</text>
+
+
+<rect class="node" x="144" y="392" width="470" height="40" rx="5"/>
+<text class="label" x="158" y="411">HotelMatching/MatchingPipeline</text>
+<text class="path" x="158" y="426">Models/Hotel/HotelMatching/MatchingPipeline</text>
+
+
+<rect class="node" x="144" y="448" width="470" height="40" rx="5"/>
+<text class="label" x="158" y="467">HotelResearch</text>
+<text class="path" x="158" y="482">Models/Hotel/HotelResearch</text>
+
+
+<rect class="node" x="144" y="504" width="470" height="40" rx="5"/>
+<text class="label" x="158" y="523">HotelBusiness</text>
+<text class="path" x="158" y="538">Models/Hotel/HotelBusiness</text>
+
+
+<rect class="node" x="144" y="560" width="470" height="40" rx="5"/>
+<text class="label" x="158" y="579">SupplierStaticData</text>
+<text class="path" x="158" y="594">Models/Hotel/SupplierStaticData</text>
+
+
+<rect class="node" x="90" y="616" width="470" height="40" rx="5"/>
+<text class="label" x="104" y="635">2.Room</text>
+<text class="path" x="104" y="650">Models/Room</text>
+
+
+<rect class="node" x="144" y="672" width="470" height="40" rx="5"/>
+<text class="label" x="158" y="691">RoomDataProcessings/QueryPriceSupRoomBuilder</text>
+<text class="path" x="158" y="706">Models/Room/RoomDataProcessings/QueryPriceSupRoomBuilder</text>
+
+
+<rect class="node" x="144" y="728" width="470" height="40" rx="5"/>
+<text class="label" x="158" y="747">RoomMatchings/Core</text>
+<text class="path" x="158" y="762">Models/Room/RoomMatchings/Core</text>
+
+
+<rect class="node" x="144" y="784" width="470" height="40" rx="5"/>
+<text class="label" x="158" y="803">RoomMatchings/OTARoomBuilder</text>
+<text class="path" x="158" y="818">Models/Room/RoomMatchings/OTARoomBuilder</text>
+
+
+<rect class="node" x="144" y="840" width="470" height="40" rx="5"/>
+<text class="label" x="158" y="859">RoomMatchings/Statistics</text>
+<text class="path" x="158" y="874">Models/Room/RoomMatchings/Statistics</text>
+
+
+<rect class="node" x="144" y="896" width="470" height="40" rx="5"/>
+<text class="label" x="158" y="915">SupRoomInfo/Ingestion</text>
+<text class="path" x="158" y="930">Models/Room/SupRoomInfo/Ingestion</text>
+
+
+<rect class="node" x="90" y="952" width="470" height="40" rx="5"/>
+<text class="label" x="104" y="971">3.Price</text>
+<text class="path" x="104" y="986">Models/Price</text>
+
+
+<rect class="node" x="144" y="1008" width="470" height="40" rx="5"/>
+<text class="label" x="158" y="1027">ExpediaChaseRoom</text>
+<text class="path" x="158" y="1042">Models/Price/ExpediaChaseRoom</text>
+
+
+<rect class="node" x="144" y="1064" width="470" height="40" rx="5"/>
+<text class="label" x="158" y="1083">HotelPriceAvailability</text>
+<text class="path" x="158" y="1098">Models/Price/HotelPriceAvailability</text>
+
+
+<rect class="node" x="90" y="1120" width="470" height="40" rx="5"/>
+<text class="label" x="104" y="1139">4.MetricsAndAlerts</text>
+<text class="path" x="104" y="1154">Models/MetricsAndAlerts</text>
+
+
+<rect class="node" x="144" y="1176" width="470" height="40" rx="5"/>
+<text class="label" x="158" y="1195">GrafanaAlert</text>
+<text class="path" x="158" y="1210">Models/MetricsAndAlerts/GrafanaAlert</text>
+
+
+<rect class="node" x="144" y="1232" width="470" height="40" rx="5"/>
+<text class="label" x="158" y="1251">MetricsAndAlerts</text>
+<text class="path" x="158" y="1266">Models/MetricsAndAlerts/MetricsAndAlerts</text>
+
+
+<rect class="node" x="90" y="1288" width="470" height="40" rx="5"/>
+<text class="label" x="104" y="1307">5.AI</text>
+<text class="path" x="104" y="1322">Models/AI</text>
+
+
+<rect class="node" x="144" y="1344" width="470" height="40" rx="5"/>
+<text class="label" x="158" y="1363">AgentPlatform</text>
+<text class="path" x="158" y="1378">Models/AI/AgentPlatform</text>
+
+
+<rect class="node" x="90" y="1400" width="470" height="40" rx="5"/>
+<text class="label" x="104" y="1419">6.Data</text>
+<text class="path" x="104" y="1434">Models/Backoffice</text>
+
+
+<rect class="node" x="144" y="1456" width="470" height="40" rx="5"/>
+<text class="label" x="158" y="1475">Backoffice</text>
+<text class="path" x="158" y="1490">Models/Backoffice</text>
+
+</svg>

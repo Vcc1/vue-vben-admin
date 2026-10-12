@@ -1,0 +1,19 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    
+    
+    <RootNamespace>ExpediaChaseRoom.Infra</RootNamespace><AssemblyName>ExpediaChaseRoom.Infra</AssemblyName><TargetFramework>net10.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\..\..\BaseFrameworks\VBaseFramework.Core\VBaseFramework.Core.csproj" />
+    <ProjectReference Include="..\ExpediaChaseRoom.App\ExpediaChaseRoom.App.csproj" />
+    <ProjectReference Include="..\..\..\..\Providers\Infrastructure.Redis.SupPriceCahce\Infrastructure.Redis.SupPriceCahce.csproj" />
+    <ProjectReference Include="..\..\..\..\Providers\Infrastructure.Sql.SupCacheDB\Infrastructure.Sql.SupCacheDB.csproj" />
+    <ProjectReference Include="..\..\..\..\Providers\Infrastructure.Web.Taap\Infrastructure.Web.Taap.csproj" />
+  </ItemGroup>
+
+</Project>

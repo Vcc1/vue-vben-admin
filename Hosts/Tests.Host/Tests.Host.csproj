@@ -1,0 +1,45 @@
+﻿<Project Sdk="Microsoft.NET.Sdk.Web">
+
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <RootNamespace>Tests.Host</RootNamespace>
+    <AssemblyName>Tests.Host</AssemblyName>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <UserSecretsId>61b8b80b-56ea-40a4-a274-6190d9c39477</UserSecretsId>
+    <DockerDefaultTargetOS>Linux</DockerDefaultTargetOS>
+    <DockerfileContext>..\..</DockerfileContext>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <None Update="Configs\nlog.config">
+      <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+      <CopyToPublishDirectory>Always</CopyToPublishDirectory>
+    </None>
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\Models\Hotel\HotelMatching\MatchingPipeline\HotelMatchingPipeline.App\HotelMatchingPipeline.App.csproj" />
+    <ProjectReference Include="..\..\Models\Hotel\HotelMatching\MatchingPipeline\HotelMatchingPipeline.Domain\HotelMatchingPipeline.Domain.csproj" />
+    <ProjectReference Include="..\..\Models\Hotel\HotelMatching\MatchingPipeline\HotelMatchingPipeline.Infra\HotelMatchingPipeline.Infra.csproj" />
+    <ProjectReference Include="..\..\Models\Room\RoomMatchings\Core\RoomMatch.Infra\RoomMatch.Infra.csproj" />
+    <ProjectReference Include="..\..\BaseFrameworks\VBaseFramework.Core\VBaseFramework.Core.csproj" />
+    <ProjectReference Include="..\..\BaseFrameworks\VBaseFramework.ServiceDefaults\VBaseFramework.ServiceDefaults.csproj" />
+    <ProjectReference Include="..\..\Models\Hotel\SupplierStaticData\SupplierStaticData.App\SupplierStaticData.App.csproj" />
+    <ProjectReference Include="..\..\Models\Base\Shared\OTA.Domain\OTA.Domain.csproj" />
+    <ProjectReference Include="..\..\Providers\Infrastructure.SupplierStaticData\Infrastructure.SupplierStaticData.csproj" />
+    <ProjectReference Include="..\..\Providers\Infrastructure.Redis.HotelMatchingRedis\Infrastructure.Redis.HotelMatchingRedis.csproj" />
+    <ProjectReference Include="..\..\Providers\Infrastructure.Sql.RoomMapping\Infrastructure.Sql.RoomMapping.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.VisualStudio.Azure.Containers.Tools.Targets" Version="1.23.0" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Reference Include="MengTu.Connectmate.Client">
+      <HintPath>..\..\999.DLL\Connectmate\net10.0\MengTu.Connectmate.Client.dll</HintPath>
+    </Reference>
+  </ItemGroup>
+
+</Project>

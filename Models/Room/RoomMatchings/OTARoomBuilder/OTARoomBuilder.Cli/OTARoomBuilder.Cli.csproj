@@ -1,0 +1,51 @@
+<Project Sdk="Microsoft.NET.Sdk;Microsoft.NET.Sdk.Publish">
+
+  <PropertyGroup>
+    
+    
+    <RootNamespace>OTARoomBuilder.Cli</RootNamespace><AssemblyName>OTARoomBuilder.Cli</AssemblyName><OutputType>Exe</OutputType>
+    <TargetFramework>net10.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <DockerDefaultTargetOS>Linux</DockerDefaultTargetOS>
+    <DockerfileContext>..\..\..\..\..</DockerfileContext>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <Content Include="appsettings.json">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+      <ExcludeFromSingleFile>true</ExcludeFromSingleFile>
+      <CopyToPublishDirectory>PreserveNewest</CopyToPublishDirectory>
+    </Content>
+    <Content Include="Configs\nlog.config">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+      <ExcludeFromSingleFile>true</ExcludeFromSingleFile>
+      <CopyToPublishDirectory>PreserveNewest</CopyToPublishDirectory>
+    </Content>
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\..\..\..\BaseFrameworks\VBaseFramework.Core\VBaseFramework.Core.csproj" />
+    <ProjectReference Include="..\..\..\..\..\BaseFrameworks\VBaseFramework.ServiceDefaults\VBaseFramework.ServiceDefaults.csproj" />
+    <ProjectReference Include="..\OTARoomBuilder.App\OTARoomBuilder.App.csproj" />
+    <ProjectReference Include="..\..\Core\RoomMatch.Core.App\RoomMatch.Core.App.csproj" />
+    <ProjectReference Include="..\OTARoomBuilder.Infra\OTARoomBuilder.Infra.csproj" />
+    <ProjectReference Include="..\..\..\..\..\Providers\Infrastructure.HTTP.OTARoomCreate\Infrastructure.HTTP.OTARoomCreate.csproj" />
+    <ProjectReference Include="..\..\..\..\..\Providers\Infrastructure.SupplierStaticData\Infrastructure.SupplierStaticData.csproj" />
+    <ProjectReference Include="..\..\Core\RoomMatch.Infra\RoomMatch.Infra.csproj" />
+    <ProjectReference Include="..\..\..\..\..\Models\AI\AgentPlatform\AgentPlatform.Client\AgentPlatform.Client.csproj" />
+    <ProjectReference Include="..\..\..\..\..\Models\Hotel\HotelResearch\HotelResearch.Client\HotelResearch.Client.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.VisualStudio.Azure.Containers.Tools.Targets" Version="1.23.0" />
+    <PackageReference Include="VBase.AppMetrics" Version="1.0.8" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Reference Include="MengTu.Connectmate.Client">
+      <HintPath>..\..\..\..\..\999.DLL\Connectmate\net10.0\MengTu.Connectmate.Client.dll</HintPath>
+    </Reference>
+  </ItemGroup>
+
+</Project>

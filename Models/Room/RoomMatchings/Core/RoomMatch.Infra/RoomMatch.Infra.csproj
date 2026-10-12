@@ -1,0 +1,26 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    
+    
+    <RootNamespace>RoomMatch.Infra</RootNamespace><AssemblyName>RoomMatch.Infra</AssemblyName><TargetFramework>net10.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\..\..\..\BaseFrameworks\VBaseFramework.Core\VBaseFramework.Core.csproj" />
+    <ProjectReference Include="..\RoomMatch.Domain\RoomMatch.Domain.csproj" />
+    <ProjectReference Include="..\..\..\..\Base\Shared\OTA.Domain\OTA.Domain.csproj" />
+    <ProjectReference Include="..\RoomMatch.Core.App\RoomMatch.Core.App.csproj" />
+    <ProjectReference Include="..\RoomMatch.App\RoomMatch.App.csproj" />
+    <ProjectReference Include="..\..\..\..\..\Providers\Infrastructure.HTTP.SupStaticData\Infrastructure.HTTP.SupStaticData.csproj" />
+    <ProjectReference Include="..\..\..\..\..\Providers\Infrastructure.Redis.RoomMatchingRedis\Infrastructure.Redis.RoomMatchingRedis.csproj" />
+    <ProjectReference Include="..\..\..\..\..\Providers\Infrastructure.Redis.SupRoomInfo.DirectPriceDiscovery\Infrastructure.Redis.SupRoomInfo.DirectPriceDiscovery.csproj" />
+    <ProjectReference Include="..\..\..\..\..\Providers\Infrastructure.Sql.MengTuAPI\Infrastructure.Sql.MengTuAPI.csproj" />
+    <ProjectReference Include="..\..\..\..\..\Providers\Infrastructure.Sql.MengTuSup\Infrastructure.Sql.MengTuSup.csproj" />
+    <ProjectReference Include="..\..\..\..\..\Providers\Infrastructure.Sql.MixedData\Infrastructure.Sql.MixedData.csproj" />
+    <ProjectReference Include="..\..\..\..\..\Providers\Infrastructure.Sql.RoomMapping\Infrastructure.Sql.RoomMapping.csproj" />
+  </ItemGroup>
+
+</Project>

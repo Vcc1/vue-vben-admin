@@ -1,0 +1,31 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <RootNamespace>HotelMatchingPipeline.Infra</RootNamespace>
+    <AssemblyName>HotelMatchingPipeline.Infra</AssemblyName>
+    <TargetFramework>net10.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.Extensions.DependencyInjection.Abstractions" Version="10.0.4" />
+    <PackageReference Include="Microsoft.Extensions.Http" Version="10.0.4" />
+    <PackageReference Include="Microsoft.Extensions.Options" Version="10.0.4" />
+    <PackageReference Include="NetTopologySuite" Version="2.6.0" />
+    <PackageReference Include="Newtonsoft.Json" Version="13.0.4" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\HotelMatchingPipeline.App\HotelMatchingPipeline.App.csproj" />
+    <ProjectReference Include="..\HotelMatchingPipeline.Domain\HotelMatchingPipeline.Domain.csproj" />
+    <ProjectReference Include="..\..\..\..\..\Providers\Infrastructure.Redis.HotelMatchingRedis\Infrastructure.Redis.HotelMatchingRedis.csproj" />
+    <ProjectReference Include="..\..\..\..\..\Providers\Infrastructure.HTTP.WorkWechatAlert\Infrastructure.HTTP.WorkWechatAlert.csproj" />
+    <ProjectReference Include="..\..\..\..\..\Providers\Infrastructure.Sql.RoomMapping\Infrastructure.Sql.RoomMapping.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Compile Remove="Tests\**\*.cs" />
+  </ItemGroup>
+
+</Project>

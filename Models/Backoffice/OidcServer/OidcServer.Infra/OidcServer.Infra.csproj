@@ -1,0 +1,21 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <FrameworkReference Include="Microsoft.AspNetCore.App" />
+    <PackageReference Include="OpenIddict.AspNetCore" Version="6.0.0" />
+    <PackageReference Include="OpenIddict.EntityFrameworkCore" Version="6.0.0" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\OidcServer.App\OidcServer.App.csproj" />
+    <ProjectReference Include="..\..\AdminIdentity\AdminIdentity.App\AdminIdentity.App.csproj" />
+    <ProjectReference Include="..\..\..\..\Providers\Infrastructure.Sql.Admin\Infrastructure.Sql.Admin.csproj" />
+  </ItemGroup>
+
+</Project>
