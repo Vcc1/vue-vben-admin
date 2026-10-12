@@ -34,6 +34,7 @@ export interface CardListItem {
   cardholderName?: string;
   createdAt: string;
   expectedBusinessStatus: number;
+  expireAt?: string;
   hotelOrder?: HotelOrder;
   id: number;
   latestObservedAt?: string;
